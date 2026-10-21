@@ -1,4 +1,4 @@
-name: Publish v0.10.1 LocalAppData MSI
+name: Publish v0.10.1 LocalAppData MSI (new PDF icon and desktop shortcut)
 
 on:
   push:
@@ -97,7 +97,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v0.10.1-localappdata.1
+          RELEASE_TAG: v0.10.1-localappdata.2
         run: |
           set -euo pipefail
           cat > release-notes.md <<'EOF'
@@ -105,6 +105,9 @@ jobs:
 
           - Per-user installation path: %LOCALAPPDATA%\pdfcraft
           - Non-roaming app data: %LOCALAPPDATA%\pdfcraft\PdfCraftData
+          - New red PDF icon supplied for this release: Windows EXE/taskbar, MSI, file associations and shortcuts; Linux/macOS icon resources also updated.
+          - Installs a PdfCraft shortcut on the current user's desktop automatically, also with /qn.
+          - Removes that desktop shortcut on silent uninstall (without removing user data).
           - No installer wizard and no administrator privileges required for a normal current-user install.
           - Silent install: msiexec /i <downloaded-msi-file> /qn /norestart
           - Silent uninstall: msiexec /x <downloaded-msi-file> /qn /norestart
@@ -116,7 +119,7 @@ jobs:
           else
             gh release create "$RELEASE_TAG" dist/msi/*.msi \
               --target "$GITHUB_SHA" \
-              --title 'PdfCraft v0.10.1 - LocalAppData MSI (x64/x86)' \
+              --title 'PdfCraft v0.10.1 - Red PDF Icon + Desktop Shortcut (x64/x86)' \
               --notes-file release-notes.md \
               --prerelease --latest=false
           fi

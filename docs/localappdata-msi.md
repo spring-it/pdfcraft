@@ -29,11 +29,13 @@ msiexec.exe /x "pdfcraft-0.10.1-windows-x64-localappdata.msi" /qn /norestart
 
 For an x86 install use the x86 MSI in the uninstall command. Exit status 0 means success; 3010 means Windows requests a reboot.
 
-This is a **separate per-user installer** with its own UpgradeCode. It does not upgrade or remove the original per-machine PdfCraft MSI. It creates a per-user Start Menu shortcut but makes no machine-wide PDF associations, Explorer context-menu entries or HKLM changes. It is suitable for managed silent deployment and does not install MCP or any background service.
+This is a **separate per-user installer** with its own UpgradeCode. It does not upgrade or remove the original per-machine PdfCraft MSI. It automatically creates both a **per-user desktop shortcut named `PdfCraft`** and a per-user Start Menu shortcut—even with `/qn` and no user interaction. Both shortcuts are removed on uninstall. It makes no machine-wide PDF associations, Explorer context-menu entries or HKLM changes. It is suitable for managed silent deployment and does not install MCP or any background service.
+
+The red PDF document icon supplied for this release replaces the earlier animal logo throughout app resources: Windows EXE/taskbar/MSI/shortcut, embedded document icon, runtime PNG, and Linux/macOS icon assets. The earlier `v0.10.1-localappdata.1` release is preserved unchanged.
 
 ## Build and release
 
-On the `v0.10.1-localappdata-msi` branch, `.github/workflows/localappdata-msi.yml` builds both architectures on Windows runners, checks MSI metadata, tests real `/qn` installs and uninstalls, then publishes exactly the two MSI assets to the **prerelease** `v0.10.1-localappdata.1`. The original v0.10.1 release is not modified.
+On the `v0.10.1-localappdata-msi` branch, `.github/workflows/localappdata-msi.yml` builds both architectures on Windows runners, checks MSI metadata, tests real `/qn` installs and uninstalls, then publishes exactly the two MSI assets to the **prerelease** `v0.10.1-localappdata.2`. The original v0.10.1 release is not modified.
 
 Locally, install Rust MSVC targets and WiX 5.0.2, then run:
 

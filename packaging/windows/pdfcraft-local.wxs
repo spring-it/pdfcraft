@@ -29,6 +29,8 @@
       </Directory>
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder" />
+    <!-- DesktopFolder resolves to the current user desktop, including redirected desktops. -->
+    <StandardDirectory Id="DesktopFolder" />
 
     <!-- Intentionally no UIRef or authored dialogs. msiexec /qn requires zero clicks. -->
     <Feature Id="Main" Title="PdfCraft" Level="1">
@@ -52,6 +54,14 @@
             Type="integer" Value="1" KeyPath="yes" />
         <!-- Remove only an empty directory; PdfCraftData is user data and must survive uninstall. -->
         <RemoveFolder Id="RemoveLocalAppFolder" Directory="INSTALLFOLDER" On="uninstall" />
+      </Component>
+      <!-- Always create a per-user desktop shortcut, including during /qn installs. -->
+      <Component Id="PdfcraftLocalDesktopShortcut" Directory="DesktopFolder" Guid="*">
+        <Shortcut Id="DesktopShortcut" Name="PdfCraft"
+            Description="PdfCraft PDF reader" Target="[#PdfcraftExe]"
+            WorkingDirectory="INSTALLFOLDER" Icon="PdfcraftIcon.ico" IconIndex="0" />
+        <RegistryValue Root="HKCU" Key="Software\PdfCraft\LocalMsi" Name="DesktopShortcut"
+            Type="integer" Value="1" KeyPath="yes" />
       </Component>
       <Component Id="PdfcraftLocalShortcut" Directory="ProgramMenuFolder" Guid="*">
         <Shortcut Id="StartMenuShortcut" Name="PdfCraft (Local)"

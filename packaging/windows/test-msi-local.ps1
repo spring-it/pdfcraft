@@ -38,6 +38,11 @@ $modelsComponent = First 'SELECT `KeyPath` FROM `Component` WHERE `Component` = 
 Require ($modelsKey -and $modelsComponent -eq $modelsKey) 'models must use an HKCU registry key path'
 $shortcut = First 'SELECT `Directory_` FROM `Shortcut` WHERE `Shortcut` = ''StartMenuShortcut'''
 Require ($shortcut -eq 'ProgramMenuFolder') 'Start menu shortcut must belong to the current user'
+$desktopShortcutDir = First 'SELECT `Directory_` FROM `Shortcut` WHERE `Shortcut` = ''DesktopShortcut'''
+Require ($desktopShortcutDir -eq 'DesktopFolder') 'MSI must create a current-user desktop shortcut even with /qn'
+$desktopReg = First 'SELECT `Registry` FROM `Registry` WHERE `Root` = 1 AND `Name` = ''DesktopShortcut'''
+$desktopKey = First 'SELECT `KeyPath` FROM `Component` WHERE `Component` = ''PdfcraftLocalDesktopShortcut'''
+Require ($desktopReg -and $desktopKey -eq $desktopReg) 'Desktop shortcut component must use HKCU keypath'
 
 $hasMarker = $false
 $modelCount = 0
@@ -55,4 +60,4 @@ Require $hasMarker 'portable.txt is required so settings/logs stay in LocalAppDa
 Require ($modelCount -ge 2) "at least 2 OCR models are required, got $modelCount"
 [void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Database)
 [void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Installer)
-Write-Output 'ok: no wizard, current-user HKCU registry, %LOCALAPPDATA%\pdfcraft, portable data, OCR models'
+Write-Output 'ok: no wizard, current-user Desktop and Start Menu shortcuts, HKCU registry, %LOCALAPPDATA%\pdfcraft, portable data, OCR models'

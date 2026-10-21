@@ -4,6 +4,9 @@ $ErrorActionPreference = 'Stop'
 $Msi = (Resolve-Path -LiteralPath $Path).Path
 $AppFolder = Join-Path $env:LOCALAPPDATA 'pdfcraft'
 $Shortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\PdfCraft (Local).lnk'
+$DesktopDirectory = [Environment]::GetFolderPath([Environment+SpecialFolder]::DesktopDirectory)
+if (-not $DesktopDirectory) { throw 'Cannot locate current user DesktopDirectory' }
+$DesktopShortcut = Join-Path $DesktopDirectory 'PdfCraft.lnk'
 $InstallLog = Join-Path $env:TEMP 'pdfcraft-local-install.log'
 $UninstallLog = Join-Path $env:TEMP 'pdfcraft-local-uninstall.log'
 $Installed = $false
@@ -27,6 +30,14 @@ try {
     }
   }
   if (-not (Test-Path -LiteralPath $Shortcut)) { throw "Start menu shortcut missing: $Shortcut" }
+  if (-not (Test-Path -LiteralPath $DesktopShortcut)) { throw "Desktop shortcut missing: $DesktopShortcut" }
+  $shell = New-Object -ComObject WScript.Shell
+  $lnk = $shell.CreateShortcut($DesktopShortcut)
+  $expected = (Join-Path $AppFolder 'pdfcraft.exe')
+  if ([IO.Path]::GetFullPath($lnk.TargetPath) -ine [IO.Path]::GetFullPath($expected)) {
+    throw "Desktop shortcut target '$($lnk.TargetPath)' does not match '$expected'"
+  }
+  Write-Output "ok desktop shortcut points to $expected"
   & (Join-Path $AppFolder 'pdfcraft-cli.exe') --version
   if ($LASTEXITCODE -ne 0) { throw "Installed CLI could not run ($LASTEXITCODE)" }
   Write-Output "ok silent /qn install at $AppFolder"
@@ -36,4 +47,5 @@ finally {
 }
 if (Test-Path -LiteralPath (Join-Path $AppFolder 'pdfcraft.exe')) { throw 'Silent uninstall left pdfcraft.exe behind' }
 if (Test-Path -LiteralPath $Shortcut) { throw 'Silent uninstall left the Start menu shortcut behind' }
+if (Test-Path -LiteralPath $DesktopShortcut) { throw 'Silent uninstall left the desktop shortcut behind' }
 Write-Output 'ok silent /qn uninstall'
