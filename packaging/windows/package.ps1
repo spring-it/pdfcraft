@@ -134,7 +134,7 @@ if ($LocalAppDataMsi) {
     '<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">'
     '  <Fragment>'
     '    <ComponentGroup Id="PdfcraftModels" Directory="ModelsFolder">'
-    '      <Component Id="PdfcraftLocalModels" Guid="*">'
+    '      <Component Id="PdfcraftLocalModels" Guid="C7FC98D9-9BB7-41DA-AC82-9A895E090798">'
     '        <RegistryValue Root="HKCU" Key="Software\PdfCraft\LocalMsi" Name="Models" Type="integer" Value="1" KeyPath="yes" />'
     '        <RemoveFolder Id="RemoveLocalModelsFolder" Directory="ModelsFolder" On="uninstall" />'
   ) + $ModelLines + @(
