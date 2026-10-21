@@ -19,24 +19,24 @@ function Require([bool] $Pass, [string] $Message) {
   if (-not $Pass) { throw "MSI validation failed: $Message" }
 }
 
-$allUsers = First "SELECT `Value` FROM `Property` WHERE `Property` = 'ALLUSERS'"
+$allUsers = First 'SELECT `Value` FROM `Property` WHERE `Property` = ''ALLUSERS'''
 Require ($allUsers -ne '1') 'ALLUSERS must not select per-machine scope'
-$parent = First "SELECT `Directory_Parent` FROM `Directory` WHERE `Directory` = 'INSTALLFOLDER'"
+$parent = First 'SELECT `Directory_Parent` FROM `Directory` WHERE `Directory` = ''INSTALLFOLDER'''
 Require ($parent -eq 'LocalAppDataFolder') "INSTALLFOLDER must be under LocalAppDataFolder, got '$parent'"
-$name = First "SELECT `DefaultDir` FROM `Directory` WHERE `Directory` = 'INSTALLFOLDER'"
+$name = First 'SELECT `DefaultDir` FROM `Directory` WHERE `Directory` = ''INSTALLFOLDER'''
 Require ($name -match '(^|\|)pdfcraft$') "install directory must be pdfcraft, got '$name'"
-$modelsParent = First "SELECT `Directory_Parent` FROM `Directory` WHERE `Directory` = 'ModelsFolder'"
+$modelsParent = First 'SELECT `Directory_Parent` FROM `Directory` WHERE `Directory` = ''ModelsFolder'''
 Require ($modelsParent -eq 'INSTALLFOLDER') 'OCR models must be beside the application'
 Require (-not (First 'SELECT `Key` FROM `Registry` WHERE `Root` = 2')) 'HKLM writes are forbidden for a per-user MSI'
-Require (-not (First "SELECT `Name` FROM `_Tables` WHERE `Name` = 'Dialog'")) 'local MSI must have no wizard dialogs'
+Require (-not (First 'SELECT `Name` FROM `_Tables` WHERE `Name` = ''Dialog''')) 'local MSI must have no wizard dialogs'
 
-$payloadKey = First "SELECT `Registry` FROM `Registry` WHERE `Root` = 1 AND `Name` = 'Payload'"
-$componentKey = First "SELECT `KeyPath` FROM `Component` WHERE `Component` = 'PdfcraftLocalApp'"
+$payloadKey = First 'SELECT `Registry` FROM `Registry` WHERE `Root` = 1 AND `Name` = ''Payload'''
+$componentKey = First 'SELECT `KeyPath` FROM `Component` WHERE `Component` = ''PdfcraftLocalApp'''
 Require ($payloadKey -and $componentKey -eq $payloadKey) 'application must use an HKCU registry key path'
-$modelsKey = First "SELECT `Registry` FROM `Registry` WHERE `Root` = 1 AND `Name` = 'Models'"
-$modelsComponent = First "SELECT `KeyPath` FROM `Component` WHERE `Component` = 'PdfcraftLocalModels'"
+$modelsKey = First 'SELECT `Registry` FROM `Registry` WHERE `Root` = 1 AND `Name` = ''Models'''
+$modelsComponent = First 'SELECT `KeyPath` FROM `Component` WHERE `Component` = ''PdfcraftLocalModels'''
 Require ($modelsKey -and $modelsComponent -eq $modelsKey) 'models must use an HKCU registry key path'
-$shortcut = First "SELECT `Directory_` FROM `Shortcut` WHERE `Shortcut` = 'StartMenuShortcut'"
+$shortcut = First 'SELECT `Directory_` FROM `Shortcut` WHERE `Shortcut` = ''StartMenuShortcut'''
 Require ($shortcut -eq 'ProgramMenuFolder') 'Start menu shortcut must belong to the current user'
 
 $hasMarker = $false
