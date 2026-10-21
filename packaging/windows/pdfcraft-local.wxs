@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Per-user, no-wizard MSI for the dedicated v0.10.1 LocalAppData release.
+     A distinct UpgradeCode keeps it independent from the original per-machine MSI.
+     The portable marker keeps settings, logs, recovery and IDs under LocalAppData,
+     not in the roaming AppData folder. No HKLM registrations or system associations. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="PdfCraft (Local)"
+      Manufacturer="Learning Machines LLC"
+      Version="$(var.Version)"
+      UpgradeCode="C39A5F0D-991B-414B-9B9C-18E689194C73"
+      Scope="perUser"
+      Compressed="yes"
+      Language="1033">
+    <SummaryInformation Description="PdfCraft current-user LocalAppData installation" Manufacturer="Learning Machines LLC" />
+    <Launch Condition="NOT ALLUSERS OR (Installed AND REMOVE = &quot;ALL&quot;)"
+        Message="This PdfCraft MSI is for the current user only; do not set ALLUSERS=1." />
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+        DowngradeErrorMessage="A newer version of PdfCraft (Local) is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <Icon Id="PdfcraftIcon.ico" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="PdfcraftIcon.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/spring-it/pdfcraft" />
+
+    <!-- LocalAppDataFolder resolves to the installing user's %LOCALAPPDATA%. -->
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="pdfcraft">
+        <Directory Id="ModelsFolder" Name="models" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <!-- Intentionally no UIRef or authored dialogs. msiexec /qn requires zero clicks. -->
+    <Feature Id="Main" Title="PdfCraft" Level="1">
+      <ComponentGroupRef Id="PdfcraftLocalFiles" />
+      <ComponentGroupRef Id="PdfcraftModels" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="PdfcraftLocalFiles" Directory="INSTALLFOLDER">
+      <!-- ICE38: components installed in a user-profile directory use HKCU key paths. -->
+      <Component Id="PdfcraftLocalApp" Guid="*">
+        <File Id="PdfcraftExe" Source="$(var.BinDir)\pdfcraft.exe" />
+        <File Id="PdfcraftCliExe" Source="$(var.BinDir)\pdfcraft-cli.exe" />
+        <File Id="PdfcraftPortableMarker" Source="$(var.BinDir)\portable.txt" />
+        <File Id="PdfcraftDocumentIconLicense" Source="$(var.BinDir)\LICENSE-document.txt" />
+        <File Id="PdfcraftMitLicense" Source="$(var.BinDir)\LICENSE-MIT" />
+        <File Id="PdfcraftApacheLicense" Source="$(var.BinDir)\LICENSE-APACHE" />
+        <File Id="PdfcraftNotice" Source="$(var.BinDir)\NOTICE" />
+        <RegistryValue Root="HKCU" Key="Software\PdfCraft\LocalMsi" Name="Payload"
+            Type="integer" Value="1" KeyPath="yes" />
+        <!-- Remove only an empty directory; PdfCraftData is user data and must survive uninstall. -->
+        <RemoveFolder Id="RemoveLocalAppFolder" Directory="INSTALLFOLDER" On="uninstall" />
+      </Component>
+      <Component Id="PdfcraftLocalShortcut" Directory="ProgramMenuFolder" Guid="*">
+        <Shortcut Id="StartMenuShortcut" Name="PdfCraft (Local)"
+            Description="PdfCraft PDF workbench" Target="[#PdfcraftExe]"
+            WorkingDirectory="INSTALLFOLDER" Icon="PdfcraftIcon.ico" IconIndex="0" />
+        <RegistryValue Root="HKCU" Key="Software\PdfCraft\LocalMsi" Name="StartMenu"
+            Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

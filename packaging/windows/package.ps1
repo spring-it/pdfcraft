@@ -5,6 +5,7 @@
 .DESCRIPTION
   Produces, in $env:DIST (default: dist/release):
     pdfcraft-<version>-windows-<arch>.msi            per-machine installer (WiX v5)
+    pdfcraft-<version>-windows-<arch>-localappdata.msi per-user MSI (with -LocalAppDataMsi)
     pdfcraft-<version>-windows-<arch>-portable.zip   pdfcraft.exe + pdfcraft-cli.exe + models\ + portable.txt
 
   The binaries link the C runtime statically (+crt-static), so neither the MSI nor the portable
@@ -17,11 +18,13 @@
 .EXAMPLE
   pwsh packaging/windows/package.ps1 -Arch x64
   pwsh packaging/windows/package.ps1 -Arch x86 -SkipBuild
+  pwsh packaging/windows/package.ps1 -Arch x64 -LocalAppDataMsi  # per-user, silent-compatible
   pwsh packaging/windows/package.ps1 -Arch arm64     # cross-compiled; needs the MSVC ARM64 build tools
 #>
 param(
   [ValidateSet('x64', 'x86', 'arm64')] [string] $Arch = 'x64',
-  [switch] $SkipBuild
+  [switch] $SkipBuild,
+  [switch] $LocalAppDataMsi
 )
 $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -93,6 +96,9 @@ foreach ($f in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE') {
   Copy-Item (Join-Path $Root $f) $Stage
 }
 Copy-Item (Join-Path $Root 'assets\app-icon\LICENSE-document.txt') $Stage
+# Only the per-user MSI ships a portable marker: it keeps settings/logs/recovery under
+# %LOCALAPPDATA%\pdfcraft\PdfCraftData instead of roaming %APPDATA%.
+if ($LocalAppDataMsi) { Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Stage }
 
 & (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'pdfcraft.exe') (Join-Path $Stage 'pdfcraft-cli.exe')
 
@@ -109,16 +115,51 @@ if (-not (Test-Path (Join-Path $Models 'ATTRIBUTION.txt')) -or -not (Get-ChildIt
 }
 
 # ---- MSI ---------------------------------------------------------------------------------------
-$Msi = Join-Path $Dist "pdfcraft-$Version-windows-$Arch.msi"
+$MsiSuffix = if ($LocalAppDataMsi) { '-localappdata' } else { '' }
+$Msi = Join-Path $Dist "pdfcraft-$Version-windows-$Arch$MsiSuffix.msi"
+$WixSources = @()
+if ($LocalAppDataMsi) {
+  # WiX <Files> auto-creates file keypaths, which violate ICE38 for per-user directories.
+  # Harvest all downloaded OCR files into ONE component with an HKCU registry keypath.
+  $LocalModelsWxs = Join-Path $Stage 'local-models.wxs'
+  $ModelFiles = @(Get-ChildItem -LiteralPath $Models -File | Sort-Object Name)
+  if ($ModelFiles.Count -lt 2) { throw "expected at least two OCR model files in $Models" }
+  $ModelLines = @()
+  for ($i = 0; $i -lt $ModelFiles.Count; $i++) {
+    $source = [System.Security.SecurityElement]::Escape($ModelFiles[$i].FullName)
+    $ModelLines += ('        <File Id="LocalModelFile{0}" Source="{1}" />' -f $i, $source)
+  }
+  $ModelsXml = @(
+    '<?xml version="1.0" encoding="utf-8"?>'
+    '<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">'
+    '  <Fragment>'
+    '    <ComponentGroup Id="PdfcraftModels" Directory="ModelsFolder">'
+    '      <Component Id="PdfcraftLocalModels" Guid="*">'
+    '        <RegistryValue Root="HKCU" Key="Software\PdfCraft\LocalMsi" Name="Models" Type="integer" Value="1" KeyPath="yes" />'
+    '        <RemoveFolder Id="RemoveLocalModelsFolder" Directory="ModelsFolder" On="uninstall" />'
+  ) + $ModelLines + @(
+    '      </Component>'
+    '    </ComponentGroup>'
+    '  </Fragment>'
+    '</Wix>'
+  )
+  Set-Content -LiteralPath $LocalModelsWxs -Value $ModelsXml -Encoding utf8
+  $WixSources += (Join-Path $PSScriptRoot 'pdfcraft-local.wxs')
+  $WixSources += $LocalModelsWxs
+  $MsiTest = 'test-msi-local.ps1'
+} else {
+  $WixSources += (Join-Path $PSScriptRoot 'pdfcraft.wxs')
+  $WixSources += (Join-Path $PSScriptRoot 'installer-ui.wxs')
+  $MsiTest = 'test-msi.ps1'
+}
 Invoke-Native 'wix build' {
-  wix build (Join-Path $PSScriptRoot 'pdfcraft.wxs') -arch $Arch `
-    (Join-Path $PSScriptRoot 'installer-ui.wxs') `
+  wix build @WixSources -arch $Arch `
     -d "Version=$MsiVersion" -d "BinDir=$Stage" -d "ModelsDir=$Models" -d "IconPath=$(Join-Path $Root 'assets\app-icon\pdfcraft.ico')" `
     -o $Msi
 }
 # Inspect the built MSI, not just the XML, before signing/publishing it. In a child process, so
 # its Windows Installer database handle is gone before signtool opens the MSI.
-Invoke-Native 'test-msi' { & (Get-Process -Id $PID).Path -NoProfile -File (Join-Path $PSScriptRoot 'test-msi.ps1') $Msi }
+Invoke-Native 'test-msi' { & (Get-Process -Id $PID).Path -NoProfile -File (Join-Path $PSScriptRoot $MsiTest) $Msi }
 # wix writes its debug symbols (.wixpdb) next to the MSI; keep them out of the release assets.
 Remove-Item -Force -ErrorAction SilentlyContinue ([IO.Path]::ChangeExtension($Msi, '.wixpdb'))
 & (Join-Path $PSScriptRoot 'sign.ps1') $Msi
