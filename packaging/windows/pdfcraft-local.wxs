@@ -40,7 +40,7 @@
   <Fragment>
     <ComponentGroup Id="PdfcraftLocalFiles" Directory="INSTALLFOLDER">
       <!-- ICE38: components installed in a user-profile directory use HKCU key paths. -->
-      <Component Id="PdfcraftLocalApp" Guid="*">
+      <Component Id="PdfcraftLocalApp" Guid="A855963E-BFCC-414E-BB0E-909A77F89240">
         <File Id="PdfcraftExe" Source="$(var.BinDir)\pdfcraft.exe" />
         <File Id="PdfcraftCliExe" Source="$(var.BinDir)\pdfcraft-cli.exe" />
         <File Id="PdfcraftPortableMarker" Source="$(var.BinDir)\portable.txt" />
