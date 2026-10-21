@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: localappdata-msi-v0.10.1
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-msi:
@@ -43,6 +43,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'WiX installation failed' }
           $toolPath = Join-Path $env:USERPROFILE '.dotnet\tools'
           Add-Content -Path $env:GITHUB_PATH -Value $toolPath
+
+      - name: Install NASM for 32-bit native dependencies
+        if: matrix.arch == 'x86'
+        shell: pwsh
+        run: |
+          choco install nasm --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'NASM installation failed' }
+          $nasmDir = 'C:\Program Files\NASM'
+          if (-not (Test-Path (Join-Path $nasmDir 'nasm.exe'))) { throw "nasm.exe not found at $nasmDir" }
+          Add-Content -Path $env:GITHUB_PATH -Value $nasmDir
 
       - name: Build per-user MSI
         shell: pwsh
