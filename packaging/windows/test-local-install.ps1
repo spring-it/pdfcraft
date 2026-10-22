@@ -3,7 +3,7 @@ param([Parameter(Mandatory)] [string] $Path)
 $ErrorActionPreference = 'Stop'
 $Msi = (Resolve-Path -LiteralPath $Path).Path
 $AppFolder = Join-Path $env:LOCALAPPDATA 'pdfcraft'
-$Shortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\PdfCraft (Local).lnk'
+$Shortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\沃飞翼览 PDF.lnk'
 $DesktopDirectory = [Environment]::GetFolderPath([Environment+SpecialFolder]::DesktopDirectory)
 if (-not $DesktopDirectory) { throw 'Cannot locate current user DesktopDirectory' }
 $DesktopShortcut = Join-Path $DesktopDirectory '沃飞翼览 PDF.lnk'
