@@ -85,6 +85,8 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
             Dialog::Print => 820.0,
             Dialog::FieldProps | Dialog::BulkFieldProps => 600.0,
             Dialog::About => 780.0,
+            Dialog::Marks(pdfcraft_engine::MarkKind::Watermark) => 1160.0,
+            Dialog::Marks(_) => 720.0,
             _ => 520.0,
         });
         match dialog {
@@ -1171,6 +1173,11 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                         ui.add_space(12.0);
                         ui.label("基于开源 PdfCraft 定制，原作者版权归 ArtCraft Team 及贡献者所有。");
                         ui.label("许可证：MIT OR Apache-2.0，详见安装目录中的 LICENSE 和 NOTICE。");
+                        ui.add_space(12.0);
+                        ui.separator();
+                        ui.label(egui::RichText::new("内部定制开发者信息").strong());
+                        ui.label("数字发展室");
+                        ui.label(egui::RichText::new("Bing.Zheng1@aerofugia.com").italics());
                     }
                 }
             }

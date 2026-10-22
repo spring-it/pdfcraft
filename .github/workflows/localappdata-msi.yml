@@ -1,4 +1,4 @@
-name: Publish v0.10.2 沃飞翼览 PDF (Unicode watermark and silent MSI)
+name: Publish v0.10.3 沃飞翼览 PDF (Unicode watermark and silent MSI)
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: localappdata-msi-v0.10.2
+  group: localappdata-msi-v0.10.3
   cancel-in-progress: true
 
 jobs:
@@ -62,6 +62,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Chinese watermark rasterization tests failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-edit --lib
           if ($LASTEXITCODE -ne 0) { throw 'PDF watermark engine tests failed' }
+          cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui watermark_dialog_defaults_match_reference -- --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Watermark dialog defaults test failed' }
 
       - name: Build per-user MSI
         shell: pwsh
@@ -71,13 +73,13 @@ jobs:
       - name: Verify noninteractive install and uninstall
         shell: pwsh
         run: |
-          $msi = Get-Item "dist/release/pdfcraft-0.10.2-windows-${{ matrix.arch }}-localappdata.msi"
+          $msi = Get-Item "dist/release/pdfcraft-0.10.3-windows-${{ matrix.arch }}-localappdata.msi"
           & .\packaging\windows\test-local-install.ps1 -Path $msi.FullName
 
       - uses: actions/upload-artifact@v4
         with:
           name: local-msi-${{ matrix.arch }}
-          path: dist/release/pdfcraft-0.10.2-windows-${{ matrix.arch }}-localappdata.msi
+          path: dist/release/pdfcraft-0.10.3-windows-${{ matrix.arch }}-localappdata.msi
           if-no-files-found: error
           retention-days: 30
 
@@ -98,27 +100,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -s dist/msi/pdfcraft-0.10.2-windows-x64-localappdata.msi
-          test -s dist/msi/pdfcraft-0.10.2-windows-x86-localappdata.msi
+          test -s dist/msi/pdfcraft-0.10.3-windows-x64-localappdata.msi
+          test -s dist/msi/pdfcraft-0.10.3-windows-x86-localappdata.msi
           test "$(find dist/msi -maxdepth 1 -type f -name '*.msi' | wc -l)" -eq 2
 
       - name: Publish release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v0.10.2-wofei.1
+          RELEASE_TAG: v0.10.3-wofei.1
         run: |
           set -euo pipefail
           cat > release-notes.md <<'EOF'
-          沃飞翼览 PDF 0.10.2 企业定制版，基于 PdfCraft 开源项目（MIT OR Apache-2.0）。
+          沃飞翼览 PDF 0.10.3 企业定制版，基于 PdfCraft 开源项目（MIT OR Apache-2.0）。
 
           - Per-user installation path: %LOCALAPPDATA%\pdfcraft
           - Non-roaming app data: %LOCALAPPDATA%\pdfcraft\PdfCraftData
           - New red PDF icon supplied for this release: Windows EXE/taskbar, MSI, file associations and shortcuts; Linux/macOS icon resources also updated.
           - Installs a 沃飞翼览 PDF shortcut on the current user's desktop automatically, also with /qn.
           - Removes that desktop shortcut on silent uninstall (without removing user data).
-          - Enterprise home screen and Windows title renamed to 沃飞翼览 PDF; removed ArtCraft and Discord promotional controls.
-          - Enhanced native watermarks: Chinese text via local OS glyph rasterization, transparent PNG, tile/single modes, 9 positions, spacing, color, rotation, opacity, templates, odd/even/custom page ranges.
+          - Enterprise home screen and Windows title renamed to 沃飞翼览 PDF; removed ArtCraft and Discord promotional controls. The About page lists internal customization developer info: 数字发展室, Bing.Zheng1@aerofugia.com.
+          - Enhanced native watermarks: Chinese text via local OS glyph rasterization, transparent PNG, tile/single modes, 9 positions, spacing, color, rotation, opacity, templates, odd/even/custom page ranges. The watermark dialog is widened with settings on the left and a large live page preview on the right. Defaults match the reference: text 内部资料, 微软雅黑, 15 pt, gray, -45°, 10% opacity, tiled, 80/120 pt gaps, on top, zero offset.
           - Offline processing: no upload of PDFs or OS fonts.
           - No installer wizard and no administrator privileges required for a normal current-user install.
           - Silent install: msiexec /i <downloaded-msi-file> /qn /norestart
@@ -131,7 +133,7 @@ jobs:
           else
             gh release create "$RELEASE_TAG" dist/msi/*.msi \
               --target "$GITHUB_SHA" \
-              --title '沃飞翼览 PDF v0.10.2 - 中文水印增强版 (x64/x86)' \
+              --title '沃飞翼览 PDF v0.10.3 - 中文水印增强版 (x64/x86)' \
               --notes-file release-notes.md \
               --prerelease --latest=false
           fi
