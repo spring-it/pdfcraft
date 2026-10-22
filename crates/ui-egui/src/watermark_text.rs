@@ -110,7 +110,7 @@ fn choose_face(text: &str, family: usize) -> Result<(Vec<u8>, u32), String> {
 /// Includes all target glyphs as SVG paths, so no font assets are exported.
 pub fn png(text: &str, size: f64, color: [f64; 3], family: usize) -> Result<Vec<u8>, String> {
     let text = text.trim();
-    if text.is_empty() || text.chars().count() > MAX_GLYPHS || text.contains(['\n', '\r']) {
+    if text.is_empty() || text.chars().count() > MAX_GLYPHS || (text.contains('\n') || text.contains('\r')) {
         return Err("水印文字须为 1 至 80 个字符且不能包含换行。".into());
     }
     if !size.is_finite() || !(8.0..=100.0).contains(&size) {
