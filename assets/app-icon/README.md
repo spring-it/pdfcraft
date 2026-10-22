@@ -1,10 +1,10 @@
 # PdfCraft red PDF app icon
 
-The earlier green animal/lion icon is replaced with the **user-provided red PDF document icon** for the dedicated `v0.10.1-localappdata-msi` custom release.
+The earlier green animal/lion icon is replaced with the **user-provided red PDF document icon** for the dedicated `v0.10.2-wofei.1` custom release.
 
 <img src="pdfcraft-small.svg" alt="PdfCraft red PDF document icon" width="128">
 
-The supplied artwork is a red rounded-square icon containing a white folded PDF document and a curved red ribbon. The image was normalized to a square transparent canvas, not redesigned.
+The supplied artwork is the red rounded-square PDF document icon uploaded by the requester. It is the canonical application icon for the 0.10.2 custom release. The existing master artwork and all platform variants use this same supplied icon; the transparent canvas and original artwork are retained without redesign.
 
 ## Platform resources
 
