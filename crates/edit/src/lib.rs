@@ -114,6 +114,15 @@ pub struct Watermark {
     pub behind: bool,
     /// Offset of the centre from the page centre, in points (right, up).
     pub offset: [f64; 2],
+    /// Repeat the watermark across the selected pages instead of placing it once.
+    pub tile: bool,
+    /// Extra space between tiled watermarks, in points (horizontal, vertical).
+    pub tile_gap: [f64; 2],
+    /// Single watermark location in a 3x3 grid: 0=top-left, 4=center, 8=bottom-right.
+    pub position: u8,
+    /// Text rendered into a PNG at this many pixels per PDF point.
+    /// Zero keeps original image/PDF mark sizing behaviour.
+    pub raster_dpi: f64,
 }
 
 impl Watermark {
@@ -139,6 +148,10 @@ impl Default for Watermark {
             rotation: 45.0,
             behind: false,
             offset: [0.0; 2],
+            tile: false,
+            tile_gap: [90.0, 90.0],
+            position: 4,
+            raster_dpi: 0.0,
         }
     }
 }
@@ -175,6 +188,25 @@ fn picture(src: &MarkSource, page: (f64, f64), scale: f64, rotation: f64, offset
         format!("{} 0 0 {} {} {} cm", n(k), n(k), n(-dw / 2.0), n(-dh / 2.0))
     };
     format!("{} {} {} {} {} {} cm\n{place}\n/PCPic{} Do\n", n(c), n(s), n(-s), n(c), n(cx), n(cy), src.xobject.num)
+}
+
+/// Draw one picture at a specific physical size, in PDF display-space points.
+/// The same XObject can be reused by many tiled positions without duplicating its bytes.
+fn picture_at(src: &MarkSource, size: (f64, f64), rotation: f64, centre: (f64, f64)) -> String {
+    let (dw, dh) = size;
+    let (sn, cs) = rotation.to_radians().sin_cos();
+    let (cx, cy) = centre;
+    let place = if src.image {
+        format!("{} 0 0 {} {} {} cm", n(dw), n(dh), n(-dw / 2.0), n(-dh / 2.0))
+    } else {
+        let (sw, sh) = (src.size.0.max(0.01), src.size.1.max(0.01));
+        let sx = dw / sw;
+        let sy = dh / sh;
+        format!("{} 0 0 {} {} {} cm", n(sx), n(sy), n(-dw / 2.0), n(-dh / 2.0))
+    };
+    // Protect each placement's rotation/scale from affecting the next one.
+    format!("q\n{} {} {} {} {} {} cm\n{place}\n/PCPic{} Do\nQ\n",
+        n(cs), n(sn), n(-sn), n(cs), n(cx), n(cy), src.xobject.num)
 }
 
 /// Register a mark picture in the page's own resources (`/PCPic<num>`).
@@ -713,7 +745,47 @@ pub fn add_watermark(doc: &mut Document, pages: &[usize], wm: &Watermark, replac
         if let Some(src) = &wm.source {
             let mut content = begin(MarkKind::Watermark, "Watermark", page.view_matrix(doc));
             content.push_str(&format!("/PCGS{} gs\n", (opacity * 100.0).round() as i64));
-            content.push_str(&picture(src, (w, h), wm.scale, wm.rotation, wm.offset));
+            // Native file marks keep their existing fit-to-page scaling. Rasterized text
+            // carries its own DPI and keeps the requested point size on every page.
+            if wm.tile || wm.raster_dpi > 0.0 {
+                let (dw, dh) = if wm.raster_dpi > 0.0 {
+                    (src.size.0 / wm.raster_dpi, src.size.1 / wm.raster_dpi)
+                } else {
+                    let k = (w / src.size.0.max(0.01)).min(h / src.size.1.max(0.01)) * wm.scale.clamp(0.05, 1.0);
+                    (src.size.0 * k, src.size.1 * k)
+                };
+                if !(dw.is_finite() && dh.is_finite() && dw > 0.0 && dh > 0.0) {
+                    return Err(EditError::Invalid("invalid watermark image size".into()));
+                }
+                if wm.tile {
+                    let step_x = (dw + wm.tile_gap[0].clamp(20.0, 260.0)).max(20.0);
+                    let step_y = (dh + wm.tile_gap[1].clamp(20.0, 260.0)).max(20.0);
+                    let mut draw_count = 0usize;
+                    let mut row = 0usize;
+                    let mut y = -dh;
+                    while y <= h + dh && draw_count < 1200 {
+                        let shift = if row % 2 == 0 { 0.0 } else { step_x / 2.0 };
+                        let mut x = -dw;
+                        while x <= w + dw && draw_count < 1200 {
+                            content.push_str(&picture_at(src, (dw, dh), wm.rotation,
+                                (x + shift + wm.offset[0], y + wm.offset[1])));
+                            x += step_x;
+                            draw_count += 1;
+                        }
+                        y += step_y;
+                        row += 1;
+                    }
+                } else {
+                    let col = usize::from(wm.position.min(8)) % 3;
+                    let row = usize::from(wm.position.min(8)) / 3;
+                    let xs = [34.0 + dw / 2.0, w / 2.0, w - 34.0 - dw / 2.0];
+                    let ys = [h - 34.0 - dh / 2.0, h / 2.0, 34.0 + dh / 2.0];
+                    content.push_str(&picture_at(src, (dw, dh), wm.rotation,
+                        (xs[col] + wm.offset[0], ys[row] + wm.offset[1])));
+                }
+            } else {
+                content.push_str(&picture(src, (w, h), wm.scale, wm.rotation, wm.offset));
+            }
             content.push_str(END);
             add_resources(doc, &page, Some(opacity), None)?;
             add_picture_resource(doc, &page_list(doc)[i].clone(), src)?;
