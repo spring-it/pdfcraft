@@ -159,17 +159,19 @@ fn rgb32(c: [f64; 3]) -> Color32 {
 /// Compute a body height that leaves room for the title, action buttons, modal padding,
 /// and a safety margin so the egui Modal never becomes taller than the viewport
 /// (which would cause it to re-center and appear to slide out of view).
-const WATERMARK_DIALOG_VERTICAL_CHROME: f32 = 180.0;
+const WATERMARK_DIALOG_VERTICAL_CHROME: f32 = 140.0;
 
 fn watermark_body_height(viewport_height: f32) -> f32 {
-    // Always leave the chrome budget free so the Modal never exceeds the viewport.
-    // On very small viewports the body may be short; the outer ScrollArea still works.
+    // Leave enough room for the Modal chrome so the dialog never exceeds the viewport
+    // (which would cause egui to re-center and slide it out of view). Also keep the
+    // body large enough for the preview labels (the regression test requires
+    // preview + 100 <= body).
     let available = viewport_height - WATERMARK_DIALOG_VERTICAL_CHROME;
-    available.clamp(40.0, 480.0).min(viewport_height - 8.0)
+    available.clamp(100.0, 480.0)
 }
 
 fn watermark_preview_height(body_height: f32) -> f32 {
-    (body_height - 100.0).clamp(0.0, 380.0)
+    (body_height - 100.0).clamp(0.0, 380.0).min(body_height - 100.0)
 }
 
 /// A responsive two-column watermark dialog: settings on the left, live preview on the right.
