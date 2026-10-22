@@ -48,10 +48,22 @@ jobs:
         if: matrix.arch == 'x86'
         shell: pwsh
         run: |
-          choco install nasm --yes --no-progress
-          if ($LASTEXITCODE -ne 0) { throw 'NASM installation failed' }
-          $nasmDir = 'C:\Program Files\NASM'
-          if (-not (Test-Path (Join-Path $nasmDir 'nasm.exe'))) { throw "nasm.exe not found at $nasmDir" }
+          $installed = $false
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            Write-Host "Installing NASM (attempt $attempt/3)"
+            choco install nasm --yes --no-progress --execution-timeout=1800
+            if ($LASTEXITCODE -eq 0) { $installed = $true; break }
+            if ($attempt -lt 3) { Start-Sleep -Seconds 15 }
+          }
+          if (-not $installed) { throw 'NASM installation failed after three attempts' }
+          $nasm = Get-Command nasm.exe -ErrorAction SilentlyContinue
+          if ($nasm) {
+            $nasmDir = Split-Path -Parent $nasm.Source
+          } else {
+            $candidates = @('C:\Program Files\NASM', 'C:\Program Files (x86)\NASM', (Join-Path $env:ChocolateyInstall 'lib\nasm\tools'))
+            $nasmDir = $candidates | Where-Object { Test-Path (Join-Path $_ 'nasm.exe') } | Select-Object -First 1
+          }
+          if (-not $nasmDir -or -not (Test-Path (Join-Path $nasmDir 'nasm.exe'))) { throw 'NASM installed but nasm.exe could not be located' }
           Add-Content -Path $env:GITHUB_PATH -Value $nasmDir
 
       - name: Test Chinese watermark PNG and layout rules
