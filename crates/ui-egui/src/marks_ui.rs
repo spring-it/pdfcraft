@@ -162,7 +162,10 @@ fn rgb32(c: [f64; 3]) -> Color32 {
 const WATERMARK_DIALOG_VERTICAL_CHROME: f32 = 180.0;
 
 fn watermark_body_height(viewport_height: f32) -> f32 {
-    (viewport_height - WATERMARK_DIALOG_VERTICAL_CHROME).clamp(80.0, 480.0)
+    // Always leave the chrome budget free so the Modal never exceeds the viewport.
+    // On very small viewports the body may be short; the outer ScrollArea still works.
+    let available = viewport_height - WATERMARK_DIALOG_VERTICAL_CHROME;
+    available.clamp(40.0, 480.0).min(viewport_height - 8.0)
 }
 
 fn watermark_preview_height(body_height: f32) -> f32 {
