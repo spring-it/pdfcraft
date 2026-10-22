@@ -997,10 +997,12 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 return;
             }
             Dialog::Marks(kind) => {
-                // Width is set once by dialog_width() above. Do not override it here.
-                // Do not set a max height either: the watermark body sizes to content.
-                // A max height here was causing the Modal to expand and leave a large
-                // blank region below the controls.
+                // Width is set once by dialog_width() above.
+                // Hard cap the modal content height so egui cannot re-center a
+                // too-tall card and slide it out of view. The body uses a
+                // shrinking ScrollArea, so this does not create empty space.
+                let max_h = (ctx.content_rect().height() - 16.0).max(220.0);
+                ui.set_max_height(max_h);
                 let (apply, cancel) = crate::marks_ui::body(ui, app, &t, kind);
                 marks_now = apply;
                 close = apply || cancel;
