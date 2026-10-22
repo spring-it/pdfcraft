@@ -161,17 +161,16 @@ fn rgb32(c: [f64; 3]) -> Color32 {
 /// (which would cause it to re-center and appear to slide out of view).
 const WATERMARK_DIALOG_VERTICAL_CHROME: f32 = 140.0;
 
+/// Maximum height we are willing to give the two-column area. The dialog itself
+/// sizes to content; this only caps the scrollable settings pane and preview
+/// so the Modal never exceeds the viewport and slides away.
 fn watermark_body_height(viewport_height: f32) -> f32 {
-    // Leave enough room for the Modal chrome so the dialog never exceeds the viewport
-    // (which would cause egui to re-center and slide it out of view). Also keep the
-    // body large enough for the preview labels (the regression test requires
-    // preview + 100 <= body).
     let available = viewport_height - WATERMARK_DIALOG_VERTICAL_CHROME;
-    available.clamp(100.0, 480.0)
+    available.clamp(100.0, 420.0)
 }
 
 fn watermark_preview_height(body_height: f32) -> f32 {
-    (body_height - 100.0).clamp(0.0, 380.0).min(body_height - 100.0)
+    (body_height - 80.0).clamp(120.0, 340.0)
 }
 
 /// A responsive two-column watermark dialog: settings on the left, live preview on the right.
@@ -198,17 +197,17 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     let right_width = (available_width - 660.0).clamp(140.0, 450.0);
     let left_width = (available_width - right_width - 20.0).clamp(180.0, 640.0);
 
-    egui::ScrollArea::vertical()
-        .id_salt("wofei-watermark-dialog")
-        .max_height(body_height + 8.0)
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
+    // Size the two-column area to its content. Only the settings column scrolls
+    // when the controls exceed the available height. This avoids the large empty
+    // white region that appeared when a fixed body height was forced.
     ui.horizontal_top(|ui| {
-        ui.allocate_ui_with_layout(vec2(left_width, body_height), Layout::top_down(Align::Min), |left| {
+        ui.vertical(|left| {
+            left.set_min_width(left_width);
+            left.set_max_width(left_width);
             egui::ScrollArea::vertical()
                 .id_salt("wofei-watermark-settings")
-                .max_height((body_height - 12.0).max(40.0))
-                .auto_shrink([false, false])
+                .max_height(body_height)
+                .auto_shrink([false, true])
                 .show(left, |ui| {
                 ui.set_min_width((left_width - 16.0).max(160.0));
                 ui.horizontal(|ui| {
@@ -318,7 +317,9 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
 
         ui.separator();
 
-        ui.allocate_ui_with_layout(vec2(right_width, body_height), Layout::top_down(Align::Min), |right| {
+        ui.vertical(|right| {
+            right.set_min_width(right_width);
+            right.set_max_width(right_width);
             right.label(egui::RichText::new("实时预览").font(theme::semibold(15.0)));
             right.add_space(6.0);
             let file_name = d.file.as_ref().filter(|_| d.use_file).map(|f| f.0.as_str());
@@ -334,7 +335,6 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                 .small().color(t.text_muted));
         });
     });
-        });
 
     ui.add_space(10.0);
     let has_source = if d.use_file { d.file.is_some() } else { !d.wm.text.trim().is_empty() };
@@ -943,8 +943,10 @@ mod tests {
             let preview = watermark_preview_height(body);
             assert!(body + WATERMARK_DIALOG_VERTICAL_CHROME <= viewport_height + 0.1,
                 "body {body} plus dialog chrome must fit viewport {viewport_height}");
-            assert!(preview + 100.0 <= body + 0.1,
-                "preview {preview} and its labels must fit body {body}");
+            // Preview is content-sized and capped; it must stay within a reasonable
+            // range so the dialog does not grow a large empty region below the controls.
+            assert!(preview >= 100.0 && preview <= 360.0,
+                "preview {preview} should stay in a compact range for body {body}");
         }
     }
 
