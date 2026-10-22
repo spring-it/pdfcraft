@@ -1,6 +1,6 @@
 # 沃飞翼览 PDF
 
-**沃飞长空内部 PDF 阅读与处理工具**（基于开源 PdfCraft v0.10.1 定制，桌面企业版 0.10.6）
+**沃飞长空内部 PDF 阅读与处理工具**（基于开源 PdfCraft v0.10.1 定制，桌面企业版 0.10.7）
 
 - 离线阅读、编辑、批注、OCR 和文档管理
 - 增强版 PDF 水印：**中文**、透明度、颜色、旋转、平铺/单个、九宫格位置、间距及指定页码
@@ -357,7 +357,7 @@ emerge --ask app-text/pdfcraft-bin
 
 Logs, environment variables and other development notes are in [docs/development.md](docs/development.md).
 
-## v0.10.6 enterprise customization
+## v0.10.7 enterprise customization
 
 This branch is a Windows-focused internal distribution of PdfCraft, maintained for 沃飞长空.
 
@@ -372,27 +372,27 @@ This branch is a Windows-focused internal distribution of PdfCraft, maintained f
 
 ## Downloads
 
-### Windows MSI (version 0.10.6)
+### Windows MSI (version 0.10.7)
 
 The customized release publishes two installers after the x64 and x86 build, watermark tests, and silent-install/uninstall checks pass.
 
 | Architecture | Installer |
 |---|---|
-| Windows x64 | [pdfcraft-0.10.6-windows-x64-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.6-wofei.1/pdfcraft-0.10.6-windows-x64-localappdata.msi) |
-| Windows x86 | [pdfcraft-0.10.6-windows-x86-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.6-wofei.1/pdfcraft-0.10.6-windows-x86-localappdata.msi) |
+| Windows x64 | [pdfcraft-0.10.7-windows-x64-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.7-wofei.1/pdfcraft-0.10.7-windows-x64-localappdata.msi) |
+| Windows x86 | [pdfcraft-0.10.7-windows-x86-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.7-wofei.1/pdfcraft-0.10.7-windows-x86-localappdata.msi) |
 
 The installers are for the current Windows user, require no administrator privileges for a normal installation, and create **沃飞翼览 PDF** desktop and Start menu shortcuts. Application settings, logs and recovery data remain under `%LOCALAPPDATA%\pdfcraft\PdfCraftData`.
 
 Silent install:
 
 ```powershell
-msiexec /i "pdfcraft-0.10.6-windows-x64-localappdata.msi" /qn /norestart
+msiexec /i "pdfcraft-0.10.7-windows-x64-localappdata.msi" /qn /norestart
 ```
 
 Silent uninstall:
 
 ```powershell
-msiexec /x "pdfcraft-0.10.6-windows-x64-localappdata.msi" /qn /norestart
+msiexec /x "pdfcraft-0.10.7-windows-x64-localappdata.msi" /qn /norestart
 ```
 
 These custom MSI files are **unsigned unless signing is separately configured**. See [the MSI packaging and test notes](docs/localappdata-msi.md). This release is not the upstream PdfCraft release; it is built from this customized branch.

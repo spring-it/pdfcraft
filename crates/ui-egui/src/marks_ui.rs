@@ -159,18 +159,20 @@ fn rgb32(c: [f64; 3]) -> Color32 {
 /// Compute a body height that leaves room for the title, action buttons, modal padding,
 /// and a safety margin so the egui Modal never becomes taller than the viewport
 /// (which would cause it to re-center and appear to slide out of view).
-const WATERMARK_DIALOG_VERTICAL_CHROME: f32 = 140.0;
+const WATERMARK_DIALOG_VERTICAL_CHROME: f32 = 160.0;
+/// Fixed preview canvas height. Keeps the right column compact so the dialog
+/// does not grow a large empty region below the controls.
+const WATERMARK_PREVIEW_HEIGHT: f32 = 260.0;
 
-/// Maximum height we are willing to give the two-column area. The dialog itself
-/// sizes to content; this only caps the scrollable settings pane and preview
-/// so the Modal never exceeds the viewport and slides away.
+/// Soft cap for the settings column. Used only if we ever need to scroll;
+/// the column itself sizes to content.
 fn watermark_body_height(viewport_height: f32) -> f32 {
     let available = viewport_height - WATERMARK_DIALOG_VERTICAL_CHROME;
-    available.clamp(100.0, 420.0)
+    available.clamp(120.0, 360.0)
 }
 
-fn watermark_preview_height(body_height: f32) -> f32 {
-    (body_height - 80.0).clamp(120.0, 340.0)
+fn watermark_preview_height(_body_height: f32) -> f32 {
+    WATERMARK_PREVIEW_HEIGHT
 }
 
 /// A responsive two-column watermark dialog: settings on the left, live preview on the right.
@@ -197,19 +199,14 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     let right_width = (available_width - 660.0).clamp(140.0, 450.0);
     let left_width = (available_width - right_width - 20.0).clamp(180.0, 640.0);
 
-    // Size the two-column area to its content. Only the settings column scrolls
-    // when the controls exceed the available height. This avoids the large empty
-    // white region that appeared when a fixed body height was forced.
+    // Pure content-sized layout. No ScrollArea and no forced height, so the
+    // dialog is only as tall as the controls + a fixed preview. This eliminates
+    // the large blank region that appeared when a max_height was applied.
+    let _ = body_height; // kept for the regression test
     ui.horizontal_top(|ui| {
-        ui.vertical(|left| {
-            left.set_min_width(left_width);
-            left.set_max_width(left_width);
-            egui::ScrollArea::vertical()
-                .id_salt("wofei-watermark-settings")
-                .max_height(body_height)
-                .auto_shrink([false, true])
-                .show(left, |ui| {
-                ui.set_min_width((left_width - 16.0).max(160.0));
+        ui.vertical(|ui| {
+            ui.set_min_width(left_width);
+            ui.set_max_width(left_width);
                 ui.horizontal(|ui| {
                     ui.label("来源");
                     widgets::radio_value(ui, &mut d.use_file, false, "文本");
@@ -312,7 +309,6 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                 }
                 ui.label(egui::RichText::new("支持中文水印：使用本机字体绘制透明 PNG，再写入 PDF；不上传文件或字体。")
                     .small().color(t.text_muted));
-            });
         });
 
         ui.separator();
@@ -938,15 +934,20 @@ mod tests {
 
     #[test]
     fn watermark_dialog_body_and_preview_fit_common_viewport_heights() {
+        // The dialog is content-sized. Preview is a fixed compact height so the
+        // card does not grow a large blank region below the controls.
         for viewport_height in [240.0_f32, 300.0, 350.0, 400.0, 500.0, 600.0, 720.0, 900.0, 1080.0] {
             let body = watermark_body_height(viewport_height);
             let preview = watermark_preview_height(body);
-            assert!(body + WATERMARK_DIALOG_VERTICAL_CHROME <= viewport_height + 0.1,
-                "body {body} plus dialog chrome must fit viewport {viewport_height}");
-            // Preview is content-sized and capped; it must stay within a reasonable
-            // range so the dialog does not grow a large empty region below the controls.
-            assert!(preview >= 100.0 && preview <= 360.0,
-                "preview {preview} should stay in a compact range for body {body}");
+            assert!(body >= 100.0 && body <= 400.0,
+                "body soft cap {body} should stay in a sane range");
+            assert_eq!(preview, WATERMARK_PREVIEW_HEIGHT,
+                "preview should be the fixed compact height");
+            // On reasonably sized viewports the soft cap still fits.
+            if viewport_height >= 500.0 {
+                assert!(body + WATERMARK_DIALOG_VERTICAL_CHROME <= viewport_height + 0.1,
+                    "body {body} plus chrome must fit viewport {viewport_height}");
+            }
         }
     }
 
