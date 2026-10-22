@@ -545,19 +545,48 @@ fn file_source(ui: &mut egui::Ui, d: &mut MarksDraft, kind: MarkKind) -> bool {
     browse
 }
 
-/// The edit the dialog's OK makes.
-pub fn edit(d: &MarksDraft, kind: MarkKind, count: usize) -> Edit {
-    let pages = d.range.pages(count);
+/// Parse 1-based custom page ranges, rejecting invalid syntax and out-of-range pages.
+fn selected_pages(d: &MarksDraft, count: usize) -> Result<Vec<usize>, String> {
+    if !d.custom_enabled { return Ok(d.range.pages(count)); }
+    let mut pages = std::collections::BTreeSet::new();
+    let text = d.custom_pages.replace('，', ",").replace(' ', "");
+    if text.is_empty() { return Err("请输入页码范围".into()); }
+    for part in text.split(',') {
+        let (a, b) = if let Some((a, b)) = part.split_once('-') {
+            (a.parse::<usize>().map_err(|_| "无效起始页码")?, b.parse::<usize>().map_err(|_| "无效结束页码")?)
+        } else {
+            let p = part.parse::<usize>().map_err(|_| "无效页码")?;
+            (p, p)
+        };
+        if a < 1 || b < a || b > count { return Err("页码超出文档范围".into()); }
+        for p in a..=b { pages.insert(p - 1); }
+    }
+    if pages.is_empty() { return Err("没有选中任何页面".into()); }
+    Ok(pages.into_iter().collect())
+}
+
+/// Render the text into a transparent PNG, as in the user's HTML watermark example.
+fn watermark_file(d: &MarksDraft) -> Result<Option<pdfcraft_engine::MarkFile>, String> {
+    if d.use_file { return Ok(mark_file(d)); }
+    let png = crate::watermark_text::png(&d.wm.text, d.wm.font_size, d.wm.color, d.font_family)?;
+    Ok(Some(pdfcraft_engine::MarkFile {
+        name: "wofei-watermark.png".into(),
+        bytes: std::sync::Arc::new(png),
+        page: 0,
+    }))
+}
+
+/// The edit the dialog's OK makes. Fail before mutating any PDF on invalid font/pages.
+pub fn edit(d: &MarksDraft, kind: MarkKind, count: usize) -> Result<Edit, String> {
+    let pages = if kind == MarkKind::Watermark { selected_pages(d, count)? } else { d.range.pages(count) };
     match kind {
-        MarkKind::HeaderFooter => Edit::AddHeaderFooter { pages, settings: d.hf.clone(), replace: d.replace },
+        MarkKind::HeaderFooter => Ok(Edit::AddHeaderFooter { pages, settings: d.hf.clone(), replace: d.replace }),
         MarkKind::Watermark => {
             let mut wm = d.wm.clone();
-            if d.fit {
-                wm.font_size = 0.0;
-            }
-            Edit::AddWatermark { pages, settings: wm, replace: d.replace, file: mark_file(d) }
+            if !d.use_file { wm.raster_dpi = crate::watermark_text::DPI; }
+            Ok(Edit::AddWatermark { pages, settings: wm, replace: d.replace, file: watermark_file(d)? })
         }
-        MarkKind::Background => Edit::AddBackground { pages, settings: d.bg.clone(), replace: d.replace, file: mark_file(d) },
+        MarkKind::Background => Ok(Edit::AddBackground { pages, settings: d.bg.clone(), replace: d.replace, file: mark_file(d) }),
     }
 }
 
@@ -573,7 +602,7 @@ mod tests {
         d.hf.text[5] = "Page <<1>> of <<n>> — café".into();
         assert_eq!(undrawable(MarkKind::HeaderFooter, &d), None);
         d.wm.text = "ΑΠΟΡΡΗΤΟ".into();
-        assert_eq!(undrawable(MarkKind::Watermark, &d), Some('Α'));
+        assert_eq!(undrawable(MarkKind::Watermark, &d), None, "Unicode text is rasterized");
         d.use_file = true;
         assert_eq!(undrawable(MarkKind::Watermark, &d), None, "a picture watermark draws no text");
         assert_eq!(undrawable(MarkKind::Background, &d), None);
@@ -595,11 +624,23 @@ mod tests {
     }
 
     #[test]
+    fn strict_custom_page_range_works_with_chinese_watermark() {
+        let mut d = MarksDraft::default();
+        d.custom_enabled = true;
+        d.custom_pages = "1-3， 5, 8-10".to_owned();
+        assert_eq!(selected_pages(&d, 10).unwrap(), [0, 1, 2, 4, 7, 8, 9]);
+        d.custom_pages = "11".to_owned();
+        assert!(selected_pages(&d, 10).is_err());
+        d.custom_pages = "4-2".to_owned();
+        assert!(selected_pages(&d, 10).is_err());
+    }
+
+    #[test]
     fn the_watermark_edit_carries_the_offset() {
         let mut d = MarksDraft::default();
         d.wm.text = "DRAFT".into();
         d.wm.offset = [-72.0, 36.0];
-        match edit(&d, MarkKind::Watermark, 3) {
+        match edit(&d, MarkKind::Watermark, 3).unwrap() {
             Edit::AddWatermark { settings, .. } => assert_eq!(settings.offset, [-72.0, 36.0]),
             other => panic!("expected AddWatermark, got {other:?}"),
         }
