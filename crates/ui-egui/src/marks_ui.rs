@@ -406,19 +406,43 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                 p.text(centre, egui::Align2::CENTER_CENTER, file_name.clone().unwrap_or_default(), egui::FontId::proportional(10.0), Color32::GRAY);
             }
             MarkKind::Watermark => {
-                let text = if wm.text.trim().is_empty() { "CONFIDENTIAL" } else { wm.text.trim() };
+                let text = if wm.text.trim().is_empty() { "内部资料 · 请勿外传" } else { wm.text.trim() };
                 let size = if fit {
-                    (r.width().hypot(r.height()) * 0.5 / (text.len().max(1) as f32 * 0.55)).clamp(6.0, 80.0)
-                } else {
-                    (wm.font_size as f32 * s).max(5.0)
-                };
-                let galley = p.layout_no_wrap(text.to_string(), egui::FontId::proportional(size), rgb32(wm.color).gamma_multiply(wm.opacity as f32));
+                    (r.width().hypot(r.height()) * 0.5 / (text.chars().count().max(1) as f32 * 0.55)).clamp(6.0, 80.0)
+                } else { (wm.font_size as f32 * s).max(5.0) };
+                let color = rgb32(wm.color).gamma_multiply(wm.opacity as f32);
+                let galley = p.layout_no_wrap(text.to_string(), egui::FontId::proportional(size), color);
                 let angle = -(wm.rotation as f32).to_radians();
                 let half = galley.size() / 2.0;
                 let (sn, cs) = angle.sin_cos();
                 let offset = vec2(half.x * cs - half.y * sn, half.x * sn + half.y * cs);
-                let centre = r.center() + vec2(wm.offset[0] as f32 * s, -wm.offset[1] as f32 * s);
-                p.add(egui::epaint::TextShape::new(centre - offset, galley, Color32::BLACK).with_angle(angle));
+                let painter = p.with_clip_rect(r);
+                let draw = |centre: egui::Pos2| {
+                    painter.add(egui::epaint::TextShape::new(centre - offset, galley.clone(), Color32::BLACK).with_angle(angle));
+                };
+                if wm.tile {
+                    let step_x = (galley.size().x + wm.tile_gap[0] as f32 * s).max(30.0);
+                    let step_y = (galley.size().y + wm.tile_gap[1] as f32 * s).max(30.0);
+                    let mut y = r.top() - step_y / 2.0;
+                    let mut row = 0;
+                    while y < r.bottom() + step_y && row < 40 {
+                        let mut x = r.left() - step_x / 2.0 + if row % 2 == 0 { 0.0 } else { step_x / 2.0 };
+                        let mut col = 0;
+                        while x < r.right() + step_x && col < 40 {
+                            draw(pos2(x, y));
+                            x += step_x;
+                            col += 1;
+                        }
+                        y += step_y;
+                        row += 1;
+                    }
+                } else {
+                    let col = usize::from(wm.position.min(8)) % 3;
+                    let row = usize::from(wm.position.min(8)) / 3;
+                    let xs = [r.left() + 20.0, r.center().x, r.right() - 20.0];
+                    let ys = [r.top() + 20.0, r.center().y, r.bottom() - 20.0];
+                    draw(pos2(xs[col] + wm.offset[0] as f32 * s, ys[row] - wm.offset[1] as f32 * s));
+                }
             }
             MarkKind::Background if file_name.is_some() => {
                 p.rect_stroke(r.shrink(6.0), CornerRadius::ZERO, egui::Stroke::new(1.0, Color32::GRAY), egui::StrokeKind::Inside);
