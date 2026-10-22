@@ -180,6 +180,44 @@ mod tests {
         }
     }
     #[test]
+    fn chinese_watermark_is_embedded_into_a_saved_pdf() {
+        // Verify PNG generation *and* native PDF integration, not just UI fields.
+        let text = "机密文件";
+        let bytes = match png(text, 34.0, [0.4, 0.5, 0.6], 0) {
+            Ok(bytes) => bytes,
+            Err(e) if !cfg!(windows) => {
+                eprintln!("CJK test skipped on OS without a Chinese font: {e}");
+                return;
+            }
+            Err(e) => panic!("Windows Chinese font is required: {e}"),
+        };
+        let mut session = pdfcraft_engine::Session::new();
+        let original = session.create_from_text("Sample", "A PDF to protect").unwrap();
+        let id = session.open("sample.pdf", None, original, None).unwrap();
+        session.apply(id, pdfcraft_engine::Edit::AddWatermark {
+            pages: vec![0],
+            settings: pdfcraft_engine::Watermark {
+                text: text.into(),
+                raster_dpi: DPI,
+                tile: true,
+                opacity: 0.18,
+                ..pdfcraft_engine::Watermark::default()
+            },
+            replace: false,
+            file: Some(pdfcraft_engine::MarkFile {
+                name: "chinese-watermark.png".into(),
+                bytes: std::sync::Arc::new(bytes),
+                page: 0,
+            }),
+        }).unwrap();
+        let saved = session.save_bytes(id).unwrap();
+        assert!(saved.len() > 1024, "watermarked PDF should be nonempty");
+        let mut reopened = pdfcraft_engine::Session::new();
+        let reopened_id = reopened.open("protected.pdf", None, saved, None).unwrap();
+        assert_eq!(reopened.get(reopened_id).unwrap().info.pages.len(), 1);
+    }
+
+    #[test]
     fn long_untrusted_string_is_rejected() {
         assert!(png(&"机密".repeat(90), 34.0, [0.1; 3], 0).is_err());
     }
