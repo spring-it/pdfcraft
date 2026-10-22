@@ -89,23 +89,37 @@ pub struct MarksDraft {
     pub use_file: bool,
     pub file: Option<(String, std::sync::Arc<Vec<u8>>)>,
     pub file_page: usize,
+    pub font_family: usize,
+    pub custom_enabled: bool,
+    pub custom_pages: String,
 }
 
 impl Default for MarksDraft {
     fn default() -> Self {
         Self {
             hf: HeaderFooter::default(),
-            wm: Watermark::default(),
+            wm: Watermark {
+                text: "内部资料 · 请勿外传".into(),
+                font_size: 34.0,
+                opacity: 0.18,
+                rotation: -28.0,
+                color: [0.392, 0.455, 0.545],
+                tile: true,
+                ..Watermark::default()
+            },
             bg: Background::default(),
             range: PageRange::default(),
             replace: false,
             focused_box: 1,
             page_format: 0,
             date_format: 0,
-            fit: true,
+            fit: false,
             use_file: false,
             file: None,
             file_page: 1,
+            font_family: 0,
+            custom_enabled: false,
+            custom_pages: String::new(),
         }
     }
 }
@@ -241,15 +255,36 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                             crate::widgets::block(&mut d.wm.text).desired_rows(2).desired_width(320.0).hint_text("CONFIDENTIAL").id_salt("wm-text"),
                         );
                     });
-                    ui.horizontal(|ui| {
-                        ui.add_enabled_ui(!d.use_file, |ui| ui.add(widgets::checkbox(&mut d.fit, tl!("Fit to page"))));
-                        ui.add_enabled_ui(!d.fit, |ui| {
-                            ui.label(tl!("Size"));
-                            if d.wm.font_size == 0.0 {
-                                d.wm.font_size = 72.0;
+                    if !d.use_file {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("常用模板");
+                            for (label, value) in [
+                                ("内部资料", "内部资料 · 请勿外传"),
+                                ("机密文件", "机密文件"),
+                                ("仅供审阅", "仅供审阅"),
+                                ("CONFIDENTIAL", "CONFIDENTIAL"),
+                            ] {
+                                if ui.small_button(label).clicked() { d.wm.text = value.to_string(); }
                             }
-                            ui.add(egui::DragValue::new(&mut d.wm.font_size).range(6.0..=300.0));
                         });
+                    }
+                    ui.horizontal(|ui| {
+                        ui.label("排列方式");
+                        widgets::radio_value(ui, &mut d.wm.tile, true, "平铺水印");
+                        widgets::radio_value(ui, &mut d.wm.tile, false, "单个水印");
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("字体");
+                        egui::ComboBox::from_id_salt("wofei-watermark-font")
+                            .selected_text(["微软雅黑", "黑体", "Arial", "Georgia", "等宽字体"][d.font_family.min(4)])
+                            .show_ui(ui, |ui| {
+                                for (i, label) in ["微软雅黑", "黑体", "Arial", "Georgia", "等宽字体"].iter().enumerate() {
+                                    ui.selectable_value(&mut d.font_family, i, *label);
+                                }
+                            });
+                        ui.label("字号");
+                        ui.add(egui::Slider::new(&mut d.wm.font_size, 12.0..=100.0).suffix(" pt"));
+                        ui.label("颜色");
                         color_button(ui, &mut d.wm.color);
                     });
                     ui.horizontal(|ui| {
@@ -271,6 +306,26 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                         widgets::radio_value(ui, &mut d.wm.behind, true, tl!("Appear behind page"));
                         widgets::radio_value(ui, &mut d.wm.behind, false, tl!("Appear on top of page"));
                     });
+                    if d.wm.tile {
+                        ui.horizontal(|ui| {
+                            ui.label("横向间距");
+                            ui.add(egui::Slider::new(&mut d.wm.tile_gap[0], 20.0..=260.0).suffix(" pt"));
+                            ui.label("纵向间距");
+                            ui.add(egui::Slider::new(&mut d.wm.tile_gap[1], 20.0..=260.0).suffix(" pt"));
+                        });
+                    } else {
+                        ui.horizontal(|ui| {
+                            ui.label("水印位置");
+                            egui::Grid::new("wofei-watermark-grid").num_columns(3).show(ui, |ui| {
+                                for (i, label) in ["左上", "顶部", "右上", "左侧", "居中", "右侧", "左下", "底部", "右下"]
+                                    .into_iter().enumerate()
+                                {
+                                    ui.selectable_value(&mut d.wm.position, i as u8, label);
+                                    if i % 3 == 2 { ui.end_row(); }
+                                }
+                            });
+                        });
+                    }
                     ui.horizontal(|ui| {
                         ui.label(tl!("Offset from centre"));
                         ui.label(tl!("Horizontal"));
@@ -303,6 +358,20 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
     ui.add_space(8.0);
     ui.label(egui::RichText::new(tl!("Page Range Options")).font(theme::semibold(12.5)));
     d.range.ui(ui, count);
+    if kind == MarkKind::Watermark {
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut d.custom_enabled, "自定义页码");
+            if d.custom_enabled {
+                ui.add(egui::TextEdit::singleline(&mut d.custom_pages).desired_width(240.0)
+                    .hint_text("例如 1-3, 5, 8-10"));
+            }
+        });
+        if d.custom_enabled && selected_pages(d, count).is_err() {
+            ui.colored_label(egui::Color32::RED, "页码范围无效，请输入 1-3, 5, 8-10 格式。");
+        }
+        ui.label(egui::RichText::new("支持中文水印：使用本机字体绘制透明 PNG，再写入 PDF；不上传文件或字体。")
+            .small().color(t.text_muted));
+    }
     ui.add_space(8.0);
     // Preview of the current page.
     let hf = d.hf.clone();
@@ -374,7 +443,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                 .small()
                 .color(t.text_faint),
             );
-            let n = d.range.pages(count).len();
+            let n = selected_pages(d, count).map(|p| p.len()).unwrap_or(0);
             let applies =
                 if n == 1 { tl!("Applies to 1 page").to_string() } else { crate::i18n::fmt(tl!("Applies to {n} pages"), &[("n", &n.to_string())]) };
             ui.label(egui::RichText::new(applies).small().color(t.text_faint));
@@ -405,7 +474,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                 }
                 MarkKind::Background => !d.use_file || d.file.is_some(),
             }
-            && !d.range.pages(count).is_empty();
+            && selected_pages(d, count).is_ok_and(|pages| !pages.is_empty());
         if ui.add_enabled_ui(ready, |ui| widgets::pill_button(ui, tl!("OK"), true)).inner.clicked() {
             apply = true;
         }
@@ -438,7 +507,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
 fn undrawable(kind: MarkKind, d: &MarksDraft) -> Option<char> {
     match kind {
         MarkKind::HeaderFooter => d.hf.first_undrawable(),
-        MarkKind::Watermark if !d.use_file => d.wm.first_undrawable(),
+        MarkKind::Watermark if !d.use_file => None, // Unicode watermark text becomes a PNG.
         MarkKind::Watermark | MarkKind::Background => None,
     }
 }
