@@ -6,7 +6,7 @@ $AppFolder = Join-Path $env:LOCALAPPDATA 'pdfcraft'
 $Shortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\PdfCraft (Local).lnk'
 $DesktopDirectory = [Environment]::GetFolderPath([Environment+SpecialFolder]::DesktopDirectory)
 if (-not $DesktopDirectory) { throw 'Cannot locate current user DesktopDirectory' }
-$DesktopShortcut = Join-Path $DesktopDirectory 'PdfCraft.lnk'
+$DesktopShortcut = Join-Path $DesktopDirectory '沃飞翼览 PDF.lnk'
 $InstallLog = Join-Path $env:TEMP 'pdfcraft-local-install.log'
 $UninstallLog = Join-Path $env:TEMP 'pdfcraft-local-uninstall.log'
 $Installed = $false
