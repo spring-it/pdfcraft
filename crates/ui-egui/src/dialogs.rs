@@ -8,6 +8,20 @@ use pdfcraft_engine::Edit;
 use crate::{CloseRequest, Dialog, PdfCraftApp, PropsTab, panels::human_size, widgets};
 
 const INFO_KEYS: [&str; 4] = ["Title", "Author", "Subject", "Keywords"];
+const WATERMARK_DIALOG_WIDTH: f32 = 1160.0;
+const MARKS_DIALOG_WIDTH: f32 = 720.0;
+
+fn dialog_width(dialog: Dialog) -> f32 {
+    match dialog {
+        Dialog::Properties(_) => 640.0,
+        Dialog::Print => 820.0,
+        Dialog::FieldProps | Dialog::BulkFieldProps => 600.0,
+        Dialog::About => 780.0,
+        Dialog::Marks(pdfcraft_engine::MarkKind::Watermark) => WATERMARK_DIALOG_WIDTH,
+        Dialog::Marks(_) => MARKS_DIALOG_WIDTH,
+        _ => 520.0,
+    }
+}
 
 pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
     dialogs(app, ctx);
@@ -80,15 +94,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let mut close = false;
     let mut next = dialog;
     let modal = widgets::show_modal(ctx, "dialog", |ui| {
-        ui.set_width(match dialog {
-            Dialog::Properties(_) => 640.0,
-            Dialog::Print => 820.0,
-            Dialog::FieldProps | Dialog::BulkFieldProps => 600.0,
-            Dialog::About => 780.0,
-            Dialog::Marks(pdfcraft_engine::MarkKind::Watermark) => 1160.0,
-            Dialog::Marks(_) => 720.0,
-            _ => 520.0,
-        });
+        ui.set_width(dialog_width(dialog));
         match dialog {
             Dialog::WordCount => {
                 close = crate::word_count_ui::body(ui, app);
@@ -989,7 +995,8 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 return;
             }
             Dialog::Marks(kind) => {
-                ui.set_width(720.0);
+                // Width is set once by dialog_width() above. Do not override it here:
+                // the watermark dialog allocates a 640 pt settings pane plus a 450 pt preview.
                 let (apply, cancel) = crate::marks_ui::body(ui, app, &t, kind);
                 marks_now = apply;
                 close = apply || cancel;
@@ -1749,5 +1756,19 @@ fn unlock(app: &mut PdfCraftApp, ctx: &egui::Context) {
         }
         Some(PasswordAnswer::Cancel) => app.submit_unlock(None),
         None => {}
+    }
+}
+
+
+#[cfg(test)]
+mod watermark_dialog_layout_tests {
+    use super::*;
+
+    #[test]
+    fn watermark_dialog_keeps_enough_width_for_settings_and_preview() {
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark)), 1160.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Background)), 720.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::HeaderFooter)), 720.0);
+        assert!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark)) >= 640.0 + 450.0 + 40.0);
     }
 }

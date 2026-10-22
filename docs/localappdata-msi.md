@@ -61,3 +61,8 @@ Signing is optional in the existing packaging script; if no signing credentials 
 The watermark dialog now uses a wide two-column layout: settings and page ranges on the left, a large live PDF-page preview on the right. Default values follow the provided reference image: text `内部资料`, `微软雅黑`, 15 pt, gray, -45°, 10% opacity, tiled, 80 pt horizontal spacing, 120 pt vertical spacing, on top of page content, and zero horizontal/vertical offset. A regression test locks these defaults.
 
 The About page also lists the internal customization contact: 数字发展室 — `Bing.Zheng1@aerofugia.com`.
+
+
+## 0.10.3.1 watermark dialog layout correction
+
+The watermark dialog must retain the outer `1160 pt` width configured for its two-column layout. The `Dialog::Marks` handler must not overwrite that width with the standard `720 pt` width: doing so clips the 640 pt settings pane and 450 pt preview and can leave the modal looking like a blank white panel. A Rust regression test asserts the watermark width and the normal width for other mark dialogs. The release workflow runs this test before building/publishing and replaces both MSI assets on the existing `v0.10.3-wofei.1` prerelease only after all checks pass.
