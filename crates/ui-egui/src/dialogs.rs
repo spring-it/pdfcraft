@@ -1352,7 +1352,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
         let count = app.session.get(id).map(|d| d.info.pages.len()).unwrap_or(0);
         match crate::marks_ui::edit(&app.marks_draft, kind, count) {
             Ok(edit) => app.apply_edit(edit),
-            Err(error) => app.notify(error),
+            Err(error) => { app.notify(error); false },
         }
     }
     if boxes_now && let Some((i, id)) = app.active_ids() {
