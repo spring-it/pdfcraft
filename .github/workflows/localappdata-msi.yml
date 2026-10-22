@@ -54,6 +54,16 @@ jobs:
           if (-not (Test-Path (Join-Path $nasmDir 'nasm.exe'))) { throw "nasm.exe not found at $nasmDir" }
           Add-Content -Path $env:GITHUB_PATH -Value $nasmDir
 
+      - name: Verify committed Cargo.lock is reproducible
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          cargo metadata --format-version 1 --no-deps | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Cargo metadata failed' }
+          git diff -- Cargo.lock
+          git diff --exit-code -- Cargo.lock
+          if ($LASTEXITCODE -ne 0) { throw 'Commit the Cargo.lock changes shown above before building installers' }
+
       - name: Test Chinese watermark PNG and layout rules
         if: matrix.arch == 'x64'
         shell: pwsh
