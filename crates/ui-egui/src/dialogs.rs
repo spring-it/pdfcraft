@@ -1351,8 +1351,8 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     if marks_now && let (Dialog::Marks(kind), Some((_, id))) = (dialog, app.active_ids()) {
         let count = app.session.get(id).map(|d| d.info.pages.len()).unwrap_or(0);
         match crate::marks_ui::edit(&app.marks_draft, kind, count) {
-            Ok(edit) => app.apply_edit(edit),
-            Err(error) => { app.notify(error); false },
+            Ok(edit) => { app.apply_edit(edit); }
+            Err(error) => app.notify(error),
         }
     }
     if boxes_now && let Some((i, id)) = app.active_ids() {
