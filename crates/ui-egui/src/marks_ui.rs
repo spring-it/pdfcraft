@@ -371,8 +371,8 @@ fn watermark_preview(
     let (canvas, _) = ui.allocate_exact_size(canvas_size, egui::Sense::hover());
     let painter = ui.painter_at(canvas);
     painter.rect_filled(canvas, CornerRadius::same(6), t.field);
-    let scale = ((canvas_size.x - 24.0).max(1.0) / w)
-        .min((canvas_size.y - 24.0).max(1.0) / h) as f32;
+    let scale = (((canvas_size.x - 24.0).max(1.0) as f64) / w)
+        .min(((canvas_size.y - 24.0).max(1.0) as f64) / h) as f32;
     let page = Rect::from_center_size(canvas.center(), vec2(w as f32 * scale, h as f32 * scale));
     painter.rect_filled(page, CornerRadius::same(2), Color32::WHITE);
     painter.rect_stroke(page, CornerRadius::same(2), Stroke::new(1.0, t.border), egui::StrokeKind::Outside);
