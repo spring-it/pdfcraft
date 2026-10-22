@@ -1,12 +1,16 @@
-PdfCraft app icon (pdfcraft.svg, pdfcraft-small.svg and every file derived from them in this
-directory: pdfcraft-1024.png, pdfcraft.icns, pdfcraft.ico, hicolor/).
+PdfCraft application icon assets for this customized enterprise release.
 
-Original artwork made for this project by the project owner, drawn in ArtCraft and vectorised for
-PdfCraft (no third-party material). Licensed like the rest of PdfCraft, under either of
+Files covered include pdfcraft-source.webp, pdfcraft.svg, pdfcraft-small.svg,
+pdfcraft-1024.png, pdfcraft.icns, pdfcraft.ico, pdfcraft-document.svg,
+pdfcraft-document.ico and the derived files under hicolor/.
 
-  * Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
-  * MIT license (https://opensource.org/licenses/MIT)
+The red PDF artwork used by this customized release was supplied by the requester.
+It is not the original ArtCraft artwork and is not automatically covered by the
+PdfCraft project's MIT OR Apache-2.0 software license. See LICENSE-source.txt
+for the provenance and rights note. This file does not grant additional rights
+to the supplied image. Redistribution assumes the distributor has permission
+from the relevant artwork rights holder.
 
-at your option.
-
-Regenerate the derived files with packaging/icons.sh.
+The application's source code and other assets remain subject to their own
+licenses. See the repository-root LICENSE-MIT, LICENSE-APACHE, NOTICE and
+ATTRIBUTION.toml for the applicable code and third-party notices.
