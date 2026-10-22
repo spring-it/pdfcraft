@@ -58,7 +58,7 @@ jobs:
         if: matrix.arch == 'x64'
         shell: pwsh
         run: |
-          cargo metadata --format-version 1 --no-deps | Out-Null
+          cargo metadata --format-version 1 | Out-Null
           if ($LASTEXITCODE -ne 0) { throw 'Cargo metadata failed' }
           git diff -- Cargo.lock
           git diff --exit-code -- Cargo.lock
