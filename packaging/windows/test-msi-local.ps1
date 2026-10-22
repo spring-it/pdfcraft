@@ -25,6 +25,14 @@ $parent = First 'SELECT `Directory_Parent` FROM `Directory` WHERE `Directory` = 
 Require ($parent -eq 'LocalAppDataFolder') "INSTALLFOLDER must be under LocalAppDataFolder, got '$parent'"
 $name = First 'SELECT `DefaultDir` FROM `Directory` WHERE `Directory` = ''INSTALLFOLDER'''
 Require ($name -match '(^|\|)pdfcraft$') "install directory must be pdfcraft, got '$name'"
+
+# The user-supplied red PDF icon must remain the Add/Remove Programs and shortcut icon.
+$arpIcon = First 'SELECT `Value` FROM `Property` WHERE `Property` = ''ARPPRODUCTICON'''
+$iconRow = First 'SELECT `Name` FROM `Icon` WHERE `Name` = ''PdfcraftIcon.ico'''
+$desktopIcon = First 'SELECT `Icon_` FROM `Shortcut` WHERE `Shortcut` = ''DesktopShortcut'''
+$startIcon = First 'SELECT `Icon_` FROM `Shortcut` WHERE `Shortcut` = ''StartMenuShortcut'''
+Require ($arpIcon -eq 'PdfcraftIcon.ico' -and $iconRow -eq 'PdfcraftIcon.ico') 'MSI must embed the supplied red PDF application icon'
+Require ($desktopIcon -eq 'PdfcraftIcon.ico' -and $startIcon -eq 'PdfcraftIcon.ico') 'Desktop and Start menu shortcuts must use the supplied red PDF application icon'
 $modelsParent = First 'SELECT `Directory_Parent` FROM `Directory` WHERE `Directory` = ''ModelsFolder'''
 Require ($modelsParent -eq 'INSTALLFOLDER') 'OCR models must be beside the application'
 Require (-not (First 'SELECT `Key` FROM `Registry` WHERE `Root` = 2')) 'HKLM writes are forbidden for a per-user MSI'
