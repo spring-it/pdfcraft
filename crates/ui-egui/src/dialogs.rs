@@ -1154,12 +1154,10 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                     1 => crate::credits::contributors_ui(ui),
                     2 => crate::credits::models_ui(ui),
                     _ => {
-                        ui.horizontal(|ui| {
-                            widgets::artcraft_mark(ui, 40.0);
-                            ui.vertical(|ui| {
-                                ui.label(egui::RichText::new("PdfCraft").font(theme::semibold(20.0)));
-                                ui.label(crate::i18n::fmt(tl!("Version {v}"), &[("v", &pdfcraft_engine::build_info::version())]));
-                            });
+                        ui.vertical(|ui| {
+                            ui.label(egui::RichText::new("沃飞翼览 PDF").font(theme::semibold(20.0)));
+                            ui.label(crate::i18n::fmt(tl!("Version {v}"), &[("v", &pdfcraft_engine::build_info::version())]));
+                            ui.label("沃飞长空内部 PDF 阅读与处理工具");
                         });
                         ui.add_space(6.0);
                         ui.label(tl!("A clean-room, open-source PDF application written in Rust. MIT OR Apache-2.0."));
@@ -1171,14 +1169,8 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                             .small(),
                         );
                         ui.add_space(12.0);
-                        ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(tl!("Part of")).color(t.text_muted));
-                            widgets::artcraft_logo(ui, 16.0);
-                        });
-                        ui.add_space(6.0);
-                        if let Some(cmd) = widgets::community_links(ui) {
-                            link_command = Some(cmd);
-                        }
+                        ui.label("基于开源 PdfCraft 定制，原作者版权归 ArtCraft Team 及贡献者所有。");
+                        ui.label("许可证：MIT OR Apache-2.0，详见安装目录中的 LICENSE 和 NOTICE。");
                     }
                 }
             }
