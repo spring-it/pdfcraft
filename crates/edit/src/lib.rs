@@ -723,8 +723,13 @@ pub fn add_watermark(doc: &mut Document, pages: &[usize], wm: &Watermark, replac
     if text.is_empty() && wm.source.is_none() {
         return Err(EditError::Invalid("type the watermark text first".into()));
     }
-    if let Some(c) = wm.first_undrawable() {
-        return Err(undrawable(c));
+    // When a source image/PDF is supplied (including the UI's transparent PNG for Unicode
+    // text), the PDF text operators are not used. Do not apply WinAnsi's character restriction
+    // to the watermark label in that mode.
+    if wm.source.is_none() {
+        if let Some(c) = wm.first_undrawable() {
+            return Err(undrawable(c));
+        }
     }
     if !(wm.opacity.is_finite()
         && wm.rotation.is_finite()
