@@ -78,14 +78,9 @@ fn supports(font: &FontRef<'_>, text: &str) -> bool {
 }
 
 fn choose_face(text: &str, family: usize) -> Result<(Vec<u8>, u32), String> {
-    // Use an installed Chinese face for Han and punctuation. Inter handles Latin on
-    // machines with no Chinese fonts, such as isolated CI tests on Linux.
+    // Prefer the requested installed face. Inter is only a last-resort Latin fallback;
+    // do not silently replace the user's Arial/Georgia/monospace selection with Inter.
     let latin = include_bytes!("../../../assets/fonts/Inter-Regular.ttf");
-    if let Ok(f) = FontRef::new(latin) {
-        if supports(&f, text) && family == 2 {
-            return Ok((latin.to_vec(), 0));
-        }
-    }
     for path in font_paths(family) {
         let Ok(meta) = std::fs::metadata(&path) else { continue };
         if !meta.is_file() || meta.len() > MAX_FONT_BYTES {
