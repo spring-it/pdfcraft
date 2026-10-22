@@ -11,8 +11,8 @@ const INFO_KEYS: [&str; 4] = ["Title", "Author", "Subject", "Keywords"];
 const WATERMARK_DIALOG_WIDTH: f32 = 1160.0;
 const MARKS_DIALOG_WIDTH: f32 = 720.0;
 
-fn dialog_width(dialog: Dialog) -> f32 {
-    match dialog {
+fn dialog_width(dialog: Dialog, viewport_width: f32) -> f32 {
+    let desired = match dialog {
         Dialog::Properties(_) => 640.0,
         Dialog::Print => 820.0,
         Dialog::FieldProps | Dialog::BulkFieldProps => 600.0,
@@ -20,7 +20,9 @@ fn dialog_width(dialog: Dialog) -> f32 {
         Dialog::Marks(pdfcraft_engine::MarkKind::Watermark) => WATERMARK_DIALOG_WIDTH,
         Dialog::Marks(_) => MARKS_DIALOG_WIDTH,
         _ => 520.0,
-    }
+    };
+    // The modal frame adds 40 pt horizontal padding; leave extra room for its shadow too.
+    desired.min((viewport_width - 48.0).max(320.0))
 }
 
 pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
@@ -94,7 +96,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let mut close = false;
     let mut next = dialog;
     let modal = widgets::show_modal(ctx, "dialog", |ui| {
-        ui.set_width(dialog_width(dialog));
+        ui.set_width(dialog_width(dialog, ctx.content_rect().width()));
         match dialog {
             Dialog::WordCount => {
                 close = crate::word_count_ui::body(ui, app);
@@ -1766,9 +1768,11 @@ mod watermark_dialog_layout_tests {
 
     #[test]
     fn watermark_dialog_keeps_enough_width_for_settings_and_preview() {
-        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark)), 1160.0);
-        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Background)), 720.0);
-        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::HeaderFooter)), 720.0);
-        assert!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark)) >= 640.0 + 450.0 + 40.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1600.0), 1160.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Background), 1600.0), 720.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::HeaderFooter), 1600.0), 720.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1000.0), 952.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 900.0), 852.0);
+        assert!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1600.0) >= 640.0 + 450.0 + 40.0);
     }
 }

@@ -50,7 +50,7 @@ impl PageRange {
     }
 
     pub(crate) fn ui(&mut self, ui: &mut egui::Ui, count: usize) {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             widgets::radio_value(ui, &mut self.all, true, tl!("All pages"));
             widgets::radio_value(ui, &mut self.all, false, tl!("Pages from"));
             ui.add_enabled(!self.all, egui::DragValue::new(&mut self.from).range(1..=count.max(1)));
@@ -156,7 +156,18 @@ fn rgb32(c: [f64; 3]) -> Color32 {
     Color32::from_rgb(b(c[0]), b(c[1]), b(c[2]))
 }
 
-/// A wider two-column watermark dialog: settings on the left, large live preview on the right.
+/// Compute a body height that leaves room for the title, action buttons, and modal padding.
+const WATERMARK_DIALOG_VERTICAL_CHROME: f32 = 116.0;
+
+fn watermark_body_height(viewport_height: f32) -> f32 {
+    (viewport_height - WATERMARK_DIALOG_VERTICAL_CHROME).clamp(80.0, 610.0)
+}
+
+fn watermark_preview_height(body_height: f32) -> f32 {
+    (body_height - 100.0).clamp(0.0, 500.0)
+}
+
+/// A responsive two-column watermark dialog: settings on the left, live preview on the right.
 fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool, bool) {
     let Some((i, id)) = app.active_ids() else { return (false, true) };
     let current = app.views[i].current;
@@ -169,10 +180,24 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     ui.label(egui::RichText::new(title).font(theme::semibold(18.0)));
     ui.add_space(8.0);
 
+    // egui centers Modal content each frame. A fixed 610 pt body exceeds the available
+    // logical viewport on Windows at high display scaling, clipping the title/actions and
+    // making the modal appear to scroll into an empty white area. Size it from the viewport.
+    let viewport_height = ui.ctx().content_rect().height();
+    let body_height = watermark_body_height(viewport_height);
+    let preview_height = watermark_preview_height(body_height);
+    let available_width = ui.available_width();
+    let right_width = (available_width - 660.0).clamp(140.0, 450.0);
+    let left_width = (available_width - right_width - 20.0).clamp(180.0, 640.0);
+
     ui.horizontal_top(|ui| {
-        ui.allocate_ui_with_layout(vec2(640.0, 610.0), Layout::top_down(Align::Min), |left| {
-            egui::ScrollArea::vertical().max_height(590.0).show(left, |ui| {
-                ui.set_min_width(620.0);
+        ui.allocate_ui_with_layout(vec2(left_width, body_height), Layout::top_down(Align::Min), |left| {
+            egui::ScrollArea::vertical()
+                .id_salt("wofei-watermark-settings")
+                .max_height((body_height - 12.0).max(40.0))
+                .auto_shrink([false, false])
+                .show(left, |ui| {
+                ui.set_min_width((left_width - 16.0).max(160.0));
                 ui.horizontal(|ui| {
                     ui.label("来源");
                     widgets::radio_value(ui, &mut d.use_file, false, "文本");
@@ -183,7 +208,8 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                 } else {
                     ui.label("文本");
                     ui.add(crate::widgets::block(&mut d.wm.text)
-                        .desired_rows(2).desired_width(580.0).hint_text("内部资料").id_salt("wm-text-wide"));
+                        .desired_rows(2).desired_width((left_width - 50.0).max(180.0))
+                        .hint_text("内部资料").id_salt("wm-text-wide"));
                     ui.horizontal_wrapped(|ui| {
                         ui.label("常用模板");
                         for (label, value) in [
@@ -266,7 +292,8 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                 d.range.ui(ui, count);
                 ui.checkbox(&mut d.custom_enabled, "自定义页码");
                 if d.custom_enabled {
-                    ui.add(egui::TextEdit::singleline(&mut d.custom_pages).desired_width(360.0).hint_text("例如 1-3, 5, 8-10"));
+                    ui.add(egui::TextEdit::singleline(&mut d.custom_pages)
+                        .desired_width((left_width - 40.0).max(180.0)).hint_text("例如 1-3, 5, 8-10"));
                     if selected_pages(d, count).is_err() {
                         ui.colored_label(Color32::RED, "页码范围无效，请检查起止页是否在文档范围内。");
                     }
@@ -278,11 +305,11 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
 
         ui.separator();
 
-        ui.allocate_ui_with_layout(vec2(450.0, 610.0), Layout::top_down(Align::Min), |right| {
+        ui.allocate_ui_with_layout(vec2(right_width, body_height), Layout::top_down(Align::Min), |right| {
             right.label(egui::RichText::new("实时预览").font(theme::semibold(15.0)));
             right.add_space(6.0);
             let file_name = d.file.as_ref().filter(|_| d.use_file).map(|f| f.0.as_str());
-            watermark_preview(right, t, page, &d.wm, file_name, d.use_file);
+            watermark_preview(right, t, page, &d.wm, file_name, d.use_file, right_width, preview_height);
             right.add_space(6.0);
             right.label(egui::RichText::new(format!("预览：第 {} 页，共 {} 页", current + 1, count)).small().color(t.text_faint));
             let selected = selected_pages(d, count).map(|p| p.len()).unwrap_or(0);
@@ -336,13 +363,16 @@ fn watermark_preview(
     wm: &Watermark,
     file_name: Option<&str>,
     use_file: bool,
+    canvas_width: f32,
+    canvas_height: f32,
 ) {
     let (w, h) = (size.0.max(1.0), size.1.max(1.0));
-    let canvas_size = vec2(450.0, 500.0);
+    let canvas_size = vec2(canvas_width.max(1.0), canvas_height.max(0.0));
     let (canvas, _) = ui.allocate_exact_size(canvas_size, egui::Sense::hover());
     let painter = ui.painter_at(canvas);
     painter.rect_filled(canvas, CornerRadius::same(6), t.field);
-    let scale = (440.0 / w.max(h)).min(380.0 / w).min(440.0 / h) as f32;
+    let scale = ((canvas_size.x - 24.0).max(1.0) / w)
+        .min((canvas_size.y - 24.0).max(1.0) / h) as f32;
     let page = Rect::from_center_size(canvas.center(), vec2(w as f32 * scale, h as f32 * scale));
     painter.rect_filled(page, CornerRadius::same(2), Color32::WHITE);
     painter.rect_stroke(page, CornerRadius::same(2), Stroke::new(1.0, t.border), egui::StrokeKind::Outside);
@@ -890,6 +920,18 @@ mod tests {
         d.use_file = true;
         assert_eq!(undrawable(MarkKind::Watermark, &d), None, "a picture watermark draws no text");
         assert_eq!(undrawable(MarkKind::Background, &d), None);
+    }
+
+    #[test]
+    fn watermark_dialog_body_and_preview_fit_common_viewport_heights() {
+        for viewport_height in [240.0_f32, 300.0, 350.0, 400.0, 500.0, 600.0, 720.0, 900.0, 1080.0] {
+            let body = watermark_body_height(viewport_height);
+            let preview = watermark_preview_height(body);
+            assert!(body + WATERMARK_DIALOG_VERTICAL_CHROME <= viewport_height + 0.1,
+                "body {body} plus dialog chrome must fit viewport {viewport_height}");
+            assert!(preview + 100.0 <= body + 0.1,
+                "preview {preview} and its labels must fit body {body}");
+        }
     }
 
     #[test]
