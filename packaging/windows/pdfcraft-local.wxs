@@ -5,14 +5,14 @@
      not in the roaming AppData folder. No HKLM registrations or system associations. -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
-      Name="PdfCraft (Local)"
-      Manufacturer="Learning Machines LLC"
+      Name="沃飞翼览 PDF"
+      Manufacturer="沃飞长空科技股份有限公司"
       Version="$(var.Version)"
       UpgradeCode="C39A5F0D-991B-414B-9B9C-18E689194C73"
       Scope="perUser"
       Compressed="yes"
       Language="1033">
-    <SummaryInformation Description="PdfCraft current-user LocalAppData installation" Manufacturer="Learning Machines LLC" />
+    <SummaryInformation Description="沃飞翼览 PDF 当前用户本地安装" Manufacturer="Learning Machines LLC" />
     <Launch Condition="ALLUSERS &lt;&gt; 1 OR (Installed AND REMOVE = &quot;ALL&quot;)"
         Message="This PdfCraft MSI is for the current user only; do not set ALLUSERS=1." />
     <MajorUpgrade AllowSameVersionUpgrades="yes"
@@ -57,15 +57,15 @@
       </Component>
       <!-- Always create a per-user desktop shortcut, including during /qn installs. -->
       <Component Id="PdfcraftLocalDesktopShortcut" Directory="DesktopFolder" Guid="*">
-        <Shortcut Id="DesktopShortcut" Name="PdfCraft"
-            Description="PdfCraft PDF reader" Target="[#PdfcraftExe]"
+        <Shortcut Id="DesktopShortcut" Name="沃飞翼览 PDF"
+            Description="沃飞翼览 PDF 阅读器" Target="[#PdfcraftExe]"
             WorkingDirectory="INSTALLFOLDER" Icon="PdfcraftIcon.ico" IconIndex="0" />
         <RegistryValue Root="HKCU" Key="Software\PdfCraft\LocalMsi" Name="DesktopShortcut"
             Type="integer" Value="1" KeyPath="yes" />
       </Component>
       <Component Id="PdfcraftLocalShortcut" Directory="ProgramMenuFolder" Guid="*">
-        <Shortcut Id="StartMenuShortcut" Name="PdfCraft (Local)"
-            Description="PdfCraft PDF workbench" Target="[#PdfcraftExe]"
+        <Shortcut Id="StartMenuShortcut" Name="沃飞翼览 PDF"
+            Description="沃飞长空内部 PDF 阅读与处理工具" Target="[#PdfcraftExe]"
             WorkingDirectory="INSTALLFOLDER" Icon="PdfcraftIcon.ico" IconIndex="0" />
         <RegistryValue Root="HKCU" Key="Software\PdfCraft\LocalMsi" Name="StartMenu"
             Type="integer" Value="1" KeyPath="yes" />
