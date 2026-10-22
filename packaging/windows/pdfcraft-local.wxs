@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Per-user, no-wizard MSI for the dedicated v0.10.1 LocalAppData release.
+<!-- Per-user, no-wizard MSI for the dedicated 沃飞翼览 PDF v0.10.2 release.
      A distinct UpgradeCode keeps it independent from the original per-machine MSI.
      The portable marker keeps settings, logs, recovery and IDs under LocalAppData,
      not in the roaming AppData folder. No HKLM registrations or system associations. -->
@@ -14,9 +14,9 @@
       Language="1033">
     <SummaryInformation Description="沃飞翼览 PDF 当前用户本地安装" Manufacturer="沃飞长空科技股份有限公司" />
     <Launch Condition="ALLUSERS &lt;&gt; 1 OR (Installed AND REMOVE = &quot;ALL&quot;)"
-        Message="This PdfCraft MSI is for the current user only; do not set ALLUSERS=1." />
+        Message="此安装包仅供当前 Windows 用户安装，请勿设置 ALLUSERS=1。" />
     <MajorUpgrade AllowSameVersionUpgrades="yes"
-        DowngradeErrorMessage="A newer version of PdfCraft (Local) is already installed." />
+        DowngradeErrorMessage="已安装更新版本的沃飞翼览 PDF，不能降级安装。" />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
     <Icon Id="PdfcraftIcon.ico" SourceFile="$(var.IconPath)" />
     <Property Id="ARPPRODUCTICON" Value="PdfcraftIcon.ico" />
