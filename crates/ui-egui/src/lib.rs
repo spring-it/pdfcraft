@@ -55,6 +55,7 @@ mod drag_pointer;
 mod export_ui;
 mod js_ui;
 mod marks_ui;
+mod watermark_text;
 mod measure_ui;
 mod ocr_ui;
 mod optimize_ui;
