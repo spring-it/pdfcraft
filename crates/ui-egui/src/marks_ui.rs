@@ -156,15 +156,17 @@ fn rgb32(c: [f64; 3]) -> Color32 {
     Color32::from_rgb(b(c[0]), b(c[1]), b(c[2]))
 }
 
-/// Compute a body height that leaves room for the title, action buttons, and modal padding.
-const WATERMARK_DIALOG_VERTICAL_CHROME: f32 = 116.0;
+/// Compute a body height that leaves room for the title, action buttons, modal padding,
+/// and a safety margin so the egui Modal never becomes taller than the viewport
+/// (which would cause it to re-center and appear to slide out of view).
+const WATERMARK_DIALOG_VERTICAL_CHROME: f32 = 180.0;
 
 fn watermark_body_height(viewport_height: f32) -> f32 {
-    (viewport_height - WATERMARK_DIALOG_VERTICAL_CHROME).clamp(80.0, 610.0)
+    (viewport_height - WATERMARK_DIALOG_VERTICAL_CHROME).clamp(80.0, 480.0)
 }
 
 fn watermark_preview_height(body_height: f32) -> f32 {
-    (body_height - 100.0).clamp(0.0, 500.0)
+    (body_height - 100.0).clamp(0.0, 380.0)
 }
 
 /// A responsive two-column watermark dialog: settings on the left, live preview on the right.
@@ -180,9 +182,10 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     ui.label(egui::RichText::new(title).font(theme::semibold(18.0)));
     ui.add_space(8.0);
 
-    // egui centers Modal content each frame. A fixed 610 pt body exceeds the available
-    // logical viewport on Windows at high display scaling, clipping the title/actions and
-    // making the modal appear to scroll into an empty white area. Size it from the viewport.
+    // egui centers Modal content each frame. If the total dialog exceeds the available
+    // logical viewport (common on Windows with display scaling > 100%), the modal
+    // re-centers and appears to slide out of view into an empty area. Keep the body
+    // well under the viewport and allow internal scrolling.
     let viewport_height = ui.ctx().content_rect().height();
     let body_height = watermark_body_height(viewport_height);
     let preview_height = watermark_preview_height(body_height);
@@ -190,6 +193,11 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     let right_width = (available_width - 660.0).clamp(140.0, 450.0);
     let left_width = (available_width - right_width - 20.0).clamp(180.0, 640.0);
 
+    egui::ScrollArea::vertical()
+        .id_salt("wofei-watermark-dialog")
+        .max_height(body_height + 8.0)
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
     ui.horizontal_top(|ui| {
         ui.allocate_ui_with_layout(vec2(left_width, body_height), Layout::top_down(Align::Min), |left| {
             egui::ScrollArea::vertical()
@@ -321,6 +329,7 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                 .small().color(t.text_muted));
         });
     });
+        });
 
     ui.add_space(10.0);
     let has_source = if d.use_file { d.file.is_some() } else { !d.wm.text.trim().is_empty() };

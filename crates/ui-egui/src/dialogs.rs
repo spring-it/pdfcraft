@@ -999,6 +999,9 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
             Dialog::Marks(kind) => {
                 // Width is set once by dialog_width() above. Do not override it here:
                 // the watermark dialog allocates a 640 pt settings pane plus a 450 pt preview.
+                // Constrain height so the modal cannot grow beyond the viewport and slide away.
+                let max_h = (ctx.content_rect().height() - 24.0).max(200.0);
+                ui.set_max_height(max_h);
                 let (apply, cancel) = crate::marks_ui::body(ui, app, &t, kind);
                 marks_now = apply;
                 close = apply || cancel;
