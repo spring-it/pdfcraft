@@ -169,6 +169,24 @@ fn watermark_preview_height(viewport_height: f32) -> f32 {
     (viewport_height - 230.0).clamp(WATERMARK_PREVIEW_MIN_HEIGHT, WATERMARK_PREVIEW_HEIGHT)
 }
 
+/// The live preview is a schematic, not a pixel-exact PDF raster. Widen very narrow/tall
+/// page mockups so the watermark is easier to inspect without increasing the modal height.
+/// This only changes the preview drawing; the saved PDF page geometry is untouched.
+const WATERMARK_PREVIEW_MIN_PAGE_ASPECT: f32 = 0.65;
+
+fn watermark_preview_page_size(size: (f64, f64), canvas_size: egui::Vec2) -> egui::Vec2 {
+    let (w, h) = (size.0.max(1.0), size.1.max(1.0));
+    let max_width = (canvas_size.x - 24.0).max(1.0);
+    let max_height = (canvas_size.y - 24.0).max(1.0);
+    let scale = ((max_width as f64 / w).min(max_height as f64 / h)) as f32;
+    let page_height = (h as f32 * scale).min(max_height);
+    let natural_width = (w as f32 * scale).min(max_width);
+    let page_width = natural_width
+        .max(page_height * WATERMARK_PREVIEW_MIN_PAGE_ASPECT)
+        .min(max_width);
+    vec2(page_width, page_height)
+}
+
 fn watermark_column_widths(available_width: f32) -> (f32, f32) {
     let right = (available_width - (WATERMARK_SETTINGS_COLUMN_WIDTH + WATERMARK_COLUMN_GAP))
         .clamp(WATERMARK_PREVIEW_COLUMN_MIN_WIDTH, WATERMARK_PREVIEW_COLUMN_MAX_WIDTH);
@@ -383,7 +401,8 @@ fn watermark_preview(
     painter.rect_filled(canvas, CornerRadius::same(6), t.field);
     let scale = (((canvas_size.x - 24.0).max(1.0) as f64) / w)
         .min(((canvas_size.y - 24.0).max(1.0) as f64) / h) as f32;
-    let page = Rect::from_center_size(canvas.center(), vec2(w as f32 * scale, h as f32 * scale));
+    let page_size = watermark_preview_page_size(size, canvas_size);
+    let page = Rect::from_center_size(canvas.center(), page_size);
     painter.rect_filled(page, CornerRadius::same(2), Color32::WHITE);
     painter.rect_stroke(page, CornerRadius::same(2), Stroke::new(1.0, t.border), egui::StrokeKind::Outside);
 
@@ -954,6 +973,25 @@ mod tests {
         assert_eq!(watermark_column_widths(1280.0), (640.0, 600.0));
         assert_eq!(watermark_column_widths(1120.0), (640.0, 460.0));
         assert_eq!(watermark_column_widths(900.0), (640.0, 240.0));
+    }
+
+    #[test]
+    fn watermark_preview_widens_tall_page_mockup_without_changing_output_geometry() {
+        let canvas = vec2(600.0, 670.0);
+        let tall = watermark_preview_page_size((80.0, 200.0), canvas);
+        assert!(
+            tall.x / tall.y >= WATERMARK_PREVIEW_MIN_PAGE_ASPECT - 0.001,
+            "tall page preview should use the wider schematic aspect ratio: {tall:?}"
+        );
+        assert!(tall.x <= 576.0, "preview page must stay inside the canvas: {tall:?}");
+        assert!(tall.y <= 646.0, "preview page must stay inside the canvas: {tall:?}");
+
+        let normal_portrait = watermark_preview_page_size((612.0, 792.0), canvas);
+        let original_aspect = 612.0_f32 / 792.0_f32;
+        assert!(
+            (normal_portrait.x / normal_portrait.y - original_aspect).abs() < 0.01,
+            "ordinary portrait pages should retain their natural aspect ratio: {normal_portrait:?}"
+        );
     }
 
     #[test]

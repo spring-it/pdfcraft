@@ -1,6 +1,6 @@
 # ChatGPT-generated red PDF app icon
 
-This red PDF app/document icon family is used by the customized **沃飞翼览 PDF v0.10.13** release. The master artwork was generated with ChatGPT from prompts provided by the requester, then supplied by the requester for this project.
+This red PDF app/document icon family is used by the customized **沃飞翼览 PDF v0.10.14** release. The master artwork was generated with ChatGPT from prompts provided by the requester, then supplied by the requester for this project.
 
 <img src="pdfcraft-small.svg" alt="ChatGPT-generated red PDF document icon" width="128">
 
