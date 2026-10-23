@@ -309,6 +309,16 @@ mod tests {
             assert!(!CRAFT_FONTS.is_empty(), "release build requires embedded craft-fonts");
             assert!(document_japanese_font().is_some(), "release build must embed a Japanese document fallback font");
             assert!(ui.iter().any(|f| f.family == "BIZ UDPGothic"), "release build must embed the Japanese UI fallback font");
+            for (family, style) in [
+                ("Shippori Mincho", "Regular"),
+                ("BIZ UDPGothic", "Regular"),
+                ("BIZ UDPGothic", "Bold"),
+                ("BIZ UDMincho", "Regular"),
+                ("Noto Sans Arabic", "Regular"),
+                ("Noto Sans Thai", "Regular"),
+            ] {
+                assert!(CRAFT_FONTS.iter().any(|f| f.family == family && f.style == style), "release build must embed {family} {style}");
+            }
         }
         if CRAFT_FONTS.is_empty() {
             eprintln!("built without craft-fonts (CRAFT_FONTS_DIR unset): no Japanese faces, as expected");

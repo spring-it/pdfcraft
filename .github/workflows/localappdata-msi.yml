@@ -48,6 +48,8 @@ jobs:
             'fonts\biz-ud-pgothic\BIZUDPGothic-Regular.ttf',
             'fonts\biz-ud-pgothic\BIZUDPGothic-Bold.ttf',
             'fonts\biz-ud-mincho\BIZUDMincho-Regular.ttf',
+            'fonts\noto-sans-arabic\NotoSansArabic.ttf',
+            'fonts\noto-sans-thai\NotoSansThai.ttf',
             'fonts\shippori-mincho\OFL.txt',
             'fonts\biz-ud-pgothic\OFL.txt',
             'fonts\biz-ud-mincho\OFL.txt',
@@ -172,13 +174,13 @@ jobs:
 
           - Per-user installation path: %LOCALAPPDATA%\pdfcraft
           - Non-roaming app data: %LOCALAPPDATA%\pdfcraft\PdfCraftData
-          - ChatGPT-generated red PDF app/document icon supplied by the requester and licensed under MIT OR Apache-2.0; provenance is in LICENSE-source.txt. The Windows MSI includes LICENSE-MIT, LICENSE-APACHE, NOTICE, LICENSE-document.txt, LICENSE-source.txt, LICENSE-lucide.txt, OFL-Inter.txt, OFL-JetBrainsMono.txt and OFL-DancingScript.txt.
+          - The MSI includes project, icon, UI icon and font notices: LICENSE-MIT, LICENSE-APACHE, NOTICE, LICENSE-document.txt, LICENSE-source.txt, LICENSE-lucide.txt, OFL-Inter.txt, OFL-JetBrainsMono.txt, OFL-DancingScript.txt, CRAFT-FONTS-ATTRIBUTION.md, OFL-ShipporiMincho.txt, OFL-BIZ-UDPGothic.txt, OFL-BIZ-UDMincho.txt, OFL-NotoSansArabic.txt and OFL-NotoSansThai.txt.
           - Installs a 沃飞翼览 PDF shortcut on the current user's desktop automatically, also with /qn.
           - Registers the per-user Windows PDF "Open with" entry as 沃飞翼览 PDF, without changing the current default PDF app; the MSI test verifies FriendlyAppName, ProgID, command and executable version information.
           - Removes that desktop shortcut on silent uninstall (without removing user data).
           - Enterprise home screen and Windows title renamed to 沃飞翼览 PDF; removed ArtCraft and Discord promotional controls. The About page lists internal customization developer info: 数字发展室, Bing.Zheng1@aerofugia.com.
           - Improved display of PDFs with non-embedded Simplified Chinese Adobe-GB1 CID fonts (for example STSong-Light): use a matching CJK font already installed on Windows at runtime. System fonts are not bundled or redistributed.
-          - Include the pinned craft-fonts fallback bundle in both Windows executables, so Japanese UI and Japanese PDF text editing work without a developer-only CRAFT_FONTS_DIR setting on the user's computer.
+          - Embed all policy-permitted fallback faces from pinned craft-fonts in both Windows executables: Shippori Mincho, BIZ UDPGothic Regular/Bold, BIZ UDMincho, Noto Sans Arabic and Noto Sans Thai. Include their attribution and OFL license texts. Noto Sans CJK remains excluded under the repository asset policy; Chinese CID fallback uses an installed Windows font.
           - Enhanced native watermarks: Chinese text via local OS glyph rasterization, transparent PNG, tile/single modes, 9 positions, spacing, color, rotation, opacity, templates, odd/even/custom page ranges. Watermark dialog keeps a viewport-safe 670 pt maximum preview canvas. The 600 pt preview column widens very narrow/tall schematic page mockups to a 0.65 minimum aspect ratio so the page uses more of the available horizontal space; saved PDF page geometry is unchanged. The left 640 pt settings column and defaults remain unchanged. Defaults: 内部资料, 微软雅黑, 15 pt, gray, -45°, 10% opacity, tiled, 80/120 pt gaps, on top, zero offset.
           - Offline processing: no upload of PDFs or OS fonts.
           - No installer wizard and no administrator privileges required for a normal current-user install.
@@ -188,12 +190,12 @@ jobs:
           - These packages are unsigned unless Windows signing is separately configured.
           EOF
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" --title '沃飞翼览 PDF v0.10.17 - 中文水印增强版 (x64/x86)' --notes-file release-notes.md --prerelease
+            gh release edit "$RELEASE_TAG" --title '沃飞翼览 PDF v0.10.17 - 字体嵌入修复版 (x64/x86)' --notes-file release-notes.md --prerelease
             gh release upload "$RELEASE_TAG" dist/msi/*.msi --clobber
           else
             gh release create "$RELEASE_TAG" dist/msi/*.msi \
               --target "$GITHUB_SHA" \
-              --title '沃飞翼览 PDF v0.10.17 - 中文水印增强版 (x64/x86)' \
+              --title '沃飞翼览 PDF v0.10.17 - 字体嵌入修复版 (x64/x86)' \
               --notes-file release-notes.md \
               --prerelease --latest=false
           fi
