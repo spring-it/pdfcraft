@@ -17,6 +17,9 @@ jobs:
   build-msi:
     name: Windows ${{ matrix.arch }} MSI and silent install
     runs-on: windows-2022
+    env:
+      CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+      CRAFT_FONTS_REQUIRED: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -27,6 +30,33 @@ jobs:
             target: i686-pc-windows-msvc
     steps:
       - uses: actions/checkout@v4
+
+      - name: Checkout pinned release fonts
+        uses: actions/checkout@v4
+        with:
+          repository: storytold/craft-fonts
+          ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
+          path: craft-fonts
+
+      - name: Verify required fallback font assets
+        shell: pwsh
+        run: |
+          $manifest = Join-Path $env:CRAFT_FONTS_DIR 'fonts\manifest.txt'
+          if (-not (Test-Path $manifest)) { throw "CRAFT_FONTS_DIR is not a craft-fonts checkout: $env:CRAFT_FONTS_DIR" }
+          foreach ($fontPath in @(
+            'fonts\shippori-mincho\ShipporiMincho-Regular.ttf',
+            'fonts\biz-ud-pgothic\BIZUDPGothic-Regular.ttf',
+            'fonts\biz-ud-pgothic\BIZUDPGothic-Bold.ttf',
+            'fonts\biz-ud-mincho\BIZUDMincho-Regular.ttf',
+            'fonts\shippori-mincho\OFL.txt',
+            'fonts\biz-ud-pgothic\OFL.txt',
+            'fonts\biz-ud-mincho\OFL.txt',
+            'fonts\noto-sans-arabic\OFL.txt',
+            'fonts\noto-sans-thai\OFL.txt',
+            'ATTRIBUTION.md'
+          )) {
+            if (-not (Test-Path (Join-Path $env:CRAFT_FONTS_DIR $fontPath))) { throw "Required craft-fonts asset is missing: $fontPath" }
+          }
 
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249
         with:
@@ -73,6 +103,8 @@ jobs:
         run: |
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui branded_window_title_tests -- --nocapture
           if ($LASTEXITCODE -ne 0) { throw 'Window title branding tests failed' }
+          cargo test --locked --target ${{ matrix.target }} -p pdfcraft-fonts craft_fonts_are_optional_and_consistent -- --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Required bundled fallback font test failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-render non_embedded_simplified_chinese_cid_fonts_draw_with_windows_system_font -- --nocapture
           if ($LASTEXITCODE -ne 0) { throw 'Non-embedded Chinese CID font fallback test failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui watermark_text::tests -- --nocapture
@@ -146,6 +178,7 @@ jobs:
           - Removes that desktop shortcut on silent uninstall (without removing user data).
           - Enterprise home screen and Windows title renamed to 沃飞翼览 PDF; removed ArtCraft and Discord promotional controls. The About page lists internal customization developer info: 数字发展室, Bing.Zheng1@aerofugia.com.
           - Improved display of PDFs with non-embedded Simplified Chinese Adobe-GB1 CID fonts (for example STSong-Light): use a matching CJK font already installed on Windows at runtime. System fonts are not bundled or redistributed.
+          - Include the pinned craft-fonts fallback bundle in both Windows executables, so Japanese UI and Japanese PDF text editing work without a developer-only CRAFT_FONTS_DIR setting on the user's computer.
           - Enhanced native watermarks: Chinese text via local OS glyph rasterization, transparent PNG, tile/single modes, 9 positions, spacing, color, rotation, opacity, templates, odd/even/custom page ranges. Watermark dialog keeps a viewport-safe 670 pt maximum preview canvas. The 600 pt preview column widens very narrow/tall schematic page mockups to a 0.65 minimum aspect ratio so the page uses more of the available horizontal space; saved PDF page geometry is unchanged. The left 640 pt settings column and defaults remain unchanged. Defaults: 内部资料, 微软雅黑, 15 pt, gray, -45°, 10% opacity, tiled, 80/120 pt gaps, on top, zero offset.
           - Offline processing: no upload of PDFs or OS fonts.
           - No installer wizard and no administrator privileges required for a normal current-user install.
