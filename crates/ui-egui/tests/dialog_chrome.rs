@@ -111,7 +111,7 @@ fn watermark_dialog_stays_content_sized_across_frames() {
     // repeatedly. A full-height separator used to make the modal re-center and
     // move its controls out of view on subsequent frames.
     h.run_steps(4);
-    let mut previous_top = None;
+    let mut previous_top: Option<f32> = None;
     for frame in 0..6 {
         h.run_steps(1);
         let modal = card(&h, "dialog");

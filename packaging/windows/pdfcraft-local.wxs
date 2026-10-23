@@ -55,6 +55,37 @@
         <!-- Remove only an empty directory; PdfCraftData is user data and must survive uninstall. -->
         <RemoveFolder Id="RemoveLocalAppFolder" Directory="INSTALLFOLDER" On="uninstall" />
       </Component>
+      <!-- Per-user PDF "Open with" registration. FriendlyAppName is the label Windows
+           displays in the Open with picker; registering OpenWithProgids offers the app
+           without changing the user's existing default PDF handler. -->
+      <Component Id="PdfcraftLocalPdfRegistration" Guid="5C20F3A1-DA2D-49D2-9F1D-12A5B1A4F911">
+        <RegistryValue Root="HKCU" Key="Software\Classes\Applications\pdfcraft.exe"
+            Name="FriendlyAppName" Type="string" Value="沃飞翼览 PDF" KeyPath="yes" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\Applications\pdfcraft.exe\DefaultIcon"
+            Type="string" Value="&quot;[#PdfcraftExe]&quot;,-2" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\Applications\pdfcraft.exe\SupportedTypes"
+            Name=".pdf" Type="string" Value="" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\Applications\pdfcraft.exe\shell\open\command"
+            Type="string" Value="&quot;[#PdfcraftExe]&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\PdfCraft.Document"
+            Type="string" Value="沃飞翼览 PDF 文档" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\PdfCraft.Document\DefaultIcon"
+            Type="string" Value="&quot;[#PdfcraftExe]&quot;,-2" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\PdfCraft.Document\shell\open\command"
+            Type="string" Value="&quot;[#PdfcraftExe]&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\.pdf\OpenWithProgids"
+            Name="PdfCraft.Document" Type="string" Value="" />
+        <RegistryValue Root="HKCU" Key="Software\PdfCraft\Capabilities"
+            Name="ApplicationName" Type="string" Value="沃飞翼览 PDF" />
+        <RegistryValue Root="HKCU" Key="Software\PdfCraft\Capabilities"
+            Name="ApplicationDescription" Type="string" Value="沃飞翼览 PDF 阅读与处理工具" />
+        <RegistryValue Root="HKCU" Key="Software\PdfCraft\Capabilities"
+            Name="ApplicationIcon" Type="string" Value="&quot;[#PdfcraftExe]&quot;,-2" />
+        <RegistryValue Root="HKCU" Key="Software\PdfCraft\Capabilities\FileAssociations"
+            Name=".pdf" Type="string" Value="PdfCraft.Document" />
+        <RegistryValue Root="HKCU" Key="Software\RegisteredApplications"
+            Name="沃飞翼览 PDF" Type="string" Value="Software\PdfCraft\Capabilities" />
+      </Component>
       <!-- Always create a per-user desktop shortcut, including during /qn installs. -->
       <Component Id="PdfcraftLocalDesktopShortcut" Directory="DesktopFolder" Guid="*">
         <Shortcut Id="DesktopShortcut" Name="沃飞翼览 PDF"

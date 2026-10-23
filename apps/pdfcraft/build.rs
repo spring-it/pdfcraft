@@ -23,7 +23,7 @@ fn main() {
         .set_icon_with_id("../../assets/app-icon/pdfcraft-document.ico", "2")
         .set_manifest(windows_manifest::WINDOWS_MANIFEST)
         .set("ProductName", "沃飞翼览 PDF")
-        .set("FileDescription", "沃飞长空内部 PDF 阅读与处理工具")
+        .set("FileDescription", "沃飞翼览 PDF")
         .set("LegalCopyright", "Copyright (c) the PdfCraft contributors. MIT OR Apache-2.0.")
         .set("OriginalFilename", "pdfcraft.exe")
         .set("InternalName", "pdfcraft");

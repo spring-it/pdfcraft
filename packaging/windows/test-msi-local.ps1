@@ -36,6 +36,15 @@ $startTarget = First 'SELECT `Target` FROM `Shortcut` WHERE `Shortcut` = ''Start
 Require ($arpIcon -eq 'PdfcraftIcon.ico' -and $iconRow -eq 'PdfcraftIcon.ico') 'MSI must embed the supplied red PDF application icon'
 Require ($desktopIcon -eq 'PdfcraftIcon.ico' -and $startIcon -eq 'PdfcraftIcon.ico') 'Desktop and Start menu shortcuts must use the supplied red PDF application icon'
 Require ($desktopTarget -match 'PdfcraftExe' -and $startTarget -match 'PdfcraftExe') 'Desktop and Start menu shortcuts must launch the installed PDF application'
+$friendlyName = First 'SELECT `Value` FROM `Registry` WHERE `Root` = 1 AND `Key` = ''Software\Classes\Applications\pdfcraft.exe'' AND `Name` = ''FriendlyAppName'''
+Require ($friendlyName -eq '沃飞翼览 PDF') "Open with label must be 沃飞翼览 PDF, got '$friendlyName'"
+$openWithProgId = First 'SELECT `Name` FROM `Registry` WHERE `Root` = 1 AND `Key` = ''Software\Classes\.pdf\OpenWithProgids'' AND `Name` = ''PdfCraft.Document'''
+Require ($openWithProgId -eq 'PdfCraft.Document') 'MSI must register PdfCraft.Document in the per-user PDF OpenWithProgids list'
+$openCommand = First 'SELECT `Value` FROM `Registry` WHERE `Root` = 1 AND `Key` = ''Software\Classes\Applications\pdfcraft.exe\shell\open\command'''
+Require ($openCommand -match 'PdfcraftExe' -and $openCommand -match '%1') 'Open with command must launch the installed executable with the selected PDF'
+$registeredApp = First 'SELECT `Value` FROM `Registry` WHERE `Root` = 1 AND `Key` = ''Software\RegisteredApplications'' AND `Name` = ''沃飞翼览 PDF'''
+Require ($registeredApp -eq 'Software\PdfCraft\Capabilities') 'Windows registered-app entry must use the custom display name'
+
 $modelsParent = First 'SELECT `Directory_Parent` FROM `Directory` WHERE `Directory` = ''ModelsFolder'''
 Require ($modelsParent -eq 'INSTALLFOLDER') 'OCR models must be beside the application'
 Require (-not (First 'SELECT `Key` FROM `Registry` WHERE `Root` = 2')) 'HKLM writes are forbidden for a per-user MSI'

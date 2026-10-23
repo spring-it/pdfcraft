@@ -32,6 +32,25 @@ try {
   }
   if (-not (Test-Path -LiteralPath $Shortcut)) { throw "Start menu shortcut missing: $Shortcut" }
   if (-not (Test-Path -LiteralPath $DesktopShortcut)) { throw "Desktop shortcut missing: $DesktopShortcut" }
+  $FriendlyAppKey = 'HKCU:\Software\Classes\Applications\pdfcraft.exe'
+  $FriendlyAppName = Get-ItemPropertyValue -LiteralPath $FriendlyAppKey -Name 'FriendlyAppName' -ErrorAction SilentlyContinue
+  if ($FriendlyAppName -ne '沃飞翼览 PDF') {
+    throw "Windows Open with label must be '沃飞翼览 PDF', got '$FriendlyAppName'"
+  }
+  $OpenWithKey = 'HKCU:\Software\Classes\.pdf\OpenWithProgids'
+  $OpenWithValues = Get-ItemProperty -LiteralPath $OpenWithKey -ErrorAction SilentlyContinue
+  if (-not $OpenWithValues -or $OpenWithValues.PSObject.Properties.Name -notcontains 'PdfCraft.Document') {
+    throw "Windows Open with list is missing PdfCraft.Document: $OpenWithKey"
+  }
+  $Executable = Join-Path $AppFolder 'pdfcraft.exe'
+  $VersionInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo($Executable)
+  if ($VersionInfo.ProductName -ne '沃飞翼览 PDF') {
+    throw "Executable ProductName must be '沃飞翼览 PDF', got '$($VersionInfo.ProductName)'"
+  }
+  if ($VersionInfo.FileDescription -ne '沃飞翼览 PDF') {
+    throw "Executable FileDescription must be '沃飞翼览 PDF', got '$($VersionInfo.FileDescription)'"
+  }
+  Write-Output 'ok Windows Open with displays 沃飞翼览 PDF and offers PDF files without changing the default'
   $shell = New-Object -ComObject WScript.Shell
   $lnk = $shell.CreateShortcut($DesktopShortcut)
   $expected = (Join-Path $AppFolder 'pdfcraft.exe')
@@ -55,4 +74,6 @@ finally {
 if (Test-Path -LiteralPath (Join-Path $AppFolder 'pdfcraft.exe')) { throw 'Silent uninstall left pdfcraft.exe behind' }
 if (Test-Path -LiteralPath $Shortcut) { throw 'Silent uninstall left the Start menu shortcut behind' }
 if (Test-Path -LiteralPath $DesktopShortcut) { throw 'Silent uninstall left the desktop shortcut behind' }
+$FriendlyAfter = Get-ItemPropertyValue -LiteralPath 'HKCU:\Software\Classes\Applications\pdfcraft.exe' -Name 'FriendlyAppName' -ErrorAction SilentlyContinue
+if ($FriendlyAfter -eq '沃飞翼览 PDF') { throw 'Silent uninstall left the per-user Open with registration behind' }
 Write-Output 'ok silent /qn uninstall'
