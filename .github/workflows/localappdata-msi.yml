@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - v0.10.1-localappdata-msi
+  workflow_dispatch:
 
 permissions:
   contents: write
