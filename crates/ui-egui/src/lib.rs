@@ -2932,6 +2932,39 @@ impl PdfCraftApp {
     }
 }
 
+fn branded_window_title(name: Option<String>) -> String {
+    name.map_or_else(
+        || "沃飞翼览 PDF".to_owned(),
+        |name| format!("{name} — 沃飞翼览 PDF"),
+    )
+}
+
+#[cfg(test)]
+mod branded_window_title_tests {
+    use super::branded_window_title;
+
+    #[test]
+    fn home_window_uses_custom_brand() {
+        assert_eq!(branded_window_title(None), "沃飞翼览 PDF");
+    }
+
+    #[test]
+    fn document_window_keeps_document_name_and_custom_brand() {
+        assert_eq!(
+            branded_window_title(Some("sample.pdf".to_owned())),
+            "sample.pdf — 沃飞翼览 PDF"
+        );
+    }
+
+    #[test]
+    fn combine_window_uses_custom_brand() {
+        assert_eq!(
+            branded_window_title(Some("Combine files".to_owned())),
+            "Combine files — 沃飞翼览 PDF"
+        );
+    }
+}
+
 impl eframe::App for PdfCraftApp {
     /// While files are dragged over the window the system sends no pointer moves, so egui
     /// would keep the place the pointer entered at: tell it where the pointer really is, so the
@@ -3130,11 +3163,11 @@ impl eframe::App for PdfCraftApp {
             view.begin_render_frame();
         }
         // The window shows the active document's name (or title, if it asks for that).
-        let title = self
-            .active
-            .and_then(|i| crate::canvas::tab_label(self, i))
-            .or_else(|| self.combine_showing().then(|| tl!("Combine files").to_owned()))
-            .map_or_else(|| "PdfCraft".to_owned(), |name| format!("{name} — PdfCraft"));
+        let title = branded_window_title(
+            self.active
+                .and_then(|i| crate::canvas::tab_label(self, i))
+                .or_else(|| self.combine_showing().then(|| tl!("Combine files").to_owned())),
+        );
         if title != self.window_title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.window_title = title;
