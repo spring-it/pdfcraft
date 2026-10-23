@@ -73,7 +73,7 @@ impl RenderConfig {
         InterpreterSettings {
             ocg_overrides: self.layers.clone(),
             hide_comments: self.hide_comments,
-            font_resolver: Arc::new(move |query| japanese_fallback(query).or_else(|| standard(query))),
+            font_resolver: Arc::new(move |query| japanese_fallback(query).or_else(|| windows_cjk_fallback(query)).or_else(|| standard(query))),
             ..InterpreterSettings::default()
         }
     }
@@ -104,6 +104,51 @@ fn japanese_fallback(query: &FontQuery) -> Option<(FontData, u32)> {
         }
     }?;
     Some((Arc::new(face.bytes), 0))
+}
+
+/// Substitute a Windows-installed CJK font for non-embedded Chinese, Traditional Chinese or
+/// Korean CID fonts. This reads fonts from the user's Windows installation only: no system font
+/// is copied into the repository, embedded in the executable, or shipped in the MSI.
+#[cfg(windows)]
+fn windows_cjk_fallback(query: &FontQuery) -> Option<(FontData, u32)> {
+    use std::sync::OnceLock;
+
+    static SIMPLIFIED_CHINESE: OnceLock<Option<FontData>> = OnceLock::new();
+    static TRADITIONAL_CHINESE: OnceLock<Option<FontData>> = OnceLock::new();
+    static KOREAN: OnceLock<Option<FontData>> = OnceLock::new();
+
+    let FontQuery::Fallback(fallback) = query else { return None };
+    let family = &fallback.character_collection.as_ref()?.family;
+    let (cache, candidates) = match family {
+        CidFamily::AdobeGB1 => (&SIMPLIFIED_CHINESE, &["msyh.ttc", "simsun.ttc", "simhei.ttf"][..]),
+        CidFamily::AdobeCNS1 => (&TRADITIONAL_CHINESE, &["msjh.ttc", "mingliu.ttc", "kaiu.ttf"][..]),
+        CidFamily::AdobeKorea1 => (&KOREAN, &["malgun.ttf", "batang.ttc", "gulim.ttc"][..]),
+        _ => return None,
+    };
+    let data = cache.get_or_init(|| load_windows_cjk_font(candidates)).clone()?;
+    Some((data, 0))
+}
+
+#[cfg(windows)]
+fn load_windows_cjk_font(candidates: &[&str]) -> Option<FontData> {
+    let root = std::env::var_os("WINDIR")
+        .or_else(|| std::env::var_os("SystemRoot"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(r"C:\Windows"));
+    for name in candidates {
+        if let Ok(bytes) = std::fs::read(root.join("Fonts").join(name))
+            && !bytes.is_empty()
+        {
+            let data: FontData = Arc::new(bytes);
+            return Some(data);
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+fn windows_cjk_fallback(_query: &FontQuery) -> Option<(FontData, u32)> {
+    None
 }
 
 #[derive(Debug, PartialEq)]
@@ -6699,6 +6744,47 @@ trailer << /Root 1 0 R >>
             // 日本 at 40 pt covers a few hundred dark pixels; a blank or missing-glyph run doesn't.
             assert!(inked > 300, "{base_font}: 日本 is drawn ({inked} dark pixels)");
         }
+    }
+
+    /// A common Chinese journal PDF names STSong-Light but doesn't embed the font. Chrome
+    /// substitutes a CJK face; PdfCraft previously fell back to a Latin font, leaving Han glyphs
+    /// blank. This exercises both the local Windows font selection and the full PDF render path.
+    #[cfg(windows)]
+    #[test]
+    fn non_embedded_simplified_chinese_cid_fonts_draw_with_windows_system_font() {
+        use hayro::hayro_interpret::font::FallbackFontQuery;
+        use hayro::hayro_interpret::hayro_cmap::CharacterCollection;
+
+        let query = FontQuery::Fallback(FallbackFontQuery {
+            post_script_name: Some("STSong-Light".into()),
+            character_collection: Some(CharacterCollection { family: CidFamily::AdobeGB1, supplement: 4 }),
+            ..FallbackFontQuery::default()
+        });
+        let Some((data, index)) = super::windows_cjk_fallback(&query) else {
+            panic!("a Simplified Chinese Windows font must be available on the Windows release runner");
+        };
+        let font = skrifa::FontRef::from_index((*data).as_ref(), index).expect("Windows CJK font parses");
+        assert!(font.charmap().map('动').is_some(), "fallback font must cover Simplified Chinese");
+
+        let content = "BT /F1 18 Tf 5 30 Td <52A8529B75356C6096326C34900F6C1496006280672F> Tj ET";
+        let pdf = format!(
+            "%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 80] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length {} >> stream
+{content}
+endstream endobj
+5 0 obj << /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [6 0 R] >> endobj
+6 0 obj << /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> /FontDescriptor 7 0 R /DW 1000 >> endobj
+7 0 obj << /Type /FontDescriptor /FontName /STSong-Light /Flags 6 /FontBBox [0 -141 1000 859] /ItalicAngle 0 /Ascent 859 /Descent -141 /CapHeight 700 /StemV 80 >> endobj
+trailer << /Root 1 0 R >>
+%%EOF",
+            content.len()
+        );
+        let page = render_first_page(pdf.into_bytes());
+        let inked = page.rgba.as_chunks::<4>().0.iter().filter(|pixel| pixel[0] < 128).count();
+        assert!(inked > 1000, "Chinese text should render with the Windows CJK fallback, got {inked} dark pixels");
     }
 
     /// Half-width katakana are common in Japanese documents set in a non-embedded Mincho font
