@@ -156,13 +156,14 @@ fn rgb32(c: [f64; 3]) -> Color32 {
     Color32::from_rgb(b(c[0]), b(c[1]), b(c[2]))
 }
 
-/// Kept only so the regression test still compiles. The dialog no longer uses
-/// a height budget — it sizes strictly to its controls.
-const WATERMARK_DIALOG_VERTICAL_CHROME: f32 = 0.0;
-const WATERMARK_PREVIEW_HEIGHT: f32 = 160.0;
+/// Target live-preview canvas height on standard-height windows.
+const WATERMARK_PREVIEW_HEIGHT: f32 = 320.0;
+/// Preserve room for the title, controls and action buttons on shorter windows.
+const WATERMARK_PREVIEW_MIN_HEIGHT: f32 = 220.0;
 
-fn watermark_body_height(_viewport_height: f32) -> f32 { 0.0 }
-fn watermark_preview_height(_body_height: f32) -> f32 { WATERMARK_PREVIEW_HEIGHT }
+fn watermark_preview_height(viewport_height: f32) -> f32 {
+    (viewport_height - 400.0).clamp(WATERMARK_PREVIEW_MIN_HEIGHT, WATERMARK_PREVIEW_HEIGHT)
+}
 
 /// A responsive two-column watermark dialog: settings on the left, live preview on the right.
 fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool, bool) {
@@ -177,10 +178,9 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     ui.label(egui::RichText::new(title).font(theme::semibold(18.0)));
     ui.add_space(8.0);
 
-    // Size strictly to content. No ScrollArea and no max height — those were
-    // expanding the Modal to fill the window and leaving a large blank region
-    // below the controls. A small fixed preview keeps the card compact.
-    let preview_height = WATERMARK_PREVIEW_HEIGHT;
+    // Keep the modal content-sized: no expanding ScrollArea and no max height.
+    // The live preview grows on standard windows and scales down on short viewports.
+    let preview_height = watermark_preview_height(ui.ctx().content_rect().height());
     let available_width = ui.available_width();
     let right_width = (available_width - 660.0).clamp(140.0, 450.0);
     let left_width = (available_width - right_width - 20.0).clamp(180.0, 640.0);
@@ -296,7 +296,7 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
         // Do not use ui.separator() in this horizontal layout: egui sizes a vertical
         // separator from the parent's available height, which can make Modal treat
         // the whole viewport as content and re-center the controls out of view.
-        let divider_height = 240.0_f32.min(ui.available_height());
+        let divider_height = preview_height.min(ui.available_height());
         let (divider, _) = ui.allocate_exact_size(vec2(1.0, divider_height), egui::Sense::hover());
         ui.painter().line_segment(
             [divider.center_top(), divider.center_bottom()],
@@ -923,11 +923,16 @@ mod tests {
     }
 
     #[test]
-    fn watermark_dialog_body_and_preview_fit_common_viewport_heights() {
-        // Dialog is content-sized; preview is a small fixed height so the card
-        // cannot be forced to fill the window.
-        assert_eq!(watermark_preview_height(0.0), WATERMARK_PREVIEW_HEIGHT);
-        assert!(WATERMARK_PREVIEW_HEIGHT <= 180.0);
+    fn watermark_dialog_preview_scales_to_viewport_without_forcing_modal_height() {
+        for viewport_height in [480.0_f32, 600.0, 720.0, 900.0, 1080.0] {
+            let preview = watermark_preview_height(viewport_height);
+            assert!(
+                (WATERMARK_PREVIEW_MIN_HEIGHT..=WATERMARK_PREVIEW_HEIGHT).contains(&preview),
+                "preview height {preview} must stay within bounds for viewport {viewport_height}"
+            );
+        }
+        assert_eq!(watermark_preview_height(720.0), WATERMARK_PREVIEW_HEIGHT);
+        assert_eq!(watermark_preview_height(480.0), WATERMARK_PREVIEW_MIN_HEIGHT);
     }
 
     #[test]
