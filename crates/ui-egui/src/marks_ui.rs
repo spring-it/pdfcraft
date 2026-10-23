@@ -293,7 +293,15 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                     .small().color(t.text_muted));
         });
 
-        ui.separator();
+        // Do not use ui.separator() in this horizontal layout: egui sizes a vertical
+        // separator from the parent's available height, which can make Modal treat
+        // the whole viewport as content and re-center the controls out of view.
+        let divider_height = 240.0_f32.min(ui.available_height());
+        let (divider, _) = ui.allocate_exact_size(vec2(1.0, divider_height), egui::Sense::hover());
+        ui.painter().line_segment(
+            [divider.center_top(), divider.center_bottom()],
+            Stroke::new(1.0, t.border),
+        );
 
         ui.vertical(|right| {
             right.set_min_width(right_width);
