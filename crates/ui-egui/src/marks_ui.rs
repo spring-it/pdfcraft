@@ -157,7 +157,7 @@ fn rgb32(c: [f64; 3]) -> Color32 {
 }
 
 /// Target live-preview canvas height on standard-height windows.
-const WATERMARK_PREVIEW_HEIGHT: f32 = 700.0;
+const WATERMARK_PREVIEW_HEIGHT: f32 = 670.0;
 /// Preserve room for the title, controls and action buttons on shorter windows.
 const WATERMARK_PREVIEW_MIN_HEIGHT: f32 = 220.0;
 const WATERMARK_SETTINGS_COLUMN_WIDTH: f32 = 640.0;
@@ -166,7 +166,7 @@ const WATERMARK_PREVIEW_COLUMN_MAX_WIDTH: f32 = 600.0;
 const WATERMARK_COLUMN_GAP: f32 = 20.0;
 
 fn watermark_preview_height(viewport_height: f32) -> f32 {
-    (viewport_height - 200.0).clamp(WATERMARK_PREVIEW_MIN_HEIGHT, WATERMARK_PREVIEW_HEIGHT)
+    (viewport_height - 230.0).clamp(WATERMARK_PREVIEW_MIN_HEIGHT, WATERMARK_PREVIEW_HEIGHT)
 }
 
 fn watermark_column_widths(available_width: f32) -> (f32, f32) {
@@ -941,9 +941,10 @@ mod tests {
                 "preview height {preview} must stay within bounds for viewport {viewport_height}"
             );
         }
-        assert_eq!(watermark_preview_height(480.0), 280.0);
-        assert_eq!(watermark_preview_height(600.0), 400.0);
-        assert_eq!(watermark_preview_height(720.0), 520.0);
+        assert_eq!(watermark_preview_height(400.0), WATERMARK_PREVIEW_MIN_HEIGHT);
+        assert_eq!(watermark_preview_height(480.0), 250.0);
+        assert_eq!(watermark_preview_height(600.0), 370.0);
+        assert_eq!(watermark_preview_height(720.0), 490.0);
         assert_eq!(watermark_preview_height(900.0), WATERMARK_PREVIEW_HEIGHT);
         assert_eq!(watermark_preview_height(1080.0), WATERMARK_PREVIEW_HEIGHT);
     }

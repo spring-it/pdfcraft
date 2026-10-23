@@ -365,7 +365,7 @@ This branch is a Windows-focused internal distribution of PdfCraft, maintained f
 - Product name: **沃飞翼览 PDF**.
 - Windows x64 and x86 per-user MSI installers; installation under `%LOCALAPPDATA%\pdfcraft`, without administrator privileges.
 - Registers **沃飞翼览 PDF** as the Windows PDF “Open with” app for the current user, without taking over the existing default PDF app.
-- The live-preview canvas grows to 700 pt on a 900 pt viewport (up to 700 pt, with a 220 pt minimum on shorter viewports) and the preview column grows to 600 pt; the 640 pt left settings column and all setting values remain unchanged.
+- The live-preview canvas grows to 670 pt on a 900 pt viewport (up to 670 pt, with a 220 pt minimum on shorter viewports) and the preview column grows to 600 pt; the 640 pt left settings column and all setting values remain unchanged.
 - The red PDF app/document icon family was generated with ChatGPT and supplied by the requester; it is licensed under MIT OR Apache-2.0. Provenance is recorded in `assets/app-icon/LICENSE-source.txt`; the Windows release includes this source notice, the separate Lucide/Feather UI-icon license and the bundled font OFL licenses.
 - Home-screen **添加水印** quick entry. The watermark dialog uses a wider two-column layout with controls on the left and a large live preview on the right; defaults match the reference screenshot (text 内部资料, 微软雅黑, 15 pt, gray, -45°, 10%, tiled, 80/120 pt gaps, on top).
 - Chinese watermark text rendered to a transparent PNG using a locally installed font; no document or system font is uploaded.
