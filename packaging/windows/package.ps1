@@ -109,16 +109,16 @@ if ($env:CRAFT_FONTS_DIR) {
   if (-not (Test-Path $craftAttribution)) { throw "craft-fonts attribution is missing: $craftAttribution" }
   Copy-Item $craftAttribution (Join-Path $Stage 'CRAFT-FONTS-ATTRIBUTION.md')
   $craftFontLicenses = @(
-    @('fonts\shippori-mincho\OFL.txt', 'OFL-ShipporiMincho.txt'),
-    @('fonts\biz-ud-pgothic\OFL.txt', 'OFL-BIZ-UDPGothic.txt'),
-    @('fonts\biz-ud-mincho\OFL.txt', 'OFL-BIZ-UDMincho.txt'),
-    @('fonts\noto-sans-arabic\OFL.txt', 'OFL-NotoSansArabic.txt'),
-    @('fonts\noto-sans-thai\OFL.txt', 'OFL-NotoSansThai.txt')
+    [pscustomobject]@{ Source = 'fonts\shippori-mincho\OFL.txt'; Destination = 'OFL-ShipporiMincho.txt' },
+    [pscustomobject]@{ Source = 'fonts\biz-ud-pgothic\OFL.txt'; Destination = 'OFL-BIZ-UDPGothic.txt' },
+    [pscustomobject]@{ Source = 'fonts\biz-ud-mincho\OFL.txt'; Destination = 'OFL-BIZ-UDMincho.txt' },
+    [pscustomobject]@{ Source = 'fonts\noto-sans-arabic\OFL.txt'; Destination = 'OFL-NotoSansArabic.txt' },
+    [pscustomobject]@{ Source = 'fonts\noto-sans-thai\OFL.txt'; Destination = 'OFL-NotoSansThai.txt' }
   )
   foreach ($fontLicense in $craftFontLicenses) {
-    $licenseSource = Join-Path $craftRoot $fontLicense[0]
+    $licenseSource = Join-Path $craftRoot $fontLicense.Source
     if (-not (Test-Path $licenseSource)) { throw "craft-fonts license is missing: $licenseSource" }
-    Copy-Item $licenseSource (Join-Path $Stage $fontLicense[1])
+    Copy-Item $licenseSource (Join-Path $Stage $fontLicense.Destination)
   }
 } elseif ($env:CRAFT_FONTS_REQUIRED -eq '1') {
   throw 'CRAFT_FONTS_REQUIRED=1 but CRAFT_FONTS_DIR is not set; refusing to package a font-incomplete release'
