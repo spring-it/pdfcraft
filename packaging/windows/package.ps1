@@ -98,6 +98,9 @@ foreach ($f in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE') {
 Copy-Item (Join-Path $Root 'assets\app-icon\LICENSE-document.txt') $Stage
 Copy-Item (Join-Path $Root 'assets\app-icon\LICENSE-source.txt') $Stage
 Copy-Item (Join-Path $Root 'assets\icons\LICENSE-lucide.txt') (Join-Path $Stage 'LICENSE-lucide.txt')
+foreach ($f in 'OFL-Inter.txt', 'OFL-JetBrainsMono.txt', 'OFL-DancingScript.txt') {
+  Copy-Item (Join-Path $Root "assets\fonts\$f") $Stage
+}
 # Only the per-user MSI ships a portable marker: it keeps settings/logs/recovery under
 # %LOCALAPPDATA%\pdfcraft\PdfCraftData instead of roaming %APPDATA%.
 if ($LocalAppDataMsi) { Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Stage }
@@ -171,7 +174,7 @@ $Portable = Join-Path $TargetDir "windows-package\pdfcraft-$Version-windows-$Arc
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
-foreach ($f in 'NOTICE', 'LICENSE-document.txt', 'LICENSE-source.txt', 'LICENSE-lucide.txt') {
+foreach ($f in 'NOTICE', 'LICENSE-document.txt', 'LICENSE-source.txt', 'LICENSE-lucide.txt', 'OFL-Inter.txt', 'OFL-JetBrainsMono.txt', 'OFL-DancingScript.txt') {
   Copy-Item (Join-Path $Stage $f) $Portable
 }
 Copy-Item -Recurse $Models (Join-Path $Portable 'models')

@@ -1181,7 +1181,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                         );
                         ui.add_space(12.0);
                         ui.label("基于开源 PdfCraft 定制，原作者版权归 ArtCraft Team 及贡献者所有。");
-                        ui.label("许可证：MIT OR Apache-2.0，详见安装目录中的 LICENSE-MIT、LICENSE-APACHE、NOTICE、LICENSE-lucide.txt 和 LICENSE-source.txt。");
+                        ui.label("许可证：MIT OR Apache-2.0；第三方素材详见安装目录中的 LICENSE-MIT、LICENSE-APACHE、NOTICE、LICENSE-lucide.txt、LICENSE-source.txt 和 OFL-*.txt。");
                         ui.add_space(12.0);
                         ui.separator();
                         ui.label(egui::RichText::new("内部定制开发者信息").strong());

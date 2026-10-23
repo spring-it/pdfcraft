@@ -66,7 +66,7 @@ Require ($desktopReg -and $desktopKey -eq $desktopReg) 'Desktop shortcut compone
 
 $hasMarker = $false
 $modelCount = 0
-$requiredLicenseFiles = @('LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'LICENSE-document.txt', 'LICENSE-source.txt', 'LICENSE-lucide.txt')
+$requiredLicenseFiles = @('LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'LICENSE-document.txt', 'LICENSE-source.txt', 'LICENSE-lucide.txt', 'OFL-Inter.txt', 'OFL-JetBrainsMono.txt', 'OFL-DancingScript.txt')
 $foundLicenseFiles = @{}
 $view = $Database.OpenView('SELECT `File`.`FileName`, `Component`.`Directory_` FROM `File`, `Component` WHERE `File`.`Component_` = `Component`.`Component`')
 try {

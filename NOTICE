@@ -14,13 +14,8 @@ list (author, source, license) is in ATTRIBUTION.md.
 
 - UI icon assets (assets/icons/*.svg) include Lucide icons under ISC and Feather-derived icons under MIT, as itemized in
   assets/icons/LICENSE-lucide.txt. Windows distributions include this file as LICENSE-lucide.txt.
-- The red application/document icon family (assets/app-icon/*) was generated with ChatGPT at the requester's direction
-  and supplied by the requester. The requester licenses this artwork under MIT OR Apache-2.0 to the extent permitted
-  by applicable law; provenance and the non-uniqueness caveat are documented in assets/app-icon/LICENSE-source.txt,
-  shipped as LICENSE-source.txt. It is separate from the UI icon assets and is not an ArtCraft mark. No OpenAI
-  endorsement or affiliation is implied.
-- Inter typeface (assets/fonts/Inter-*.ttf) — SIL Open Font License 1.1. See assets/fonts/OFL-Inter.txt.
-- JetBrains Mono typeface (assets/fonts/JetBrainsMono-*.ttf) — SIL Open Font License 1.1. See assets/fonts/OFL-JetBrainsMono.txt.
+- Inter typeface (assets/fonts/Inter-*.ttf) — SIL Open Font License 1.1. See assets/fonts/OFL-Inter.txt; Windows distributions include OFL-Inter.txt.
+- JetBrains Mono typeface (assets/fonts/JetBrainsMono-*.ttf) — SIL Open Font License 1.1. See assets/fonts/OFL-JetBrainsMono.txt; Windows distributions include OFL-JetBrainsMono.txt.
 - Dancing Script typeface (assets/fonts/DancingScript.ttf), Copyright 2016 The Dancing Script Project Authors — SIL Open Font License 1.1 (Reserved Font Name "Dancing Script"). See assets/fonts/OFL-DancingScript.txt.
 - Fonts from craft-fonts (https://github.com/storytold/craft-fonts), an optional build input
   (CRAFT_FONTS_DIR) that is not part of this repository. Builds made with it, which includes every
@@ -38,6 +33,15 @@ list (author, source, license) is in ATTRIBUTION.md.
 - egui default fonts (epaint_default_fonts, via eframe) — Ubuntu Light (Ubuntu Font Licence 1.0),
   Hack (MIT / Bitstream Vera licence), Noto Emoji (SIL OFL 1.1), emoji-icon-font (MIT).
 - Colour profile in hayro-interpret — CGATS001Compat-v2-micro.icc (CC0-1.0, Clinton Ingram).
+
+Custom artwork and provenance
+
+The red application/document icon family (assets/app-icon/*) was generated with ChatGPT at the requester's direction
+and supplied by the requester. The requester licenses this artwork under MIT OR Apache-2.0 to the extent permitted
+by applicable law; provenance and the non-uniqueness caveat are documented in assets/app-icon/LICENSE-source.txt,
+shipped as LICENSE-source.txt. It is separate from the UI icon assets and is not an ArtCraft mark. No OpenAI
+endorsement or affiliation is implied.
+
 
 Required notices:
 

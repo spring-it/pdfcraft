@@ -49,6 +49,9 @@
         <File Id="PdfcraftDocumentIconLicense" Source="$(var.BinDir)\LICENSE-document.txt" />
         <File Id="PdfcraftIconSourceLicense" Source="$(var.BinDir)\LICENSE-source.txt" />
         <File Id="PdfcraftLucideLicense" Source="$(var.BinDir)\LICENSE-lucide.txt" />
+        <File Id="PdfcraftOflInterLicense" Source="$(var.BinDir)\OFL-Inter.txt" />
+        <File Id="PdfcraftOflJetBrainsMonoLicense" Source="$(var.BinDir)\OFL-JetBrainsMono.txt" />
+        <File Id="PdfcraftOflDancingScriptLicense" Source="$(var.BinDir)\OFL-DancingScript.txt" />
         <File Id="PdfcraftMitLicense" Source="$(var.BinDir)\LICENSE-MIT" />
         <File Id="PdfcraftApacheLicense" Source="$(var.BinDir)\LICENSE-APACHE" />
         <File Id="PdfcraftNotice" Source="$(var.BinDir)\NOTICE" />
