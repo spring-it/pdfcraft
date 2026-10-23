@@ -11,14 +11,22 @@ fn main() {
     println!("cargo::rerun-if-env-changed=CRAFT_FONTS_DIR");
     println!("cargo::rerun-if-env-changed=CRAFT_FONTS_REQUIRED");
     let mut src = String::from("pub static CRAFT_FONTS: &[CraftFont] = &[\n");
-    if let Some(dir) = std::env::var_os("CRAFT_FONTS_DIR").map(PathBuf::from) {
-        match craft_fonts(&dir) {
+    let required = std::env::var_os("CRAFT_FONTS_REQUIRED").is_some();
+    match std::env::var_os("CRAFT_FONTS_DIR").map(PathBuf::from) {
+        Some(dir) => match craft_fonts(&dir) {
+            Ok(entries) if required && (!entries.contains("Shippori Mincho") || !entries.contains("BIZ UDPGothic")) => {
+                println!("cargo::error=CRAFT_FONTS_REQUIRED=1 but the checkout did not provide the required Japanese fallback faces");
+            }
             Ok(entries) => src.push_str(&entries),
-            Err(e) if std::env::var_os("CRAFT_FONTS_REQUIRED").is_some() => {
+            Err(e) if required => {
                 println!("cargo::error=CRAFT_FONTS_DIR={}: {e}", dir.display());
             }
             Err(e) => println!("cargo::warning=building without craft-fonts: CRAFT_FONTS_DIR={}: {e}", dir.display()),
+        },
+        None if required => {
+            println!("cargo::error=CRAFT_FONTS_REQUIRED=1 but CRAFT_FONTS_DIR is not set");
         }
+        None => {}
     }
     src.push_str("];\n");
     let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap_or_default()).join("craft_fonts.rs");

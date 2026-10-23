@@ -101,6 +101,28 @@ Copy-Item (Join-Path $Root 'assets\icons\LICENSE-lucide.txt') (Join-Path $Stage 
 foreach ($f in 'OFL-Inter.txt', 'OFL-JetBrainsMono.txt', 'OFL-DancingScript.txt') {
   Copy-Item (Join-Path $Root "assets\fonts\$f") $Stage
 }
+if ($env:CRAFT_FONTS_DIR) {
+  $craftRoot = (Resolve-Path $env:CRAFT_FONTS_DIR).Path
+  $craftManifest = Join-Path $craftRoot 'fonts\manifest.txt'
+  if (-not (Test-Path $craftManifest)) { throw "CRAFT_FONTS_DIR is not a craft-fonts checkout: $craftRoot" }
+  $craftAttribution = Join-Path $craftRoot 'ATTRIBUTION.md'
+  if (-not (Test-Path $craftAttribution)) { throw "craft-fonts attribution is missing: $craftAttribution" }
+  Copy-Item $craftAttribution (Join-Path $Stage 'CRAFT-FONTS-ATTRIBUTION.md')
+  $craftFontLicenses = @(
+    @('fonts\shippori-mincho\OFL.txt', 'OFL-ShipporiMincho.txt'),
+    @('fonts\biz-ud-pgothic\OFL.txt', 'OFL-BIZ-UDPGothic.txt'),
+    @('fonts\biz-ud-mincho\OFL.txt', 'OFL-BIZ-UDMincho.txt'),
+    @('fonts\noto-sans-arabic\OFL.txt', 'OFL-NotoSansArabic.txt'),
+    @('fonts\noto-sans-thai\OFL.txt', 'OFL-NotoSansThai.txt')
+  )
+  foreach ($fontLicense in $craftFontLicenses) {
+    $licenseSource = Join-Path $craftRoot $fontLicense[0]
+    if (-not (Test-Path $licenseSource)) { throw "craft-fonts license is missing: $licenseSource" }
+    Copy-Item $licenseSource (Join-Path $Stage $fontLicense[1])
+  }
+} elseif ($env:CRAFT_FONTS_REQUIRED -eq '1') {
+  throw 'CRAFT_FONTS_REQUIRED=1 but CRAFT_FONTS_DIR is not set; refusing to package a font-incomplete release'
+}
 # Only the per-user MSI ships a portable marker: it keeps settings/logs/recovery under
 # %LOCALAPPDATA%\pdfcraft\PdfCraftData instead of roaming %APPDATA%.
 if ($LocalAppDataMsi) { Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Stage }
@@ -176,6 +198,9 @@ New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
 foreach ($f in 'NOTICE', 'LICENSE-document.txt', 'LICENSE-source.txt', 'LICENSE-lucide.txt', 'OFL-Inter.txt', 'OFL-JetBrainsMono.txt', 'OFL-DancingScript.txt') {
   Copy-Item (Join-Path $Stage $f) $Portable
+}
+foreach ($f in 'CRAFT-FONTS-ATTRIBUTION.md', 'OFL-ShipporiMincho.txt', 'OFL-BIZ-UDPGothic.txt', 'OFL-BIZ-UDMincho.txt', 'OFL-NotoSansArabic.txt', 'OFL-NotoSansThai.txt') {
+  if (Test-Path (Join-Path $Stage $f)) { Copy-Item (Join-Path $Stage $f) $Portable }
 }
 Copy-Item -Recurse $Models (Join-Path $Portable 'models')
 foreach ($f in 'README.md', 'LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE') {
