@@ -1,6 +1,6 @@
 # 沃飞翼览 PDF
 
-**沃飞长空内部 PDF 阅读与处理工具**（基于开源 PdfCraft v0.10.1 定制，桌面企业版 0.10.12）
+**沃飞长空内部 PDF 阅读与处理工具**（基于开源 PdfCraft v0.10.1 定制，桌面企业版 0.10.13）
 
 - 离线阅读、编辑、批注、OCR 和文档管理
 - 增强版 PDF 水印：**中文**、透明度、颜色、旋转、平铺/单个、九宫格位置、间距及指定页码
@@ -11,6 +11,7 @@
 > **开源与商标说明**：本版本由沃飞长空定制，基于 [PdfCraft](https://github.com/storytold/pdfcraft) 的 MIT OR Apache-2.0 授权代码。
 > 原作者为 ArtCraft Team 与 PdfCraft 贡献者。本项目并非原项目官方发行版；本定制版移除了不适用于派生版本的 ArtCraft 商标资源。
 > 根据原项目 `LICENSE-MIT`、`LICENSE-APACHE` 和 `NOTICE` 保留所有必须的许可和归属信息。
+> 红色 PDF 图标为请求者使用 ChatGPT 生成并提供，按 MIT OR Apache-2.0 许可；该声明不代表 OpenAI 对本软件的背书。图标输出可能并非唯一，详见 `assets/app-icon/LICENSE-source.txt`。
 
 更多本地安装信息请见 [企业 MSI 文档](docs/localappdata-msi.md)。
 
@@ -357,15 +358,15 @@ emerge --ask app-text/pdfcraft-bin
 
 Logs, environment variables and other development notes are in [docs/development.md](docs/development.md).
 
-## v0.10.12 enterprise customization
+## v0.10.13 enterprise customization
 
 This branch is a Windows-focused internal distribution of PdfCraft, maintained for 沃飞长空.
 
 - Product name: **沃飞翼览 PDF**.
 - Windows x64 and x86 per-user MSI installers; installation under `%LOCALAPPDATA%\pdfcraft`, without administrator privileges.
 - Registers **沃飞翼览 PDF** as the Windows PDF “Open with” app for the current user, without taking over the existing default PDF app.
-- The live-preview canvas targets up to 450 pt on larger windows, scales with the available viewport down to a 220 pt minimum on shorter windows, and leaves the left-side watermark settings and defaults unchanged.
-- The supplied red PDF artwork remains the application icon for the executable, in-app window, MSI, desktop shortcut, Start menu shortcut and PDF document association resource.
+- The live-preview canvas grows to 700 pt on a 900 pt viewport (up to 700 pt, with a 220 pt minimum on shorter viewports) and the preview column grows to 600 pt; the 640 pt left settings column and all setting values remain unchanged.
+- The red PDF app/document icon family was generated with ChatGPT and supplied by the requester; it is licensed under MIT OR Apache-2.0. Provenance is recorded in `assets/app-icon/LICENSE-source.txt`; the release packages the source notice and the separate Lucide/Feather UI-icon license.
 - Home-screen **添加水印** quick entry. The watermark dialog uses a wider two-column layout with controls on the left and a large live preview on the right; defaults match the reference screenshot (text 内部资料, 微软雅黑, 15 pt, gray, -45°, 10%, tiled, 80/120 pt gaps, on top).
 - Chinese watermark text rendered to a transparent PNG using a locally installed font; no document or system font is uploaded.
 - Watermark presets, opacity, color, rotation, tile/single layout, spacing, nine-position placement, page subsets and custom page ranges.
@@ -374,27 +375,27 @@ This branch is a Windows-focused internal distribution of PdfCraft, maintained f
 
 ## Downloads
 
-### Windows MSI (version 0.10.12)
+### Windows MSI (version 0.10.13)
 
 The customized release publishes two installers after the x64 and x86 build, watermark tests, and silent-install/uninstall checks pass.
 
 | Architecture | Installer |
 |---|---|
-| Windows x64 | [pdfcraft-0.10.12-windows-x64-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.12-wofei.1/pdfcraft-0.10.12-windows-x64-localappdata.msi) |
-| Windows x86 | [pdfcraft-0.10.12-windows-x86-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.12-wofei.1/pdfcraft-0.10.12-windows-x86-localappdata.msi) |
+| Windows x64 | [pdfcraft-0.10.13-windows-x64-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.13-wofei.1/pdfcraft-0.10.13-windows-x64-localappdata.msi) |
+| Windows x86 | [pdfcraft-0.10.13-windows-x86-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.13-wofei.1/pdfcraft-0.10.13-windows-x86-localappdata.msi) |
 
 The installers are for the current Windows user, require no administrator privileges for a normal installation, and create **沃飞翼览 PDF** desktop and Start menu shortcuts. Application settings, logs and recovery data remain under `%LOCALAPPDATA%\pdfcraft\PdfCraftData`.
 
 Silent install:
 
 ```powershell
-msiexec /i "pdfcraft-0.10.12-windows-x64-localappdata.msi" /qn /norestart
+msiexec /i "pdfcraft-0.10.13-windows-x64-localappdata.msi" /qn /norestart
 ```
 
 Silent uninstall:
 
 ```powershell
-msiexec /x "pdfcraft-0.10.12-windows-x64-localappdata.msi" /qn /norestart
+msiexec /x "pdfcraft-0.10.13-windows-x64-localappdata.msi" /qn /norestart
 ```
 
 These custom MSI files are **unsigned unless signing is separately configured**. See [the MSI packaging and test notes](docs/localappdata-msi.md). This release is not the upstream PdfCraft release; it is built from this customized branch.

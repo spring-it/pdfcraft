@@ -157,12 +157,23 @@ fn rgb32(c: [f64; 3]) -> Color32 {
 }
 
 /// Target live-preview canvas height on standard-height windows.
-const WATERMARK_PREVIEW_HEIGHT: f32 = 450.0;
+const WATERMARK_PREVIEW_HEIGHT: f32 = 700.0;
 /// Preserve room for the title, controls and action buttons on shorter windows.
 const WATERMARK_PREVIEW_MIN_HEIGHT: f32 = 220.0;
+const WATERMARK_SETTINGS_COLUMN_WIDTH: f32 = 640.0;
+const WATERMARK_PREVIEW_COLUMN_MIN_WIDTH: f32 = 140.0;
+const WATERMARK_PREVIEW_COLUMN_MAX_WIDTH: f32 = 600.0;
+const WATERMARK_COLUMN_GAP: f32 = 20.0;
 
 fn watermark_preview_height(viewport_height: f32) -> f32 {
-    (viewport_height - 500.0).clamp(WATERMARK_PREVIEW_MIN_HEIGHT, WATERMARK_PREVIEW_HEIGHT)
+    (viewport_height - 200.0).clamp(WATERMARK_PREVIEW_MIN_HEIGHT, WATERMARK_PREVIEW_HEIGHT)
+}
+
+fn watermark_column_widths(available_width: f32) -> (f32, f32) {
+    let right = (available_width - (WATERMARK_SETTINGS_COLUMN_WIDTH + WATERMARK_COLUMN_GAP))
+        .clamp(WATERMARK_PREVIEW_COLUMN_MIN_WIDTH, WATERMARK_PREVIEW_COLUMN_MAX_WIDTH);
+    let left = (available_width - right - WATERMARK_COLUMN_GAP).clamp(180.0, WATERMARK_SETTINGS_COLUMN_WIDTH);
+    (left, right)
 }
 
 /// A responsive two-column watermark dialog: settings on the left, live preview on the right.
@@ -182,8 +193,7 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     // The live preview grows on standard windows and scales down on short viewports.
     let preview_height = watermark_preview_height(ui.ctx().content_rect().height());
     let available_width = ui.available_width();
-    let right_width = (available_width - 660.0).clamp(140.0, 450.0);
-    let left_width = (available_width - right_width - 20.0).clamp(180.0, 640.0);
+    let (left_width, right_width) = watermark_column_widths(available_width);
 
     ui.horizontal_top(|ui| {
         ui.vertical(|ui| {
@@ -931,9 +941,18 @@ mod tests {
                 "preview height {preview} must stay within bounds for viewport {viewport_height}"
             );
         }
-        assert_eq!(watermark_preview_height(900.0), 400.0);
+        assert_eq!(watermark_preview_height(480.0), 280.0);
+        assert_eq!(watermark_preview_height(600.0), 400.0);
+        assert_eq!(watermark_preview_height(720.0), 520.0);
+        assert_eq!(watermark_preview_height(900.0), WATERMARK_PREVIEW_HEIGHT);
         assert_eq!(watermark_preview_height(1080.0), WATERMARK_PREVIEW_HEIGHT);
-        assert_eq!(watermark_preview_height(480.0), WATERMARK_PREVIEW_MIN_HEIGHT);
+    }
+
+    #[test]
+    fn watermark_preview_column_grows_without_changing_settings_width() {
+        assert_eq!(watermark_column_widths(1280.0), (640.0, 600.0));
+        assert_eq!(watermark_column_widths(1120.0), (640.0, 460.0));
+        assert_eq!(watermark_column_widths(900.0), (640.0, 240.0));
     }
 
     #[test]

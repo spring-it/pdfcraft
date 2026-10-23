@@ -1,16 +1,19 @@
-PdfCraft application icon assets for this customized enterprise release.
+PdfCraft custom red PDF application/document icon family
 
-Files covered include pdfcraft-source.webp, pdfcraft.svg, pdfcraft-small.svg,
+Covered files include pdfcraft-source.webp, pdfcraft.svg, pdfcraft-small.svg,
 pdfcraft-1024.png, pdfcraft.icns, pdfcraft.ico, pdfcraft-document.svg,
 pdfcraft-document.ico and the derived files under hicolor/.
 
-The red PDF artwork used by this customized release was supplied by the requester.
-It is not the original ArtCraft artwork and is not automatically covered by the
-PdfCraft project's MIT OR Apache-2.0 software license. See LICENSE-source.txt
-for the provenance and rights note. This file does not grant additional rights
-to the supplied image. Redistribution assumes the distributor has permission
-from the relevant artwork rights holder.
+The artwork was generated with ChatGPT from prompts provided by the requester
+and supplied by the requester. The requester licenses this artwork under
+either the MIT License or the Apache License, Version 2.0, at the recipient's
+option, to the extent permitted by applicable law. See LICENSE-source.txt for
+the complete provenance and licensing note. The full license texts are the
+repository-root LICENSE-MIT and LICENSE-APACHE files.
 
-The application's source code and other assets remain subject to their own
-licenses. See the repository-root LICENSE-MIT, LICENSE-APACHE, NOTICE and
-ATTRIBUTION.toml for the applicable code and third-party notices.
+The artwork is not the original ArtCraft artwork and is not an ArtCraft mark.
+No OpenAI endorsement or affiliation is implied. ChatGPT output may not be
+unique, and this note does not guarantee the absence of third-party rights.
+
+Other bundled UI icons and dependencies retain their own licenses. See the
+repository-root NOTICE, ATTRIBUTION.toml and assets/icons/LICENSE-lucide.txt.

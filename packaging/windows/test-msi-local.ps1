@@ -26,7 +26,7 @@ Require ($parent -eq 'LocalAppDataFolder') "INSTALLFOLDER must be under LocalApp
 $name = First 'SELECT `DefaultDir` FROM `Directory` WHERE `Directory` = ''INSTALLFOLDER'''
 Require ($name -match '(^|\|)pdfcraft$') "install directory must be pdfcraft, got '$name'"
 
-# The user-supplied red PDF icon must remain the Add/Remove Programs and shortcut icon.
+# The ChatGPT-generated red PDF icon must remain the Add/Remove Programs and shortcut icon.
 $arpIcon = First 'SELECT `Value` FROM `Property` WHERE `Property` = ''ARPPRODUCTICON'''
 $iconRow = First 'SELECT `Name` FROM `Icon` WHERE `Name` = ''PdfcraftIcon.ico'''
 $desktopIcon = First 'SELECT `Icon_` FROM `Shortcut` WHERE `Shortcut` = ''DesktopShortcut'''
@@ -66,14 +66,46 @@ Require ($desktopReg -and $desktopKey -eq $desktopReg) 'Desktop shortcut compone
 
 $hasMarker = $false
 $modelCount = 0
+$requiredLicenseFiles = @('LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'LICENSE-document.txt', 'LICENSE-source.txt', 'LICENSE-lucide.txt')
+$foundLicenseFiles = @{}
 $view = $Database.OpenView('SELECT `File`.`FileName`, `Component`.`Directory_` FROM `File`, `Component` WHERE `File`.`Component_` = `Component`.`Component`')
 try {
   [void] $view.Execute()
   while ($record = $view.Fetch()) {
     $filename = $record.StringData(1)
     $directory = $record.StringData(2)
-    if ($filename -match '(^|\|)portable\.txt$') { $hasMarker = $true }
-    if ($directory -eq 'ModelsFolder' -and $filename -match '\.rten$') { $modelCount++ }
+    if ($filename -match '(^|\|)portable\.txt
+  }
+} finally { [void] $view.Close() }
+Require $hasMarker 'portable.txt is required so settings/logs stay in LocalAppData'
+Require ($modelCount -ge 2) "at least 2 OCR models are required, got $modelCount"
+foreach ($licenseFile in $requiredLicenseFiles) {
+  Require ($foundLicenseFiles.ContainsKey($licenseFile)) "MSI must package the required license/provenance file $licenseFile"
+}
+[void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Database)
+[void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Installer)
+Write-Output 'ok: no wizard, current-user Desktop and Start Menu shortcuts, HKCU registry, %LOCALAPPDATA%\pdfcraft, portable data, OCR models'
+) { $hasMarker = $true }
+    foreach ($licenseFile in $requiredLicenseFiles) {
+      if ($filename -match ('(^|\|)' + [regex]::Escape($licenseFile) + '
+  }
+} finally { [void] $view.Close() }
+Require $hasMarker 'portable.txt is required so settings/logs stay in LocalAppData'
+Require ($modelCount -ge 2) "at least 2 OCR models are required, got $modelCount"
+[void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Database)
+[void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Installer)
+Write-Output 'ok: no wizard, current-user Desktop and Start Menu shortcuts, HKCU registry, %LOCALAPPDATA%\pdfcraft, portable data, OCR models'
+)) { $foundLicenseFiles[$licenseFile] = $true }
+    }
+    if ($directory -eq 'ModelsFolder' -and $filename -match '\.rten
+  }
+} finally { [void] $view.Close() }
+Require $hasMarker 'portable.txt is required so settings/logs stay in LocalAppData'
+Require ($modelCount -ge 2) "at least 2 OCR models are required, got $modelCount"
+[void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Database)
+[void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Installer)
+Write-Output 'ok: no wizard, current-user Desktop and Start Menu shortcuts, HKCU registry, %LOCALAPPDATA%\pdfcraft, portable data, OCR models'
+) { $modelCount++ }
   }
 } finally { [void] $view.Close() }
 Require $hasMarker 'portable.txt is required so settings/logs stay in LocalAppData'

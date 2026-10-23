@@ -115,7 +115,7 @@ fn watermark_dialog_stays_content_sized_across_frames() {
     for frame in 0..6 {
         h.run_steps(1);
         let modal = card(&h, "dialog");
-        assert!(modal.height() < 700.0, "frame {frame}: watermark modal unexpectedly tall: {modal:?}");
+        assert!(modal.height() < 880.0, "frame {frame}: watermark modal unexpectedly tall: {modal:?}");
         assert!(
             modal.top() >= 0.0 && modal.bottom() <= 900.0,
             "frame {frame}: watermark modal is outside the viewport: {modal:?}"

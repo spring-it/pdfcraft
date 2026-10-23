@@ -8,7 +8,7 @@ use pdfcraft_engine::Edit;
 use crate::{CloseRequest, Dialog, PdfCraftApp, PropsTab, panels::human_size, widgets};
 
 const INFO_KEYS: [&str; 4] = ["Title", "Author", "Subject", "Keywords"];
-const WATERMARK_DIALOG_WIDTH: f32 = 1160.0;
+const WATERMARK_DIALOG_WIDTH: f32 = 1320.0;
 const MARKS_DIALOG_WIDTH: f32 = 720.0;
 
 fn dialog_width(dialog: Dialog, viewport_width: f32) -> f32 {
@@ -1174,14 +1174,14 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                         ui.label(tl!("A clean-room, open-source PDF application written in Rust. MIT OR Apache-2.0."));
                         ui.label(
                             egui::RichText::new(
-                                "Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)",
+                                "Rendering: hayro (bootstrap) · UI: egui · UI icons: Lucide/Feather (ISC/MIT) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)",
                             )
                             .color(t.text_muted)
                             .small(),
                         );
                         ui.add_space(12.0);
                         ui.label("基于开源 PdfCraft 定制，原作者版权归 ArtCraft Team 及贡献者所有。");
-                        ui.label("许可证：MIT OR Apache-2.0，详见安装目录中的 LICENSE 和 NOTICE。");
+                        ui.label("许可证：MIT OR Apache-2.0，详见安装目录中的 LICENSE-MIT、LICENSE-APACHE、NOTICE、LICENSE-lucide.txt 和 LICENSE-source.txt。");
                         ui.add_space(12.0);
                         ui.separator();
                         ui.label(egui::RichText::new("内部定制开发者信息").strong());
@@ -1768,11 +1768,11 @@ mod watermark_dialog_layout_tests {
 
     #[test]
     fn watermark_dialog_keeps_enough_width_for_settings_and_preview() {
-        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1600.0), 1160.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1600.0), 1320.0);
         assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Background), 1600.0), 720.0);
         assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::HeaderFooter), 1600.0), 720.0);
         assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1000.0), 952.0);
         assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 900.0), 852.0);
-        assert!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1600.0) >= 640.0 + 450.0 + 40.0);
+        assert!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1600.0) >= 640.0 + 600.0 + 40.0);
     }
 }

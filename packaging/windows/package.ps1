@@ -90,12 +90,14 @@ $Stage = Join-Path $TargetDir "windows-package\$Arch"
 Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 Copy-Item (Join-Path $Bin 'pdfcraft.exe'), (Join-Path $Bin 'pdfcraft-cli.exe') $Stage
-# The document icon embeds Lucide artwork: carry its ISC notice and the project licences
+# Carry the project licences, ChatGPT-generated icon provenance, and separate UI-icon notices
 # beside the binaries in both distributions.
 foreach ($f in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE') {
   Copy-Item (Join-Path $Root $f) $Stage
 }
 Copy-Item (Join-Path $Root 'assets\app-icon\LICENSE-document.txt') $Stage
+Copy-Item (Join-Path $Root 'assets\app-icon\LICENSE-source.txt') $Stage
+Copy-Item (Join-Path $Root 'assets\icons\LICENSE-lucide.txt') (Join-Path $Stage 'LICENSE-lucide.txt')
 # Only the per-user MSI ships a portable marker: it keeps settings/logs/recovery under
 # %LOCALAPPDATA%\pdfcraft\PdfCraftData instead of roaming %APPDATA%.
 if ($LocalAppDataMsi) { Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Stage }
@@ -169,7 +171,7 @@ $Portable = Join-Path $TargetDir "windows-package\pdfcraft-$Version-windows-$Arc
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
-foreach ($f in 'NOTICE', 'LICENSE-document.txt') {
+foreach ($f in 'NOTICE', 'LICENSE-document.txt', 'LICENSE-source.txt', 'LICENSE-lucide.txt') {
   Copy-Item (Join-Path $Stage $f) $Portable
 }
 Copy-Item -Recurse $Models (Join-Path $Portable 'models')

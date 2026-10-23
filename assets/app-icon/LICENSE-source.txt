@@ -1,3 +1,32 @@
-PdfCraft red PDF icon (custom release)
+ChatGPT-generated red PDF icon artwork (custom PdfCraft release)
+SPDX-License-Identifier: MIT OR Apache-2.0
 
-The image artwork was supplied by the requester for inclusion in a customized PdfCraft release. Rights in the supplied artwork remain with their respective rights holder(s). This notice is not an additional MIT or Apache-2.0 licence grant for the supplied artwork; further reuse and redistribution should be authorized by the relevant rights holder.
+Provenance
+The red PDF application/document icon artwork in this directory was generated
+with ChatGPT from prompts provided by the requester, then supplied by the
+requester for use in this customized PdfCraft-derived project. The master
+artwork and platform variants are listed in ATTRIBUTION.toml.
+
+License grant
+To the extent the requester holds rights in this artwork and to the extent
+permitted by applicable law, the requester licenses it under either the MIT
+License or the Apache License, Version 2.0, at the recipient's option. This
+permits use, copying, modification, redistribution and commercial distribution,
+subject to the selected license's terms. The full license texts are
+LICENSE-MIT and LICENSE-APACHE in the repository root and are included in the
+Windows installation directory.
+
+OpenAI Terms of Use
+OpenAI's Terms of Use (effective January 1, 2026) state that, as between the
+user and OpenAI and to the extent permitted by applicable law, the user owns
+Output and OpenAI assigns any rights it has in that Output to the user. The
+Terms also note that Output may not be unique and that other users may receive
+similar output:
+https://openai.com/policies/terms-of-use/
+
+This provenance note does not guarantee uniqueness or non-infringement and
+does not replace the review required by applicable law. The requester remains
+responsible for checking whether third-party rights apply to the output and
+for ensuring that the prompts and resulting artwork are suitable for the
+intended distribution. The artwork is not an ArtCraft mark. No OpenAI
+endorsement or affiliation is claimed.
