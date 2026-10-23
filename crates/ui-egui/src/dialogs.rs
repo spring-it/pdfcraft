@@ -997,12 +997,8 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 return;
             }
             Dialog::Marks(kind) => {
-                // Width is set once by dialog_width() above.
-                // Hard cap the modal content height so egui cannot re-center a
-                // too-tall card and slide it out of view. The body uses a
-                // shrinking ScrollArea, so this does not create empty space.
-                let max_h = (ctx.content_rect().height() - 16.0).max(220.0);
-                ui.set_max_height(max_h);
+                // Width only. Do not set a height: a max height here made the
+                // Modal expand to fill the window and left a large blank area.
                 let (apply, cancel) = crate::marks_ui::body(ui, app, &t, kind);
                 marks_now = apply;
                 close = apply || cancel;
