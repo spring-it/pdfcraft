@@ -96,3 +96,43 @@ fn document_properties_long_filename_does_not_overflow_card() {
     let card = card(&h, "dialog");
     assert!(card.width() <= 700.0, "dialog card should not blow out horizontally on long filename, width was: {}", card.width());
 }
+
+#[test]
+fn watermark_dialog_stays_content_sized_across_frames() {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("watermark.pdf", None, fixture()).unwrap();
+        app.dialog = Some(pdfcraft_ui_egui::Dialog::Marks(pdfcraft_engine::MarkKind::Watermark));
+        app
+    });
+
+    // Allow egui's first-frame font setup to settle, then exercise the live modal
+    // repeatedly. A full-height separator used to make the modal re-center and
+    // move its controls out of view on subsequent frames.
+    h.run_steps(4);
+    let mut previous_top = None;
+    for frame in 0..6 {
+        h.run_steps(1);
+        let modal = card(&h, "dialog");
+        assert!(modal.height() < 700.0, "frame {frame}: watermark modal unexpectedly tall: {modal:?}");
+        assert!(
+            modal.top() >= 0.0 && modal.bottom() <= 900.0,
+            "frame {frame}: watermark modal is outside the viewport: {modal:?}"
+        );
+
+        let cancel = h.get_by_label("Cancel").rect();
+        assert!(
+            cancel.top() >= modal.top() && cancel.bottom() <= modal.bottom(),
+            "frame {frame}: Cancel is outside the modal: {cancel:?} in {modal:?}"
+        );
+        assert!(
+            cancel.top() >= 0.0 && cancel.bottom() <= 900.0,
+            "frame {frame}: Cancel moved outside the viewport: {cancel:?}"
+        );
+        if let Some(top) = previous_top {
+            assert!((modal.top() - top).abs() < 2.0, "frame {frame}: modal jumped vertically: {modal:?}, previous top {top}");
+        }
+        previous_top = Some(modal.top());
+    }
+}

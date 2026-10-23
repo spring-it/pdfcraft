@@ -81,6 +81,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Watermark dialog defaults test failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui watermark_dialog_body_and_preview_fit_common_viewport_heights -- --nocapture
           if ($LASTEXITCODE -ne 0) { throw 'Responsive watermark dialog height test failed' }
+          cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui --test dialog_chrome watermark_dialog_stays_content_sized_across_frames -- --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Watermark dialog geometry regression test failed' }
 
       - name: Build per-user MSI
         shell: pwsh
@@ -101,6 +103,7 @@ jobs:
           retention-days: 30
 
   publish:
+    if: ${{ !startsWith(github.event.head_commit.message, 'test(watermark):') }}
     name: Publish two MSI assets to Releases
     needs: build-msi
     runs-on: ubuntu-latest
