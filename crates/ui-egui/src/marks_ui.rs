@@ -157,12 +157,12 @@ fn rgb32(c: [f64; 3]) -> Color32 {
 }
 
 /// Target live-preview canvas height on standard-height windows.
-const WATERMARK_PREVIEW_HEIGHT: f32 = 320.0;
+const WATERMARK_PREVIEW_HEIGHT: f32 = 450.0;
 /// Preserve room for the title, controls and action buttons on shorter windows.
 const WATERMARK_PREVIEW_MIN_HEIGHT: f32 = 220.0;
 
 fn watermark_preview_height(viewport_height: f32) -> f32 {
-    (viewport_height - 400.0).clamp(WATERMARK_PREVIEW_MIN_HEIGHT, WATERMARK_PREVIEW_HEIGHT)
+    (viewport_height - 500.0).clamp(WATERMARK_PREVIEW_MIN_HEIGHT, WATERMARK_PREVIEW_HEIGHT)
 }
 
 /// A responsive two-column watermark dialog: settings on the left, live preview on the right.
@@ -931,7 +931,8 @@ mod tests {
                 "preview height {preview} must stay within bounds for viewport {viewport_height}"
             );
         }
-        assert_eq!(watermark_preview_height(720.0), WATERMARK_PREVIEW_HEIGHT);
+        assert_eq!(watermark_preview_height(900.0), 400.0);
+        assert_eq!(watermark_preview_height(1080.0), WATERMARK_PREVIEW_HEIGHT);
         assert_eq!(watermark_preview_height(480.0), WATERMARK_PREVIEW_MIN_HEIGHT);
     }
 
