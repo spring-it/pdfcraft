@@ -6754,6 +6754,7 @@ trailer << /Root 1 0 R >>
     fn non_embedded_simplified_chinese_cid_fonts_draw_with_windows_system_font() {
         use hayro::hayro_interpret::font::FallbackFontQuery;
         use hayro::hayro_interpret::hayro_cmap::CharacterCollection;
+        use skrifa::MetadataProvider;
 
         let query = FontQuery::Fallback(FallbackFontQuery {
             post_script_name: Some("STSong-Light".into()),
