@@ -336,8 +336,11 @@ English label and the stable command id; filenames, PDF contents, author names, 
 action names and error details from the engine or the operating system keep their own text.
 
 Japanese fonts come from [craft-fonts](https://github.com/storytold/craft-fonts), an optional build
-input that every release includes. To build with them (Japanese interface text, and Japanese text in
-edited PDFs):
+input that every release includes. The customized Windows release checks out a pinned revision and
+sets `CRAFT_FONTS_REQUIRED=1`; its build fails rather than publishing an installer without the
+Japanese fallback fonts. The font files are embedded in the executables, and their OFL license texts
+and attribution are installed beside the application. To build locally with them (Japanese interface
+text and Japanese text in edited PDFs):
 
 ```sh
 git clone https://github.com/storytold/craft-fonts ../craft-fonts

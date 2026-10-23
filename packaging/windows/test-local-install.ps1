@@ -25,7 +25,7 @@ if (Test-Path (Join-Path $AppFolder 'pdfcraft.exe')) {
 try {
   Invoke-Msi 'i' $InstallLog
   $Installed = $true
-  foreach ($name in 'pdfcraft.exe', 'pdfcraft-cli.exe', 'portable.txt', 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'LICENSE-document.txt', 'LICENSE-source.txt', 'LICENSE-lucide.txt', 'OFL-Inter.txt', 'OFL-JetBrainsMono.txt', 'OFL-DancingScript.txt', 'models\text-detection.rten', 'models\text-recognition.rten') {
+  foreach ($name in 'pdfcraft.exe', 'pdfcraft-cli.exe', 'portable.txt', 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'LICENSE-document.txt', 'LICENSE-source.txt', 'LICENSE-lucide.txt', 'OFL-Inter.txt', 'OFL-JetBrainsMono.txt', 'OFL-DancingScript.txt', 'CRAFT-FONTS-ATTRIBUTION.md', 'OFL-ShipporiMincho.txt', 'OFL-BIZ-UDPGothic.txt', 'OFL-BIZ-UDMincho.txt', 'OFL-NotoSansArabic.txt', 'OFL-NotoSansThai.txt', 'models\text-detection.rten', 'models\text-recognition.rten') {
     if (-not (Test-Path -LiteralPath (Join-Path $AppFolder $name))) {
       throw "Installed payload missing: $name"
     }
