@@ -1294,6 +1294,56 @@ fn japanese_fallback_split_across_fonts_keeps_order_and_positions() {
 
 /// Only a change of font gets a `Tf`: alternating characters with one glyph per font switch at every
 /// character, and a run of one font's characters switches nowhere.
+/// A glyph absent from the preferred Japanese face is drawn from a later permitted face when
+/// one has it; the edit remains a single readable text line.
+#[test]
+fn replacement_uses_later_fallback_face_for_a_missing_glyph() {
+    if without_craft_fonts("replacement_uses_later_fallback_face_for_a_missing_glyph") {
+        return;
+    }
+    let faces: Vec<_> = pdfcraft_fonts::document_japanese_fonts_for_style(false, false)
+        .into_iter()
+        .chain(pdfcraft_fonts::ui_chinese_fonts())
+        .collect();
+    let Some(primary) = faces.first().copied() else { return };
+    let Some(ch) = (0x4E00u32..0xA000)
+        .filter_map(char::from_u32)
+        .find(|ch| {
+            pdfcraft_fonts::japanese_glyph_from(primary, *ch).is_err()
+                && faces.iter().skip(1).any(|face| pdfcraft_fonts::japanese_glyph_from(face, *ch).is_ok())
+        })
+    else {
+        eprintln!("skipping: no later permitted fallback face has a glyph missing from the primary face");
+        return;
+    };
+    let replacement = format!("見{ch}商");
+    let mut doc = text_page("BT /F2 12 Tf 72 700 Td (ab) Tj ET");
+    text::replace_line(&mut doc, 0, 0, &replacement).unwrap();
+    assert_eq!(text::text_lines(&reopen(&doc), 0).unwrap()[0].text, replacement);
+}
+
+/// U+80DC (胜) was the character reported missing in a real Chinese PDF. A release must include
+/// a policy-permitted face that can draw it, and the text-edit path must be able to use that face.
+#[test]
+fn simplified_chinese_u80dc_can_be_written_with_a_permitted_fallback_face() {
+    if without_craft_fonts("simplified_chinese_u80dc_can_be_written_with_a_permitted_fallback_face") {
+        return;
+    }
+    let faces: Vec<_> = pdfcraft_fonts::document_japanese_fonts_for_style(false, false)
+        .into_iter()
+        .chain(pdfcraft_fonts::ui_chinese_fonts())
+        .collect();
+    let ch = '\u{80DC}';
+    assert!(
+        faces.iter().any(|face| pdfcraft_fonts::japanese_glyph_from(face, ch).is_ok()),
+        "no policy-permitted bundled fallback face contains U+80DC; do not publish until a licensed CJK face is added to craft-fonts"
+    );
+    let replacement = "政府胜利";
+    let mut doc = text_page("BT /F2 12 Tf 72 700 Td (ab) Tj ET");
+    text::replace_line(&mut doc, 0, 0, replacement).unwrap();
+    assert_eq!(text::text_lines(&reopen(&doc), 0).unwrap()[0].text, replacement);
+}
+
 #[test]
 fn japanese_fallback_switches_font_only_between_runs() {
     if without_craft_fonts("japanese_fallback_switches_font_only_between_runs") {

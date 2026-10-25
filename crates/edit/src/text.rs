@@ -1598,13 +1598,14 @@ fn no_hebrew_font() -> EditError {
     )
 }
 
-/// The faces a Type 3 replacement may draw `text` with, best first. Text with Hebrew takes the
-/// Hebrew face first (its Latin and digits too, so a line keeps one look), then the Japanese
-/// faces for anything it lacks; other text takes the Japanese faces, as before.
+/// The faces a Type 3 replacement may draw `text` with, best first. Japanese faces keep their
+/// requested style first; licensed Simplified Chinese faces are the last resort for Han glyphs the
+/// Japanese faces do not contain. Hebrew keeps its own face first, then tries Japanese and Chinese.
 fn type3_faces(text: &str, family: crate::added::Family, bold: bool) -> Result<(Vec<&'static CraftFont>, bool), EditError> {
     let japanese = pdfcraft_fonts::document_japanese_fonts_for_style(family == crate::added::Family::Times, bold);
+    let chinese = pdfcraft_fonts::ui_chinese_fonts();
     if !text.chars().any(crate::bidi::is_hebrew) {
-        return Ok((japanese, false));
+        return Ok((japanese.into_iter().chain(chinese).collect(), false));
     }
     // Points are drawn on their letter with the font's positioning, which a one-glyph-per-
     // character Type 3 font can't do; refuse rather than print them beside the letter.
@@ -1612,7 +1613,7 @@ fn type3_faces(text: &str, family: crate::added::Family, bold: bool) -> Result<(
         return Err(EditError::Invalid("Hebrew points (niqqud) can't be written into a PDF yet; type the text without them".into()));
     }
     let hebrew = pdfcraft_fonts::document_hebrew_font(bold).ok_or_else(no_hebrew_font)?;
-    Ok((std::iter::once(hebrew).chain(japanese).collect(), true))
+    Ok((std::iter::once(hebrew).chain(japanese).chain(chinese).collect(), true))
 }
 
 fn type3_font(
@@ -1635,19 +1636,26 @@ fn type3_font(
     if chars.is_empty() {
         return Err(EditError::Invalid("replacement text is empty".into()));
     }
-    // The faces differ in coverage (e.g. of Cyrillic), so use the best face that has every
-    // character. When none has them all, the best face reports the character it lacks. Hebrew
-    // text keeps the Hebrew face and takes each character it lacks from the next face that has it.
+    // Keep one preferred face for the generated font's metadata, but choose the outline for each
+    // character independently. A line can mix characters covered by different licensed faces;
+    // refusing the whole edit just because the preferred face lacks one glyph was too restrictive.
     let face = if hebrew { faces.first().copied() } else { fallback_face(&faces, &chars, |face, ch| japanese_glyph_from(face, ch).is_ok()) }
         .ok_or_else(|| no_fallback_font(text))?;
-    let others: &[&CraftFont] = if hebrew { faces.get(1..).unwrap_or_default() } else { &[] };
-    // Every outline is read before the document is touched, so a character that fails leaves it
-    // as it was. Each font takes the next `per_font` characters; codes restart at 1 in each.
     let per_font = max_glyphs.clamp(1, MAX_TYPE3_GLYPHS);
+    let ordered_faces: Vec<_> = std::iter::once(face)
+        .chain(faces.iter().copied().filter(|candidate| !std::ptr::eq(*candidate, face)))
+        .collect();
     let mut glyphs = Vec::with_capacity(chars.len());
     for (i, ch) in chars.into_iter().enumerate() {
-        // Hebrew text: the first face with the glyph, else the Hebrew face's error.
-        let (path, width) = others.iter().fold(type3_path(face, ch), |found, f| found.or_else(|e| type3_path(f, ch).map_err(|_| e)))?;
+        let mut first_error = None;
+        let mut found = None;
+        for candidate in &ordered_faces {
+            match type3_path(candidate, ch) {
+                Ok(glyph) => { found = Some(glyph); break; }
+                Err(error) => if first_error.is_none() { first_error = Some(error); },
+            }
+        }
+        let (path, width) = found.ok_or_else(|| first_error.unwrap_or_else(no_japanese_font))?;
         let code = u8::try_from((i % per_font).saturating_add(1))
             .map_err(|_| EditError::Invalid("replacement text has too many unique characters".into()))?;
         glyphs.push(Type3Glyph { code, ch, path, width });
