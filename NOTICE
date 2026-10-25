@@ -17,14 +17,13 @@ list (author, source, license) is in ATTRIBUTION.md.
 - Inter typeface (assets/fonts/Inter-*.ttf) — SIL Open Font License 1.1. See assets/fonts/OFL-Inter.txt; Windows distributions include OFL-Inter.txt.
 - JetBrains Mono typeface (assets/fonts/JetBrainsMono-*.ttf) — SIL Open Font License 1.1. See assets/fonts/OFL-JetBrainsMono.txt; Windows distributions include OFL-JetBrainsMono.txt.
 - Dancing Script typeface (assets/fonts/DancingScript.ttf), Copyright 2016 The Dancing Script Project Authors — SIL Open Font License 1.1 (Reserved Font Name "Dancing Script"). See assets/fonts/OFL-DancingScript.txt.
-- Fonts from craft-fonts (https://github.com/storytold/craft-fonts) are embedded in official builds and in
-  this Windows release. The Windows workflow pins revision 3d9ab3a132ed0eff457e424226a435a901da30d3 and
-  sets CRAFT_FONTS_DIR plus CRAFT_FONTS_REQUIRED=1, so the release cannot silently omit the Japanese
-  fallback faces. The embedded faces include BIZ UDPGothic (Regular and Bold), Shippori Mincho,
-  BIZ UDMincho, Noto Sans Arabic and Noto Sans Thai; Noto Sans CJK is intentionally excluded by the
-  project's font policy. Their source and author records are in CRAFT-FONTS-ATTRIBUTION.md, and their
-  SIL Open Font License 1.1 texts are shipped in the MSI as OFL-ShipporiMincho.txt,
-  OFL-BIZ-UDPGothic.txt, OFL-BIZ-UDMincho.txt, OFL-NotoSansArabic.txt and OFL-NotoSansThai.txt.
+- Fonts from the pinned craft-fonts fork (https://github.com/spring-it/craft-fonts) are embedded in this Windows release.
+  Revision fa0303128012276df3de0347a1bcbd588cb3fc8d is built with CRAFT_FONTS_REQUIRED=1, so a release cannot
+  silently omit its fallback fonts. The embedded faces include LXGW WenKai TC Regular (Simplified/Traditional Chinese
+  text-edit fallback), BIZ UDPGothic (Regular and Bold), Shippori Mincho, BIZ UDMincho, Noto Sans Arabic and Noto Sans Thai.
+  Noto Sans CJK is intentionally excluded by the project's asset policy. Source and author records are installed as
+  CRAFT-FONTS-ATTRIBUTION.md; the SIL Open Font License 1.1 texts are shipped as OFL-LXGW-WenKai-TC.txt,
+  OFL-ShipporiMincho.txt, OFL-BIZ-UDPGothic.txt, OFL-BIZ-UDMincho.txt, OFL-NotoSansArabic.txt and OFL-NotoSansThai.txt.
 - hayro (rendering, via crates.io) — Apache-2.0 OR MIT. Its `embed-fonts` feature bundles the Foxit
   standard-14 Type 1 fonts under BSD-3-Clause ("Copyright 2014 PDFium Authors"), and hayro-cmap bundles
   Adobe CMap resources under BSD-3-Clause.

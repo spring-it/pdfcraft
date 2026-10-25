@@ -56,6 +56,7 @@
         <File Id="PdfcraftOflShipporiMincho" Source="$(var.BinDir)\OFL-ShipporiMincho.txt" />
         <File Id="PdfcraftOflBizUdpgothic" Source="$(var.BinDir)\OFL-BIZ-UDPGothic.txt" />
         <File Id="PdfcraftOflBizUdmincho" Source="$(var.BinDir)\OFL-BIZ-UDMincho.txt" />
+        <File Id="PdfcraftOflLxgwWenKaiTc" Source="$(var.BinDir)\OFL-LXGW-WenKai-TC.txt" />
         <File Id="PdfcraftOflNotoSansArabic" Source="$(var.BinDir)\OFL-NotoSansArabic.txt" />
         <File Id="PdfcraftOflNotoSansThai" Source="$(var.BinDir)\OFL-NotoSansThai.txt" />
         <File Id="PdfcraftMitLicense" Source="$(var.BinDir)\LICENSE-MIT" />

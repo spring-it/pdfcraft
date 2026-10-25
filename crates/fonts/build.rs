@@ -14,8 +14,8 @@ fn main() {
     let required = std::env::var_os("CRAFT_FONTS_REQUIRED").is_some();
     match std::env::var_os("CRAFT_FONTS_DIR").map(PathBuf::from) {
         Some(dir) => match craft_fonts(&dir) {
-            Ok(entries) if required && (!entries.contains("Shippori Mincho") || !entries.contains("BIZ UDPGothic")) => {
-                println!("cargo::error=CRAFT_FONTS_REQUIRED=1 but the checkout did not provide the required Japanese fallback faces");
+            Ok(entries) if required && (!entries.contains("Shippori Mincho") || !entries.contains("BIZ UDPGothic") || !entries.contains("LXGW WenKai TC")) => {
+                println!("cargo::error=CRAFT_FONTS_REQUIRED=1 but the checkout did not provide the required Japanese and Chinese fallback faces");
             }
             Ok(entries) => src.push_str(&entries),
             Err(e) if required => {

@@ -112,6 +112,7 @@ if ($env:CRAFT_FONTS_DIR) {
     [pscustomobject]@{ Source = 'fonts\shippori-mincho\OFL.txt'; Destination = 'OFL-ShipporiMincho.txt' },
     [pscustomobject]@{ Source = 'fonts\biz-ud-pgothic\OFL.txt'; Destination = 'OFL-BIZ-UDPGothic.txt' },
     [pscustomobject]@{ Source = 'fonts\biz-ud-mincho\OFL.txt'; Destination = 'OFL-BIZ-UDMincho.txt' },
+    [pscustomobject]@{ Source = 'fonts\lxgw-wenkai-tc\OFL.txt'; Destination = 'OFL-LXGW-WenKai-TC.txt' },
     [pscustomobject]@{ Source = 'fonts\noto-sans-arabic\OFL.txt'; Destination = 'OFL-NotoSansArabic.txt' },
     [pscustomobject]@{ Source = 'fonts\noto-sans-thai\OFL.txt'; Destination = 'OFL-NotoSansThai.txt' }
   )
@@ -199,7 +200,7 @@ Copy-Item (Join-Path $Stage '*.exe') $Portable
 foreach ($f in 'NOTICE', 'LICENSE-document.txt', 'LICENSE-source.txt', 'LICENSE-lucide.txt', 'OFL-Inter.txt', 'OFL-JetBrainsMono.txt', 'OFL-DancingScript.txt') {
   Copy-Item (Join-Path $Stage $f) $Portable
 }
-foreach ($f in 'CRAFT-FONTS-ATTRIBUTION.md', 'OFL-ShipporiMincho.txt', 'OFL-BIZ-UDPGothic.txt', 'OFL-BIZ-UDMincho.txt', 'OFL-NotoSansArabic.txt', 'OFL-NotoSansThai.txt') {
+foreach ($f in 'CRAFT-FONTS-ATTRIBUTION.md', 'OFL-ShipporiMincho.txt', 'OFL-BIZ-UDPGothic.txt', 'OFL-BIZ-UDMincho.txt', 'OFL-LXGW-WenKai-TC.txt', 'OFL-NotoSansArabic.txt', 'OFL-NotoSansThai.txt') {
   if (Test-Path (Join-Path $Stage $f)) { Copy-Item (Join-Path $Stage $f) $Portable }
 }
 Copy-Item -Recurse $Models (Join-Path $Portable 'models')

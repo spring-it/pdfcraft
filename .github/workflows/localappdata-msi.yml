@@ -1,4 +1,4 @@
-name: Publish v0.10.18 沃飞翼览 PDF (responsive watermark dialog and silent MSI)
+name: Publish v0.10.19 沃飞翼览 PDF (responsive watermark dialog and silent MSI)
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: localappdata-msi-v0.10.18
+  group: localappdata-msi-v0.10.19
   cancel-in-progress: true
 
 jobs:
@@ -34,8 +34,8 @@ jobs:
       - name: Checkout pinned release fonts
         uses: actions/checkout@v4
         with:
-          repository: storytold/craft-fonts
-          ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
+          repository: spring-it/craft-fonts
+          ref: fa0303128012276df3de0347a1bcbd588cb3fc8d
           path: craft-fonts
 
       - name: Verify required fallback font assets
@@ -48,11 +48,13 @@ jobs:
             'fonts\biz-ud-pgothic\BIZUDPGothic-Regular.ttf',
             'fonts\biz-ud-pgothic\BIZUDPGothic-Bold.ttf',
             'fonts\biz-ud-mincho\BIZUDMincho-Regular.ttf',
+            'fonts\lxgw-wenkai-tc\LXGWWenKaiTC-Regular.ttf',
             'fonts\noto-sans-arabic\NotoSansArabic.ttf',
             'fonts\noto-sans-thai\NotoSansThai.ttf',
             'fonts\shippori-mincho\OFL.txt',
             'fonts\biz-ud-pgothic\OFL.txt',
             'fonts\biz-ud-mincho\OFL.txt',
+            'fonts\lxgw-wenkai-tc\OFL.txt',
             'fonts\noto-sans-arabic\OFL.txt',
             'fonts\noto-sans-thai\OFL.txt',
             'ATTRIBUTION.md'
@@ -130,13 +132,13 @@ jobs:
       - name: Verify noninteractive install and uninstall
         shell: pwsh
         run: |
-          $msi = Get-Item "dist/release/pdfcraft-0.10.18-windows-${{ matrix.arch }}-localappdata.msi"
+          $msi = Get-Item "dist/release/pdfcraft-0.10.19-windows-${{ matrix.arch }}-localappdata.msi"
           & .\packaging\windows\test-local-install.ps1 -Path $msi.FullName
 
       - uses: actions/upload-artifact@v4
         with:
           name: local-msi-${{ matrix.arch }}
-          path: dist/release/pdfcraft-0.10.18-windows-${{ matrix.arch }}-localappdata.msi
+          path: dist/release/pdfcraft-0.10.19-windows-${{ matrix.arch }}-localappdata.msi
           if-no-files-found: error
           retention-days: 30
 
@@ -158,30 +160,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -s dist/msi/pdfcraft-0.10.18-windows-x64-localappdata.msi
-          test -s dist/msi/pdfcraft-0.10.18-windows-x86-localappdata.msi
+          test -s dist/msi/pdfcraft-0.10.19-windows-x64-localappdata.msi
+          test -s dist/msi/pdfcraft-0.10.19-windows-x86-localappdata.msi
           test "$(find dist/msi -maxdepth 1 -type f -name '*.msi' | wc -l)" -eq 2
 
       - name: Publish release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v0.10.18-wofei.1
+          RELEASE_TAG: v0.10.19-wofei.1
         run: |
           set -euo pipefail
           cat > release-notes.md <<'EOF'
-          沃飞翼览 PDF 0.10.18 企业定制版，基于 PdfCraft 开源项目（MIT OR Apache-2.0）。
+          沃飞翼览 PDF 0.10.19 企业定制版，基于 PdfCraft 开源项目（MIT OR Apache-2.0）。
 
           - Per-user installation path: %LOCALAPPDATA%\pdfcraft
           - Non-roaming app data: %LOCALAPPDATA%\pdfcraft\PdfCraftData
-          - The MSI includes project, icon, UI icon and font notices: LICENSE-MIT, LICENSE-APACHE, NOTICE, LICENSE-document.txt, LICENSE-source.txt, LICENSE-lucide.txt, OFL-Inter.txt, OFL-JetBrainsMono.txt, OFL-DancingScript.txt, CRAFT-FONTS-ATTRIBUTION.md, OFL-ShipporiMincho.txt, OFL-BIZ-UDPGothic.txt, OFL-BIZ-UDMincho.txt, OFL-NotoSansArabic.txt and OFL-NotoSansThai.txt.
+          - The MSI includes project, icon, UI icon and font notices: LICENSE-MIT, LICENSE-APACHE, NOTICE, LICENSE-document.txt, LICENSE-source.txt, LICENSE-lucide.txt, OFL-Inter.txt, OFL-JetBrainsMono.txt, OFL-DancingScript.txt, CRAFT-FONTS-ATTRIBUTION.md, OFL-ShipporiMincho.txt, OFL-BIZ-UDPGothic.txt, OFL-BIZ-UDMincho.txt, OFL-LXGW-WenKai-TC.txt, OFL-NotoSansArabic.txt and OFL-NotoSansThai.txt.
           - Installs a 沃飞翼览 PDF shortcut on the current user's desktop automatically, also with /qn.
           - Registers the per-user Windows PDF "Open with" entry as 沃飞翼览 PDF, without changing the current default PDF app; the MSI test verifies FriendlyAppName, ProgID, command and executable version information.
           - Removes that desktop shortcut on silent uninstall (without removing user data).
           - Enterprise home screen and Windows title renamed to 沃飞翼览 PDF; removed ArtCraft and Discord promotional controls. The About page lists internal customization developer info: 数字发展室, Bing.Zheng1@aerofugia.com.
           - Improved display of PDFs with non-embedded Simplified Chinese Adobe-GB1 CID fonts (for example STSong-Light): use a matching CJK font already installed on Windows at runtime. System fonts are not bundled or redistributed.
           - Text editing now tries all bundled, policy-permitted fallback faces per character, including licensed Chinese faces where present, instead of failing on the first Japanese face missing a Han glyph.
-          - Embed all policy-permitted fallback faces from pinned craft-fonts in both Windows executables: Shippori Mincho, BIZ UDPGothic Regular/Bold, BIZ UDMincho, Noto Sans Arabic and Noto Sans Thai. Include their attribution and OFL license texts. Noto Sans CJK remains excluded under the repository asset policy; Chinese CID fallback uses an installed Windows font.
+          - Embed policy-permitted fallback faces from the pinned spring-it/craft-fonts fork in both Windows executables, including LXGW WenKai TC for Simplified/Traditional Chinese text editing, plus Shippori Mincho, BIZ UDPGothic Regular/Bold, BIZ UDMincho, Noto Sans Arabic and Noto Sans Thai. Include their attribution and OFL license texts. Noto Sans CJK remains excluded under the repository asset policy.
           - Enhanced native watermarks: Chinese text via local OS glyph rasterization, transparent PNG, tile/single modes, 9 positions, spacing, color, rotation, opacity, templates, odd/even/custom page ranges. Watermark dialog keeps a viewport-safe 670 pt maximum preview canvas. The 600 pt preview column widens very narrow/tall schematic page mockups to a 0.65 minimum aspect ratio so the page uses more of the available horizontal space; saved PDF page geometry is unchanged. The left 640 pt settings column and defaults remain unchanged. Defaults: 内部资料, 微软雅黑, 15 pt, gray, -45°, 10% opacity, tiled, 80/120 pt gaps, on top, zero offset.
           - Offline processing: no upload of PDFs or OS fonts.
           - No installer wizard and no administrator privileges required for a normal current-user install.
@@ -191,12 +193,12 @@ jobs:
           - These packages are unsigned unless Windows signing is separately configured.
           EOF
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" --title '沃飞翼览 PDF v0.10.18 - 字体嵌入修复版 (x64/x86)' --notes-file release-notes.md --prerelease
+            gh release edit "$RELEASE_TAG" --title '沃飞翼览 PDF v0.10.19 - 字体嵌入修复版 (x64/x86)' --notes-file release-notes.md --prerelease
             gh release upload "$RELEASE_TAG" dist/msi/*.msi --clobber
           else
             gh release create "$RELEASE_TAG" dist/msi/*.msi \
               --target "$GITHUB_SHA" \
-              --title '沃飞翼览 PDF v0.10.18 - 字体嵌入修复版 (x64/x86)' \
+              --title '沃飞翼览 PDF v0.10.19 - 字体嵌入修复版 (x64/x86)' \
               --notes-file release-notes.md \
               --prerelease --latest=false
           fi

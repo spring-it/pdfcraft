@@ -1,6 +1,6 @@
 # 沃飞翼览 PDF
 
-**沃飞长空内部 PDF 阅读与处理工具**（基于开源 PdfCraft v0.10.1 定制，桌面企业版 0.10.18）
+**沃飞长空内部 PDF 阅读与处理工具**（基于开源 PdfCraft v0.10.1 定制，桌面企业版 0.10.19）
 
 - 离线阅读、编辑、批注、OCR 和文档管理
 - 增强版 PDF 水印：**中文**、透明度、颜色、旋转、平铺/单个、九宫格位置、间距及指定页码
@@ -335,15 +335,15 @@ dialogs, panels and keyboard shortcuts. Command search accepts the translated la
 English label and the stable command id; filenames, PDF contents, author names, custom
 action names and error details from the engine or the operating system keep their own text.
 
-Japanese fonts come from [craft-fonts](https://github.com/storytold/craft-fonts), an optional build
-input that every release includes. The customized Windows release checks out a pinned revision and
-sets `CRAFT_FONTS_REQUIRED=1`; its build fails rather than publishing an installer without the
-Japanese fallback fonts. The font files are embedded in the executables, and their OFL license texts
-and attribution are installed beside the application. To build locally with them (Japanese interface
-text and Japanese text in edited PDFs):
+Japanese and Chinese fallback fonts come from [spring-it/craft-fonts](https://github.com/spring-it/craft-fonts), an optional build
+input that every release includes. The customized Windows release pins a commit of this repository and sets
+`CRAFT_FONTS_REQUIRED=1`; the build fails rather than publishing an installer without the required Japanese and
+Chinese fallback faces. LXGW WenKai TC (OFL-1.1) provides Chinese glyph coverage for PDF text editing; Noto Sans CJK
+remains excluded under the project's asset policy. Font files are embedded in the executables, and their OFL license
+texts and attribution are installed beside the application. To build locally with them:
 
 ```sh
-git clone https://github.com/storytold/craft-fonts ../craft-fonts
+git clone https://github.com/spring-it/craft-fonts ../craft-fonts
 CRAFT_FONTS_DIR=../craft-fonts cargo run --release -p pdfcraft -- some.pdf
 ```
 
@@ -362,7 +362,7 @@ emerge --ask app-text/pdfcraft-bin
 
 Logs, environment variables and other development notes are in [docs/development.md](docs/development.md).
 
-## v0.10.18 enterprise customization
+## v0.10.19 enterprise customization
 
 This branch is a Windows-focused internal distribution of PdfCraft, maintained for 沃飞长空.
 
@@ -379,27 +379,27 @@ This branch is a Windows-focused internal distribution of PdfCraft, maintained f
 
 ## Downloads
 
-### Windows MSI (version 0.10.18)
+### Windows MSI (version 0.10.19)
 
 The customized release publishes two installers after the x64 and x86 build, watermark tests, and silent-install/uninstall checks pass.
 
 | Architecture | Installer |
 |---|---|
-| Windows x64 | [pdfcraft-0.10.18-windows-x64-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.18-wofei.1/pdfcraft-0.10.18-windows-x64-localappdata.msi) |
-| Windows x86 | [pdfcraft-0.10.18-windows-x86-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.18-wofei.1/pdfcraft-0.10.18-windows-x86-localappdata.msi) |
+| Windows x64 | [pdfcraft-0.10.19-windows-x64-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.19-wofei.1/pdfcraft-0.10.19-windows-x64-localappdata.msi) |
+| Windows x86 | [pdfcraft-0.10.19-windows-x86-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.19-wofei.1/pdfcraft-0.10.19-windows-x86-localappdata.msi) |
 
 The installers are for the current Windows user, require no administrator privileges for a normal installation, and create **沃飞翼览 PDF** desktop and Start menu shortcuts. Application settings, logs and recovery data remain under `%LOCALAPPDATA%\pdfcraft\PdfCraftData`.
 
 Silent install:
 
 ```powershell
-msiexec /i "pdfcraft-0.10.18-windows-x64-localappdata.msi" /qn /norestart
+msiexec /i "pdfcraft-0.10.19-windows-x64-localappdata.msi" /qn /norestart
 ```
 
 Silent uninstall:
 
 ```powershell
-msiexec /x "pdfcraft-0.10.18-windows-x64-localappdata.msi" /qn /norestart
+msiexec /x "pdfcraft-0.10.19-windows-x64-localappdata.msi" /qn /norestart
 ```
 
 These custom MSI files are **unsigned unless signing is separately configured**. See [the MSI packaging and test notes](docs/localappdata-msi.md). This release is not the upstream PdfCraft release; it is built from this customized branch.
@@ -413,7 +413,7 @@ Copyright (c) 2026 ArtCraft Team and the PdfCraft contributors. Required notices
 
 Bundled fonts, icons, images and other assets keep their own open licenses; each one is listed
 with its author, source and license in [ATTRIBUTION.md](ATTRIBUTION.md). Release builds also embed
-the Japanese fonts of [craft-fonts](https://github.com/storytold/craft-fonts/blob/main/ATTRIBUTION.md)
+the Japanese fonts of [craft-fonts](https://github.com/spring-it/craft-fonts/blob/fa0303128012276df3de0347a1bcbd588cb3fc8d/ATTRIBUTION.md)
 (SIL Open Font License 1.1).
 
 The original ArtCraft logos and marks are trademarks not covered by the open-source license;
