@@ -1581,13 +1581,15 @@ mod tests {
         let ctx = egui::Context::default();
         ctx.begin_pass(egui::RawInput::default());
         install_source_fonts(&ctx, doc, 0);
-        ctx.end_pass();
+        // No renderer consumes paint output in this headless test. Explicitly
+        // discard texture uploads, as egui's TexturesDelta requires.
+        ctx.end_pass().textures_delta.clear();
         ctx.begin_pass(egui::RawInput::default());
         let defs = ctx.fonts(|fonts| fonts.definitions().clone());
         assert_eq!(defs.families[&FontFamily::Name(face.clone().into())], vec![face.clone()]);
         assert!(defs.families[&FontFamily::Proportional].iter().all(|name| !name.starts_with("pdf-editor-han-")));
         assert!(defs.families[&FontFamily::Monospace].iter().all(|name| !name.starts_with("pdf-editor-han-")));
-        ctx.end_pass();
+        ctx.end_pass().textures_delta.clear();
     }
 
     #[test]
