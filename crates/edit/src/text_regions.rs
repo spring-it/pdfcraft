@@ -391,7 +391,44 @@ pub(super) fn rewrite_styled_block(
     let mut programs: HashMap<String, Option<std::sync::Arc<Vec<u8>>>> = HashMap::new();
     for (range, index) in styled_spans {
         let source = lines.get(index).unwrap_or(first);
-        for ch in draft.get(range).unwrap_or_default().chars() {
+        let span_text = draft.get(range.clone()).unwrap_or_default();
+        // With a missing Chinese glyph, switching each character independently among
+        // a source subset, Japanese Mincho and Chinese WenKai changes the apparent glyph
+        // size within the same edited word. A plain Han run gets one Chinese face at
+        // the SAME point size instead. Explicit font/style selections still win.
+        let uniform_han = !span_text.is_empty()
+            && span_text.chars().all(is_han_character)
+            && span_text.chars().collect::<std::collections::HashSet<_>>().len() <= MAX_TYPE3_GLYPHS
+            && style.resource.is_none()
+            && style.family.is_none()
+            && style.bold.is_none()
+            && overrides.get(&index).is_none_or(|r| r.resource.is_none() && r.family.is_none())
+            && !metrics.get(&source.font).is_some_and(|m| source_encodes(m, span_text))
+            && pdfcraft_fonts::ui_chinese_fonts().iter().any(|face| {
+                span_text.chars().all(|ch| japanese_glyph_from(face, ch).is_ok())
+            });
+        if uniform_han {
+            let fallback = type3_font(
+                doc, &mut fonts, span_text, source_family(&source.base_font),
+                source.bold, MAX_TYPE3_GLYPHS, true,
+            )?;
+            for name in &fallback.names {
+                let dict = fonts.get(name.as_bytes())
+                    .and_then(|font| doc.resolve(font).as_dict().cloned())
+                    .ok_or_else(|| EditError::Invalid("the Chinese fallback font could not be loaded".into()))?;
+                metrics.insert(name.clone(), Metrics::from_dict(doc, &dict));
+            }
+            substituted = Some(fallback.family.to_owned());
+            for ch in span_text.chars() {
+                let font_index = fallback.codes.get(&ch).map(|(font, _)| *font)
+                    .ok_or_else(|| EditError::Invalid("the Chinese fallback has no glyph code".into()))?;
+                let name = fallback.names.get(font_index)
+                    .ok_or_else(|| EditError::Invalid("the Chinese fallback font is missing".into()))?;
+                chars.push((ch, index, name.clone()));
+            }
+            continue;
+        }
+        for ch in span_text.chars() {
             if ch == '\n' {
                 chars.push((ch, index, source.font.clone()));
                 continue;
@@ -457,7 +494,7 @@ pub(super) fn rewrite_styled_block(
                     if fallback_names.len() >= MAX_TYPE3_GLYPHS {
                         return Err(EditError::Invalid("the replacement has too many fallback glyphs".into()));
                     }
-                    let fallback = type3_font(doc, &mut fonts, &s, family, source.bold, MAX_TYPE3_GLYPHS)?;
+                    let fallback = type3_font(doc, &mut fonts, &s, family, source.bold, MAX_TYPE3_GLYPHS, chinese_font_name(&source.base_font))?;
                     let name = fallback.names.first().cloned().ok_or_else(no_japanese_font)?;
                     let dict = fonts
                         .get(name.as_bytes())

@@ -1,6 +1,6 @@
 # 沃飞翼览 PDF
 
-**沃飞长空内部 PDF 阅读与处理工具**（基于开源 PdfCraft v0.10.1 定制，桌面企业版 0.10.20）
+**沃飞长空内部 PDF 阅读与处理工具**（基于开源 PdfCraft v0.10.1 定制，桌面企业版 0.10.21）
 
 - 离线阅读、编辑、批注、OCR 和文档管理
 - 增强版 PDF 水印：**中文**、透明度、颜色、旋转、平铺/单个、九宫格位置、间距及指定页码
@@ -9,6 +9,8 @@
 - 安装包包含软件许可、版权信息及第三方使用声明
 - 修复 PDF 文本编辑误判粗体：不再把 PDF 的 ForceBold 渲染提示当作字体本身的粗体字重，明确的 Regular/Light 字体名称优先于不一致的字重元数据
 - 改进未嵌入中文字体的 PDF 显示：Windows 上使用本机已安装的中日韩字体进行替代，不将系统字体打包进安装程序
+- 恢复 0.10.17 之前的简体中文菜单字体优先级（Windows 微软雅黑等系统无衬线字体）；保留内置 LXGW 字体供 PDF 文字编辑使用，不再影响应用界面
+- 修复中文文字编辑中单一文本段的逐字字体切换：当原字体缺少汉字时，优先使用同一中文替代字形，保持原有字号；显式指定字体的编辑保持不变
 
 > **开源与商标说明**：本版本由沃飞长空定制，基于 [PdfCraft](https://github.com/storytold/pdfcraft) 的 MIT OR Apache-2.0 授权代码。
 > 原作者为 ArtCraft Team 与 PdfCraft 贡献者。本项目并非原项目官方发行版；本定制版移除了不适用于派生版本的 ArtCraft 商标资源。
@@ -363,7 +365,7 @@ emerge --ask app-text/pdfcraft-bin
 
 Logs, environment variables and other development notes are in [docs/development.md](docs/development.md).
 
-## v0.10.20 enterprise customization
+## v0.10.21 enterprise customization
 
 This branch is a Windows-focused internal distribution of PdfCraft, maintained for 沃飞长空.
 
@@ -380,27 +382,27 @@ This branch is a Windows-focused internal distribution of PdfCraft, maintained f
 
 ## Downloads
 
-### Windows MSI (version 0.10.20)
+### Windows MSI (version 0.10.21)
 
 The customized release publishes two installers after the x64 and x86 build, watermark tests, and silent-install/uninstall checks pass.
 
 | Architecture | Installer |
 |---|---|
-| Windows x64 | [pdfcraft-0.10.20-windows-x64-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.20-wofei.1/pdfcraft-0.10.20-windows-x64-localappdata.msi) |
-| Windows x86 | [pdfcraft-0.10.20-windows-x86-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.20-wofei.1/pdfcraft-0.10.20-windows-x86-localappdata.msi) |
+| Windows x64 | [pdfcraft-0.10.21-windows-x64-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.21-wofei.1/pdfcraft-0.10.21-windows-x64-localappdata.msi) |
+| Windows x86 | [pdfcraft-0.10.21-windows-x86-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v0.10.21-wofei.1/pdfcraft-0.10.21-windows-x86-localappdata.msi) |
 
 The installers are for the current Windows user, require no administrator privileges for a normal installation, and create **沃飞翼览 PDF** desktop and Start menu shortcuts. Application settings, logs and recovery data remain under `%LOCALAPPDATA%\pdfcraft\PdfCraftData`.
 
 Silent install:
 
 ```powershell
-msiexec /i "pdfcraft-0.10.20-windows-x64-localappdata.msi" /qn /norestart
+msiexec /i "pdfcraft-0.10.21-windows-x64-localappdata.msi" /qn /norestart
 ```
 
 Silent uninstall:
 
 ```powershell
-msiexec /x "pdfcraft-0.10.20-windows-x64-localappdata.msi" /qn /norestart
+msiexec /x "pdfcraft-0.10.21-windows-x64-localappdata.msi" /qn /norestart
 ```
 
 These custom MSI files are **unsigned unless signing is separately configured**. See [the MSI packaging and test notes](docs/localappdata-msi.md). This release is not the upstream PdfCraft release; it is built from this customized branch.

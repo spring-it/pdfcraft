@@ -1479,6 +1479,29 @@ const SUBSTITUTE_NAME: &str = "PCEdHelv";
 const SUBSTITUTE: &[u8] = SUBSTITUTE_NAME.as_bytes();
 const MAX_TYPE3_GLYPHS: usize = 240;
 
+/// A Chinese source font is a better cue than Han characters alone, because Japanese
+/// documents may consist entirely of kanji and must retain Japanese glyph shapes.
+fn chinese_font_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    [
+        "simsun", "simhei", "stsong", "fangsong", "kaiti", "yahei",
+        "dengxian", "mingliu", "jhenghei", "wenkai", "lxgw", "fzsong",
+        "fangzheng", "songti", "heiti", "adobegb", "gb1",
+    ]
+    .iter()
+    .any(|part| lower.contains(part))
+}
+
+fn is_han_character(ch: char) -> bool {
+    matches!(
+        ch,
+        '\u{3400}'..='\u{4DBF}'
+            | '\u{4E00}'..='\u{9FFF}'
+            | '\u{F900}'..='\u{FAFF}'
+            | '\u{20000}'..='\u{2FA1F}'
+    )
+}
+
 /// The generated fonts for one replacement: one per run of at most `max_glyphs` unique characters,
 /// in order of first appearance.
 #[derive(Clone)]
@@ -1601,11 +1624,13 @@ fn no_hebrew_font() -> EditError {
 /// The faces a Type 3 replacement may draw `text` with, best first. Japanese faces keep their
 /// requested style first; licensed Simplified Chinese faces are the last resort for Han glyphs the
 /// Japanese faces do not contain. Hebrew keeps its own face first, then tries Japanese and Chinese.
-fn type3_faces(text: &str, family: crate::added::Family, bold: bool) -> Result<(Vec<&'static CraftFont>, bool), EditError> {
+fn type3_faces(text: &str, family: crate::added::Family, bold: bool, prefer_chinese: bool) -> Result<(Vec<&'static CraftFont>, bool), EditError> {
     let japanese = pdfcraft_fonts::document_japanese_fonts_for_style(family == crate::added::Family::Times, bold);
     let chinese = pdfcraft_fonts::ui_chinese_fonts();
     if !text.chars().any(crate::bidi::is_hebrew) {
-        return Ok((japanese.into_iter().chain(chinese).collect(), false));
+        // Prefer one Chinese font for Chinese edits instead of alternating Japanese and
+        // Chinese glyph outlines within a single displayed text run.
+        return Ok((if prefer_chinese { chinese.into_iter().chain(japanese).collect() } else { japanese.into_iter().chain(chinese).collect() }, false));
     }
     // Points are drawn on their letter with the font's positioning, which a one-glyph-per-
     // character Type 3 font can't do; refuse rather than print them beside the letter.
@@ -1623,8 +1648,9 @@ fn type3_font(
     family: crate::added::Family,
     bold: bool,
     max_glyphs: usize,
+    prefer_chinese: bool,
 ) -> Result<Type3Fallback, EditError> {
-    let (faces, hebrew) = type3_faces(text, family, bold)?;
+    let (faces, hebrew) = type3_faces(text, family, bold, prefer_chinese)?;
     // Each unique character once, in order of first appearance.
     let mut chars = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -1918,7 +1944,7 @@ pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usi
         None => {
             let fallback_shown = crate::bidi::to_visual(&text);
             if needs_type3(&text) {
-                let fallback = type3_font(doc, &mut fonts_res, &text, source_family(&target.base_font), target.bold, max_glyphs)?;
+                let fallback = type3_font(doc, &mut fonts_res, &text, source_family(&target.base_font), target.bold, max_glyphs, chinese_font_name(&target.base_font))?;
                 let runs = type3_encode(&fallback, &fallback_shown)
                     .ok_or_else(|| EditError::Invalid(format!("\"{text}\" can't be shown by the {} fallback", fallback.family)))?;
                 let size = font_size_before(&ops, first).unwrap_or(target.size);
@@ -2345,7 +2371,9 @@ fn rewrite_block_from(
         let emit_inv = Matrix(emit.ctm).invert().ok_or_else(|| EditError::Invalid("the paragraph has a singular transform".into()))?;
         Matrix(o.tm).then(&Matrix(o.ctm)).then(&emit_inv).0
     };
-    let type3 = if !reuse && needs_type3(&flat) { Some(type3_font(doc, &mut fonts_res, &flat, family, bold, max_glyphs)?) } else { None };
+    let type3 = if !reuse && needs_type3(&flat) {
+        Some(type3_font(doc, &mut fonts_res, &flat, family, bold, max_glyphs, chinese_font_name(&b.base_font))?)
+    } else { None };
     let advance = |s: &str| -> f64 {
         let t = match (&metrics, reuse) {
             (Some(m), true) => {

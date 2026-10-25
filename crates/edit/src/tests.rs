@@ -1049,6 +1049,49 @@ fn styled_text_page(base: &str) -> Document {
     doc
 }
 
+/// Editing one Chinese text run must not switch between Japanese and Chinese outlines
+/// character by character. A PDF source subset may cover some old characters, but not
+/// new ones. The resulting Chinese glyphs should share the same face and point size.
+#[test]
+fn chinese_styled_edit_uses_one_face_and_size_for_the_whole_han_run() {
+    let replacement = "三大法师懂法守法阿斯顿发生";
+    let faces = pdfcraft_fonts::ui_chinese_fonts();
+    if faces.is_empty() {
+        eprintln!("Chinese UI/document fonts are optional for local builds");
+        return;
+    }
+    assert!(
+        faces.iter().any(|face| replacement.chars().all(|ch| pdfcraft_fonts::japanese_glyph_from(face, ch).is_ok())),
+        "the Windows release Chinese font must cover the edited text"
+    );
+    let mut doc = styled_text_page("SimSun");
+    let style = text::BlockStyle {
+        ranges: vec![text::RangeStyle {
+            range: 0..replacement.len(),
+            family: None,
+            resource: None,
+            size: Some(12.0),
+            color: None,
+            underline: None,
+            char_spacing: None,
+            scale: None,
+        }],
+        ..Default::default()
+    };
+    text::rewrite_block(&mut doc, 0, 0, Some(replacement), &style).unwrap();
+    let fonts = fallback_fonts(&doc);
+    assert_eq!(fonts.len(), 1, "all Han glyphs need one Chinese fallback font");
+    let descriptor = doc.resolve(fonts[0].1.get(b"FontDescriptor").unwrap());
+    let face = descriptor.as_dict().unwrap().get(b"FontFamily").unwrap();
+    let pdfcraft_cos::Object::String(name) = &*doc.resolve(face) else {
+        panic!("Chinese fallback must record a font family");
+    };
+    assert!(String::from_utf8_lossy(&name.bytes).contains("LXGW"), "unexpected fallback: {name:?}");
+    let lines = text::text_lines(&reopen(&doc), 0).unwrap();
+    assert_eq!(lines.iter().map(|line| line.text.as_str()).collect::<String>(), replacement);
+    assert!(lines.iter().all(|line| (line.size - 12.0).abs() < 0.01), "unexpected text size: {lines:?}");
+}
+
 fn fallback_paths(doc: &Document) -> Vec<Vec<u8>> {
     let p = pdfcraft_model::pages(doc).swap_remove(0);
     let res = doc.resolve(p.dict.get(b"Resources").unwrap());

@@ -260,8 +260,9 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
                 stack.push(name.to_owned());
             }
         }
+        // A Chinese face embedded for PDF editing must not switch the app's menus away
+        // from their pre-0.10.17 Windows sans-serif appearance.
         let need = match cjk {
-            _ if !pdfcraft_fonts::ui_chinese_fonts().is_empty() => Need::Other,
             CjkPreference::SimplifiedChinese => Need::Hans,
             CjkPreference::TraditionalChinese => Need::Hant,
             CjkPreference::Default => Need::Other,
@@ -370,8 +371,13 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
     // Keep missing Latin/Cyrillic letters in the app's own faces (for example Bulgarian ѝ,
     // absent from JetBrains Mono), before egui's defaults or optional system/CJK fallbacks.
     fonts.families.entry(FontFamily::Monospace).or_default().insert(1, "Inter".to_owned());
-    // The same static bytes pdfcraft-fonts uses for Japanese/Chinese text in PDFs: one copy, not two.
+    // Keep Chinese document-writing fonts out of the interface. Before 0.10.17 the
+    // Chinese menus used the installed OS sans font, not a bundled WenKai face.
+    // Japanese UI fallback faces remain available to Japanese labels.
     for face in pdfcraft_fonts::ui_cjk_fonts(prefer_hans) {
+        if face.covers("Hans") || face.covers("Hant") {
+            continue;
+        }
         let name = face.name();
         // Japanese and Chinese faces have distinct family names, so no collision here.
         if !fonts.font_data.contains_key(&name) {
@@ -624,6 +630,17 @@ mod tests {
         // A face that doesn't parse is left alone rather than guessed at.
         assert_eq!(on_interface_baseline(FontData::from_static(b"not a font")).tweak, FontTweak::default());
         assert_eq!(vertical_metrics(b"", 0), None);
+    }
+
+    #[test]
+    fn windows_chinese_menus_keep_legacy_fallback_stack() {
+        let defs = font_definitions_for_platform(true, FontPolicyPlatform::Windows);
+        for face in pdfcraft_fonts::ui_chinese_fonts() {
+            let name = face.name();
+            assert!(!defs.font_data.contains_key(&name), "PDF editing face {name} must not replace Windows menu fonts");
+            assert!(defs.families.values().all(|stack| !stack.contains(&name)), "PDF editing face {name} must not enter a menu font stack");
+        }
+        assert_eq!(defs.families[&FontFamily::Proportional][0], "Inter");
     }
 
     #[test]
