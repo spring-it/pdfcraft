@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Per-user, no-wizard MSI for the dedicated 沃飞翼览 PDF v0.10.21 release.
+<!-- Per-user, no-wizard MSI for the dedicated 沃飞翼览 PDF v0.10.22 release.
      A distinct UpgradeCode keeps it independent from the original per-machine MSI.
      The portable marker keeps settings, logs, recovery and IDs under LocalAppData,
      not in the roaming AppData folder. No HKLM registrations or system associations. -->

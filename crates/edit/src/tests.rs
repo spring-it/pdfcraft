@@ -1092,6 +1092,39 @@ fn chinese_styled_edit_uses_one_face_and_size_for_the_whole_han_run() {
     assert!(lines.iter().all(|line| (line.size - 12.0).abs() < 0.01), "unexpected text size: {lines:?}");
 }
 
+#[test]
+fn chinese_punctuation_in_a_modified_paragraph_keeps_one_face_and_weight() {
+    let replacement = "三大法师懂法守法，阿斯顿发生的。";
+    let faces = pdfcraft_fonts::ui_chinese_fonts();
+    if faces.is_empty() {
+        eprintln!("skipping: release fonts are optional in local builds");
+        return;
+    }
+    assert!(
+        faces.iter().any(|face| replacement.chars().all(|ch| pdfcraft_fonts::japanese_glyph_from(face, ch).is_ok())),
+        "the release Chinese face must support this punctuation and Han text"
+    );
+    let mut doc = styled_text_page("SimSun");
+    let style = text::BlockStyle {
+        ranges: vec![text::RangeStyle {
+            range: 0..replacement.len(),
+            family: None,
+            resource: None,
+            size: Some(12.0),
+            color: None,
+            underline: None,
+            char_spacing: None,
+            scale: None,
+        }],
+        ..Default::default()
+    };
+    text::rewrite_block(&mut doc, 0, 0, Some(replacement), &style).unwrap();
+    assert_eq!(fallback_fonts(&doc).len(), 1, "Chinese punctuation must not split the outline face");
+    let lines = text::text_lines(&reopen(&doc), 0).unwrap();
+    assert_eq!(lines.iter().map(|line| line.text.as_str()).collect::<String>(), replacement);
+    assert!(lines.iter().all(|line| !line.bold && (line.size - 12.0).abs() < 0.01), "{lines:?}");
+}
+
 fn fallback_paths(doc: &Document) -> Vec<Vec<u8>> {
     let p = pdfcraft_model::pages(doc).swap_remove(0);
     let res = doc.resolve(p.dict.get(b"Resources").unwrap());

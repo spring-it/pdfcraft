@@ -2,6 +2,20 @@
 
 use super::*;
 
+/// A Chinese edit includes the punctuation adjoining its Han characters. Splitting
+/// on punctuation made the styled writer switch among PDF subsets and fallback faces.
+fn chinese_text_run(text: &str) -> bool {
+    let mut has_han = false;
+    for ch in text.chars() {
+        if is_han_character(ch) {
+            has_han = true;
+        } else if !matches!(ch, ' ' | '　' | '、' | '。' | '，' | '：' | '；' | '？' | '！' | '（' | '）' | '《' | '》' | '“' | '”') {
+            return false;
+        }
+    }
+    has_han
+}
+
 fn same_plane(a: &TextLine, b: &TextLine) -> bool {
     let at = Matrix(a.origin.tm).then(&Matrix(a.origin.ctm));
     let bt = Matrix(b.origin.tm).then(&Matrix(b.origin.ctm));
@@ -397,7 +411,7 @@ pub(super) fn rewrite_styled_block(
         // size within the same edited word. A plain Han run gets one Chinese face at
         // the SAME point size instead. Explicit font/style selections still win.
         let uniform_han = !span_text.is_empty()
-            && span_text.chars().all(is_han_character)
+            && chinese_text_run(span_text)
             && span_text.chars().collect::<std::collections::HashSet<_>>().len() <= MAX_TYPE3_GLYPHS
             && style.resource.is_none()
             && style.family.is_none()

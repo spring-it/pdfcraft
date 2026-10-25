@@ -317,6 +317,49 @@ pub(crate) fn editor_font(look: &pdfcraft_engine::AddedText, size: f32) -> FontI
     FontId::new(size, family)
 }
 
+/// The newly typed part of a draft, in UTF-8 byte offsets. Original text outside
+/// this range keeps its own PDF font and formatting.
+fn changed_draft_range(original: &str, draft: &str) -> Option<std::ops::Range<usize>> {
+    if original == draft {
+        return None;
+    }
+    let prefix: usize = original
+        .chars()
+        .zip(draft.chars())
+        .take_while(|(old, new)| old == new)
+        .map(|(ch, _)| ch.len_utf8())
+        .sum();
+    let (mut old_end, mut new_end) = (original.len(), draft.len());
+    while old_end > prefix && new_end > prefix {
+        let (Some(old), Some(new)) = (original[..old_end].chars().next_back(), draft[..new_end].chars().next_back()) else {
+            break;
+        };
+        if old != new {
+            break;
+        }
+        old_end -= old.len_utf8();
+        new_end -= new.len_utf8();
+    }
+    (prefix < new_end).then_some(prefix..new_end)
+}
+
+/// Unlike a PDF subset with incomplete coverage, this editing-only font family
+/// contains exactly one licensed Chinese face for the entire inserted phrase.
+fn edited_chinese_face(text: &str) -> Option<String> {
+    let has_han = text.chars().any(|ch| matches!(
+        ch,
+        '\u{3400}'..='\u{4DBF}' | '\u{4E00}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '\u{20000}'..='\u{2FA1F}'
+    ));
+    if !has_han {
+        return None;
+    }
+    pdfcraft_fonts::ui_chinese_fonts()
+        .iter()
+        .enumerate()
+        .find(|(_, face)| pdfcraft_fonts::embedding::covers(face.bytes, text))
+        .map(|(index, _)| format!("pdf-editor-han-{index}"))
+}
+
 fn color32(color: [f64; 3]) -> Color32 {
     Color32::from_rgb(
         (color[0].clamp(0.0, 1.0) * 255.0).round() as u8,
@@ -1119,8 +1162,8 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
     let mut definitions = ctx.fonts(|f| f.definitions().clone());
     // Only the current editor's document fonts live in the atlas. Never accumulate the
     // programs of previously opened files or add them to the interface's default families.
-    definitions.font_data.retain(|name, _| !name.starts_with("pdf-source-"));
-    definitions.families.retain(|family, _| !matches!(family, FontFamily::Name(name) if name.starts_with("pdf-source-")));
+    definitions.font_data.retain(|name, _| !name.starts_with("pdf-source-") && !name.starts_with("pdf-editor-han-"));
+    definitions.families.retain(|family, _| !matches!(family, FontFamily::Name(name) if name.starts_with("pdf-source-") || name.starts_with("pdf-editor-han-")));
     let mut families = BTreeMap::new();
     for (index, program) in programs.iter().enumerate() {
         let name = format!("pdf-source-{index}");
@@ -1146,7 +1189,19 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
         }
         definitions.families.insert(FontFamily::Name(name.clone().into()), stack);
     }
-    if !families.is_empty() {
+    // Dedicated editor-only CJK families contain one font each, so newly typed Han
+    // glyphs never mix with a document's partial subsets or the menu font stack.
+    let mut chinese_faces = false;
+    for (index, face) in pdfcraft_fonts::ui_chinese_fonts().iter().enumerate() {
+        let name = format!("pdf-editor-han-{index}");
+        definitions.font_data.insert(
+            name.clone(),
+            Arc::new(crate::theme::on_interface_baseline(egui::FontData::from_static(face.bytes))),
+        );
+        definitions.families.insert(FontFamily::Name(name.clone().into()), vec![name]);
+        chinese_faces = true;
+    }
+    if !families.is_empty() || chinese_faces {
         ctx.set_fonts(definitions);
     }
     families
@@ -1157,6 +1212,7 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
     // An unchanged PDF row already has an authoritative line break. Do not rewrap it
     // because font rounding or a fallback face measures a fraction of a pixel wider.
     job.wrap.max_width = if text == ed.original && ed.look == ed.look0 && ed.extras == ed.extras0 { f32::INFINITY } else { width };
+    let changed = changed_draft_range(&ed.original, text);
     if let Some((block, lines)) = &ed.source {
         let lefts: Vec<_> = block.rows.iter().filter_map(|r| r.first().and_then(|i| lines.get(*i)).map(|l| l.rect[0])).collect();
         let left_span = lefts.iter().copied().fold(f64::NEG_INFINITY, f64::max) - lefts.iter().copied().fold(f64::INFINITY, f64::min);
@@ -1201,17 +1257,42 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
             let native_width = ui.fonts_mut(|f| f.layout_no_wrap(line.text.clone(), font.clone(), Color32::BLACK).size().x);
             let target_width = ((line.rect[2] - line.rect[0]) * look.size / line.size.max(0.01)) as f32 * scale;
             let spacing = if original_face { (target_width - native_width) / line.text.chars().count().saturating_sub(1).max(1) as f32 } else { 0.0 };
-            job.append(
-                text.get(range).unwrap_or_default(),
-                0.0,
-                egui::TextFormat {
-                    font_id: font,
-                    extra_letter_spacing: spacing + ed.extras.char_spacing as f32 * scale,
-                    color: color32(look.color),
-                    italics: look.italic && !embedded,
-                    ..Default::default()
-                },
-            );
+            // Keep untouched letters in their source face, but never mix glyphs
+            // from that face and unrelated fallback families in newly typed Han text.
+            let mut boundaries = vec![range.start, range.end];
+            if let Some(modified) = &changed {
+                for boundary in [modified.start, modified.end] {
+                    if range.start < boundary && boundary < range.end {
+                        boundaries.push(boundary);
+                    }
+                }
+            }
+            boundaries.sort_unstable();
+            for pair in boundaries.windows(2) {
+                let (Some(&start), Some(&end)) = (pair.first(), pair.get(1)) else { continue };
+                let part = text.get(start..end).unwrap_or_default();
+                let modified = changed.as_ref().is_some_and(|r| r.start <= start && end <= r.end);
+                let chinese = if modified && original_face && ed.font_resource.is_none() {
+                    edited_chinese_face(part)
+                } else {
+                    None
+                };
+                let mut part_font = font.clone();
+                if let Some(name) = &chinese {
+                    part_font.family = FontFamily::Name(name.clone().into());
+                }
+                job.append(
+                    part,
+                    0.0,
+                    egui::TextFormat {
+                        font_id: part_font,
+                        extra_letter_spacing: (if chinese.is_some() { 0.0 } else { spacing }) + ed.extras.char_spacing as f32 * scale,
+                        color: color32(look.color),
+                        italics: look.italic && (!embedded || chinese.is_some()),
+                        ..Default::default()
+                    },
+                );
+            }
         }
     } else {
         job.append(
@@ -1478,6 +1559,35 @@ mod tests {
             extras0: Extras::default(),
         };
         (app, ed)
+    }
+
+    #[test]
+    fn edited_chinese_uses_one_document_face_without_changing_ui_families() {
+        let original = "收到和处理政府信息公开申请情况";
+        let added = "阿斯顿发生的";
+        let draft = original.replacen("政府", &format!("{added}政府"), 1);
+        let range = changed_draft_range(original, &draft).expect("inserted range");
+        assert_eq!(draft.get(range).unwrap(), added);
+        assert_eq!(changed_draft_range(original, original), None);
+        assert_eq!(changed_draft_range("中文", "中"), None);
+        assert_eq!(edited_chinese_face("Latin only"), None);
+        if pdfcraft_fonts::ui_chinese_fonts().is_empty() {
+            eprintln!("skipping: optional build has no bundled Chinese face");
+            return;
+        }
+        let face = edited_chinese_face(added).expect("bundled face covers edited Han glyphs");
+        let (app, _) = preview_app();
+        let doc = app.session.get(app.views[0].id).unwrap();
+        let ctx = egui::Context::default();
+        ctx.begin_pass(egui::RawInput::default());
+        install_source_fonts(&ctx, doc, 0);
+        ctx.end_pass();
+        ctx.begin_pass(egui::RawInput::default());
+        let defs = ctx.fonts(|fonts| fonts.definitions().clone());
+        assert_eq!(defs.families[&FontFamily::Name(face.clone().into())], vec![face.clone()]);
+        assert!(defs.families[&FontFamily::Proportional].iter().all(|name| !name.starts_with("pdf-editor-han-")));
+        assert!(defs.families[&FontFamily::Monospace].iter().all(|name| !name.starts_with("pdf-editor-han-")));
+        ctx.end_pass();
     }
 
     #[test]
