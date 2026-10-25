@@ -518,13 +518,23 @@ fn be(b: &[u8]) -> u32 {
     b.iter().fold(0u32, |a, x| (a << 8) | u32::from(*x))
 }
 
-fn style_from_name(name: &str) -> (bool, bool) {
+/// Face-weight information in the name, when it is explicit. A regular/light name overrides
+/// inconsistent descriptor weights; names without a style suffix leave `/FontWeight` authoritative.
+fn style_from_name(name: &str) -> (Option<bool>, bool) {
     let name = name.to_ascii_lowercase();
     let name = name.split_once('+').map_or(name.as_str(), |(_, n)| n);
-    (
-        ["bold", "black", "heavy", "semibold", "demi"].iter().any(|s| name.contains(s)),
-        ["italic", "oblique", "slanted"].iter().any(|s| name.contains(s)),
-    )
+    let named_bold = ["bold", "black", "heavy", "semibold", "demi", "extrabold", "ultrabold"]
+        .iter()
+        .any(|s| name.contains(s));
+    let tokens: Vec<_> = name.split(|c: char| !c.is_ascii_alphanumeric()).collect();
+    let named_regular = ["regular", "normal", "book", "light", "thin", "extralight", "ultralight", "roman", "medium", "plain"]
+        .iter()
+        .any(|s| tokens.contains(s))
+        || ["regular", "normal", "light", "thin", "extralight", "ultralight", "roman", "medium", "plain"]
+            .iter()
+            .any(|s| name.ends_with(s));
+    let bold = if named_bold { Some(true) } else if named_regular { Some(false) } else { None };
+    (bold, ["italic", "oblique", "slanted"].iter().any(|s| name.contains(s)))
 }
 
 /// The next entry of a `begin… end…` section: `N` tokens, or `None` at its `end` operator or
@@ -632,8 +642,10 @@ impl Metrics {
             })
             .unwrap_or_default();
         m.subset = base.len() > 7 && base.as_bytes()[6] == b'+' && base[..6].bytes().all(|b| b.is_ascii_uppercase());
-        let (bold, italic) = style_from_name(&base);
-        m.bold |= bold;
+        let (named_bold, italic) = style_from_name(&base);
+        if let Some(named_bold) = named_bold {
+            m.bold = named_bold;
+        }
         m.italic |= italic;
         m.base_font = base;
         if m.composite && m.subset {
@@ -750,7 +762,10 @@ impl Metrics {
             let angle = d.get(b"ItalicAngle").and_then(|v| doc.resolve(v).as_f64()).unwrap_or(0.0);
             let weight = d.get(b"FontWeight").and_then(|v| doc.resolve(v).as_f64()).unwrap_or(0.0);
             m.italic |= flags & 64 != 0 || angle.abs() > 0.1;
-            m.bold |= flags & 262_144 != 0 || weight >= 600.0;
+            // PDF's ForceBold bit is a small-size rendering hint, not the face's actual weight.
+            // Treating it as a bold face makes ordinary CJK text become bold in the editor and
+            // causes inserted glyphs to be saved with a bold fallback font.
+            m.bold |= weight >= 600.0;
             // Type 3 descriptors may omit these metrics; the glyph-space FontBBox still applies.
             let ascent = d.get(b"Ascent").and_then(|v| doc.resolve(v).as_f64());
             let descent = d.get(b"Descent").and_then(|v| doc.resolve(v).as_f64());
@@ -1331,25 +1346,55 @@ mod tests {
         assert!(append_editor_cmap(&mut broken, &std::collections::BTreeMap::from([(65, 1)])).is_none());
     }
 
-    fn metrics_with_flags(flags: Option<Object>) -> Metrics {
+    fn metrics_with_descriptor(base_font: Option<&str>, flags: Option<Object>, weight: Option<f64>) -> Metrics {
         let mut doc = Document::new_empty();
         let mut descriptor = Dict::new();
         if let Some(flags) = flags {
             descriptor.set(b"Flags".to_vec(), flags);
         }
-        let font = font(&mut doc, vec![("Subtype", Object::name("TrueType")), ("FontDescriptor", Object::Dict(descriptor))]);
+        if let Some(weight) = weight {
+            descriptor.set(b"FontWeight".to_vec(), Object::Real(weight));
+        }
+        let mut fields = vec![("Subtype", Object::name("TrueType")), ("FontDescriptor", Object::Dict(descriptor))];
+        if let Some(base_font) = base_font {
+            fields.push(("BaseFont", Object::name(base_font)));
+        }
+        let font = font(&mut doc, fields);
         Metrics::from_dict(&doc, &font)
+    }
+
+    fn metrics_with_flags(flags: Option<Object>) -> Metrics {
+        metrics_with_descriptor(None, flags, None)
     }
 
     #[test]
     fn font_descriptor_flags_stay_within_the_u32_domain() {
         let valid = metrics_with_flags(Some(Object::Int(64 | 262_144)));
-        assert!(valid.italic && valid.bold);
+        assert!(valid.italic);
+        assert!(!valid.bold, "ForceBold is a rendering hint, not proof that the face is bold");
 
         for flags in [Some(Object::Int(-1)), Some(Object::Int(4_294_967_296)), Some(Object::Bool(true)), None] {
             let metrics = metrics_with_flags(flags);
             assert!(!metrics.italic && !metrics.bold);
         }
+    }
+
+    #[test]
+    fn explicit_regular_font_name_overrides_inconsistent_descriptor_weight() {
+        let metrics = metrics_with_descriptor(
+            Some("ABCDEF+STSong-Light"),
+            Some(Object::Int(262_144)),
+            Some(700.0),
+        );
+        assert!(!metrics.bold, "an explicit Light face must not be changed to bold by a bad descriptor");
+    }
+
+    #[test]
+    fn explicit_bold_name_and_unambiguous_font_weight_are_still_honoured() {
+        let named = metrics_with_descriptor(Some("ABCDEF+STSong-Bold"), None, None);
+        assert!(named.bold);
+        let weighted = metrics_with_descriptor(Some("CustomFace"), None, Some(700.0));
+        assert!(weighted.bold);
     }
 
     #[test]

@@ -1247,8 +1247,12 @@ fn japanese_replacement_missing_a_glyph_after_240_changes_nothing() {
     if without_craft_fonts("japanese_replacement_missing_a_glyph_after_240_changes_nothing") {
         return;
     }
-    // The first CJK character that no face draws: the 242nd unique character, in a second font.
-    let faces = pdfcraft_fonts::document_japanese_fonts_for_style(false, false);
+    // Find a character that no bundled Japanese or Chinese fallback face draws. Chinese
+    // fallback support was added later, so Japanese-only coverage is no longer sufficient.
+    let faces: Vec<_> = pdfcraft_fonts::document_japanese_fonts_for_style(false, false)
+        .into_iter()
+        .chain(pdfcraft_fonts::ui_chinese_fonts())
+        .collect();
     let missing = (0x4E00u32..0x9FFF)
         .filter_map(char::from_u32)
         .find(|ch| faces.iter().all(|face| pdfcraft_fonts::japanese_glyph_from(face, *ch).is_err()))
