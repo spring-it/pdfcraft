@@ -580,6 +580,7 @@ pub(super) fn rewrite_styled_block(
         let source = lines.get(index).unwrap_or(first);
         let span_text = draft.get(range.clone()).unwrap_or_default();
         let uniform_han = !span_text.is_empty()
+            && (chinese_font_name(&source.base_font) || chinese_text_run(draft))
             && chinese_text_run(span_text)
             && span_text.chars().collect::<std::collections::HashSet<_>>().len() <= MAX_TYPE3_GLYPHS
             && style.resource.is_none()
