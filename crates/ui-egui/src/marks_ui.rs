@@ -1157,6 +1157,9 @@ mod tests {
         assert!(selected_pages(&d, 10).is_err());
         d.custom_pages = "4-2".to_owned();
         assert!(selected_pages(&d, 10).is_err());
+    }
+
+    #[test]
     fn the_watermark_edit_carries_the_offset() {
         let mut d = MarksDraft::default();
         d.wm.text = "DRAFT".into();
