@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: localappdata-msi-v1.0.1
+  group: localappdata-msi-v1.0.1-final
   cancel-in-progress: true
 
 jobs:
@@ -216,6 +216,5 @@ jobs:
             gh release create "$RELEASE_TAG" dist/msi/*.msi \
               --target "$GITHUB_SHA" \
               --title '沃飞翼览 PDF v1.0.1 - 上游 v0.14.0 功能更新 (x64/x86)' \
-              --notes-file release-notes.md \
-             
+              --notes-file release-notes.md
           fi
