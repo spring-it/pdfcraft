@@ -7877,10 +7877,19 @@ trailer << /Root 1 0 R >>
         assert!(font.charmap().map('动').is_some(), "fallback font must cover Simplified Chinese");
         let content = "BT /F1 18 Tf 5 30 Td <52A8529B75356C6096326C34900F6C1496006280672F> Tj ET";
         let pdf = format!(
+            "%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
 3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 80] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length {} >> stream
+{content}
+endstream endobj
 5 0 obj << /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [6 0 R] >> endobj
 6 0 obj << /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> /FontDescriptor 7 0 R /DW 1000 >> endobj
 7 0 obj << /Type /FontDescriptor /FontName /STSong-Light /Flags 6 /FontBBox [0 -141 1000 859] /ItalicAngle 0 /Ascent 859 /Descent -141 /CapHeight 700 /StemV 80 >> endobj
+trailer << /Root 1 0 R >>
+%%EOF",
+            content.len()
         );
         let page = render_first_page(pdf.into_bytes());
         let inked = page.rgba.as_chunks::<4>().0.iter().filter(|pixel| pixel[0] < 128).count();
