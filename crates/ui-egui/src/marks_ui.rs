@@ -1,12 +1,13 @@
 //! Add Header and Footer, Add Watermark and Add Background dialogs (Acrobat: Edit a PDF ▸ …;
-//! dialog snapshots d13, d14, d12d). Each has the shared Page Range Options and a schematic
-//! preview of the current page. "Update" opens the same dialog in replace mode.
+//! dialog snapshots d13, d14, d12d). Each has the shared Page Range Options and a preview of a
+//! page the range selects, with the marks laid out on it. "Update" opens the same dialog in
+//! replace mode.
 
 use egui::{Align, Color32, CornerRadius, Layout, Rect, Stroke, pos2, vec2};
-use pdfcraft_engine::{Background, Edit, HeaderFooter, MarkKind, Watermark};
+use pdfcraft_engine::{Background, Edit, FontFamily, HeaderFooter, MarkKind, Watermark};
 
 use crate::theme::{self, Tokens};
-use crate::{PdfCraftApp, widgets};
+use crate::{PdfCraftApp, icons, widgets};
 
 /// How far a watermark may be moved from the page centre, in points.
 const MAX_OFFSET: f64 = 20_000.0;
@@ -89,6 +90,9 @@ pub struct MarksDraft {
     pub use_file: bool,
     pub file: Option<(String, std::sync::Arc<Vec<u8>>)>,
     pub file_page: usize,
+    /// The page (0-based) the preview was stepped to; `None` previews the current page. Reset
+    /// each time the dialog opens.
+    pub preview: Option<usize>,
     pub font_family: usize,
     pub custom_enabled: bool,
     pub custom_pages: String,
@@ -120,6 +124,7 @@ impl Default for MarksDraft {
             use_file: false,
             file: None,
             file_page: 1,
+            preview: None,
             font_family: 0,
             custom_enabled: false,
             custom_pages: String::new(),
@@ -128,7 +133,9 @@ impl Default for MarksDraft {
 }
 
 const PAGE_FORMATS: [&str; 5] = ["<<1>>", "<<1 of n>>", "<<1/n>>", "<<Page 1>>", "<<Page 1 of n>>"];
-const DATE_FORMATS: [&str; 6] = ["<<m/d/yyyy>>", "<<mm/dd/yyyy>>", "<<d/m/yyyy>>", "<<yyyy-mm-dd>>", "<<m/d/yy>>", "<<mmmm d, yyyy>>"];
+// New formats go last: `date_format` is an index into this list.
+const DATE_FORMATS: [&str; 8] =
+    ["<<m/d/yyyy>>", "<<mm/dd/yyyy>>", "<<d/m/yyyy>>", "<<yyyy-mm-dd>>", "<<m/d/yy>>", "<<mmmm d, yyyy>>", "<<yyyy/mm/dd>>", "<<yyyy/m/d>>"];
 const BOX_NAMES: [&str; 6] =
     ["Left Header Text", "Center Header Text", "Right Header Text", "Left Footer Text", "Center Footer Text", "Right Footer Text"];
 
@@ -139,14 +146,30 @@ fn color_button(ui: &mut egui::Ui, c: &mut [f64; 3]) {
     }
 }
 
-/// A schematic of the current page with the marks laid out (no rendering needed).
-fn preview(ui: &mut egui::Ui, t: &Tokens, size: (f64, f64), draw: impl FnOnce(&egui::Painter, Rect, f32)) {
+/// The page (displayed size `size`) with the marks laid out on it. `picture` is its thumbnail,
+/// rendered off the UI thread like the pages panel's; until it arrives the page is a blank sheet.
+/// `tint` multiplies the page, which is how a background behind its content looks.
+fn preview(
+    ui: &mut egui::Ui,
+    t: &Tokens,
+    size: (f64, f64),
+    picture: Option<egui::TextureId>,
+    tint: Color32,
+    draw: impl FnOnce(&egui::Painter, Rect, f32),
+) {
     let (w, h) = (size.0.max(1.0), size.1.max(1.0));
     let s = (190.0 / w.max(h)) as f32;
     let (r, _) = ui.allocate_exact_size(vec2(210.0, 210.0), egui::Sense::hover());
     let page = Rect::from_center_size(r.center(), vec2(w as f32 * s, h as f32 * s));
     let painter = ui.painter_at(r);
-    painter.rect_filled(page, CornerRadius::ZERO, Color32::WHITE);
+    match picture {
+        Some(tex) => {
+            painter.image(tex, page, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), tint);
+        }
+        None => {
+            painter.rect_filled(page, CornerRadius::ZERO, tint);
+        }
+    }
     painter.rect_stroke(page, CornerRadius::ZERO, Stroke::new(1.0, t.border), egui::StrokeKind::Outside);
     draw(&painter, page, s);
 }
@@ -154,6 +177,38 @@ fn preview(ui: &mut egui::Ui, t: &Tokens, size: (f64, f64), draw: impl FnOnce(&e
 fn rgb32(c: [f64; 3]) -> Color32 {
     let b = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
     Color32::from_rgb(b(c[0]), b(c[1]), b(c[2]))
+}
+
+/// The tint of a page over a background of `color` at `opacity`: the colour shows where the page
+/// is white and the content stays on top. A non-finite opacity is opaque, as the engine has it.
+fn behind(color: [f64; 3], opacity: f64) -> Color32 {
+    let a = if opacity.is_finite() { opacity.clamp(0.0, 1.0) } else { 1.0 };
+    rgb32(color.map(|c| 1.0 - a * (1.0 - c)))
+}
+
+/// The page (0-based) the preview shows: the current one when the range selects it, otherwise the
+/// first page the range selects (the current one again when it selects none).
+fn preview_page(range: &PageRange, current: usize, count: usize) -> usize {
+    let pages = range.pages(count);
+    if pages.contains(&current) { current } else { pages.first().copied().unwrap_or(current) }
+}
+
+/// [`preview_page`] for the page stepped to (`stepped`), or the current page if none. A page
+/// stepped to that the range leaves out is replaced by the page shown, so widening the range again
+/// keeps that page rather than jumping back.
+fn shown_preview(range: &PageRange, stepped: &mut Option<usize>, current: usize, count: usize) -> usize {
+    let shown = preview_page(range, stepped.unwrap_or(current), count);
+    if stepped.is_some() {
+        *stepped = Some(shown);
+    }
+    shown
+}
+
+/// The page the preview steps to from `shown`: the range's next page after it (`forward`) or the
+/// last one before it, or `None` at either end.
+fn step_preview(range: &PageRange, shown: usize, count: usize, forward: bool) -> Option<usize> {
+    let pages = range.pages(count);
+    if forward { pages.into_iter().find(|&p| p > shown) } else { pages.into_iter().rev().find(|&p| p < shown) }
 }
 
 /// Target live-preview canvas height on standard-height windows.
@@ -164,16 +219,12 @@ const WATERMARK_SETTINGS_COLUMN_WIDTH: f32 = 640.0;
 const WATERMARK_PREVIEW_COLUMN_MIN_WIDTH: f32 = 140.0;
 const WATERMARK_PREVIEW_COLUMN_MAX_WIDTH: f32 = 600.0;
 const WATERMARK_COLUMN_GAP: f32 = 20.0;
-
 fn watermark_preview_height(viewport_height: f32) -> f32 {
     (viewport_height - 230.0).clamp(WATERMARK_PREVIEW_MIN_HEIGHT, WATERMARK_PREVIEW_HEIGHT)
-}
-
 /// The live preview is a schematic, not a pixel-exact PDF raster. Widen very narrow/tall
 /// page mockups so the watermark is easier to inspect without increasing the modal height.
 /// This only changes the preview drawing; the saved PDF page geometry is untouched.
 const WATERMARK_PREVIEW_MIN_PAGE_ASPECT: f32 = 0.65;
-
 fn watermark_preview_page_size(size: (f64, f64), canvas_size: egui::Vec2) -> egui::Vec2 {
     let (w, h) = (size.0.max(1.0), size.1.max(1.0));
     let max_width = (canvas_size.x - 24.0).max(1.0);
@@ -185,15 +236,11 @@ fn watermark_preview_page_size(size: (f64, f64), canvas_size: egui::Vec2) -> egu
         .max(page_height * WATERMARK_PREVIEW_MIN_PAGE_ASPECT)
         .min(max_width);
     vec2(page_width, page_height)
-}
-
 fn watermark_column_widths(available_width: f32) -> (f32, f32) {
     let right = (available_width - (WATERMARK_SETTINGS_COLUMN_WIDTH + WATERMARK_COLUMN_GAP))
         .clamp(WATERMARK_PREVIEW_COLUMN_MIN_WIDTH, WATERMARK_PREVIEW_COLUMN_MAX_WIDTH);
     let left = (available_width - right - WATERMARK_COLUMN_GAP).clamp(180.0, WATERMARK_SETTINGS_COLUMN_WIDTH);
     (left, right)
-}
-
 /// A responsive two-column watermark dialog: settings on the left, live preview on the right.
 fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool, bool) {
     let Some((i, id)) = app.active_ids() else { return (false, true) };
@@ -206,13 +253,11 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     let title = if d.replace { "更新水印" } else { "添加水印" };
     ui.label(egui::RichText::new(title).font(theme::semibold(18.0)));
     ui.add_space(8.0);
-
     // Keep the modal content-sized: no expanding ScrollArea and no max height.
     // The live preview grows on standard windows and scales down on short viewports.
     let preview_height = watermark_preview_height(ui.ctx().content_rect().height());
     let available_width = ui.available_width();
     let (left_width, right_width) = watermark_column_widths(available_width);
-
     ui.horizontal_top(|ui| {
         ui.vertical(|ui| {
             ui.set_min_width(left_width);
@@ -241,7 +286,6 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                         }
                     });
                 }
-
                 ui.horizontal(|ui| {
                     ui.label("排列方式");
                     widgets::radio_value(ui, &mut d.wm.tile, true, "平铺水印");
@@ -305,7 +349,6 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                     ui.label("垂直");
                     ui.add(egui::DragValue::new(&mut d.wm.offset[1]).range(-MAX_OFFSET..=MAX_OFFSET).suffix(" pt"));
                 });
-
                 ui.add_space(8.0);
                 ui.label(egui::RichText::new("页面范围选项").font(theme::semibold(12.5)));
                 d.range.ui(ui, count);
@@ -320,7 +363,6 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                 ui.label(egui::RichText::new("支持中文水印：使用本机字体绘制透明 PNG，再写入 PDF；不上传文件或字体。")
                     .small().color(t.text_muted));
         });
-
         // Do not use ui.separator() in this horizontal layout: egui sizes a vertical
         // separator from the parent's available height, which can make Modal treat
         // the whole viewport as content and re-center the controls out of view.
@@ -330,7 +372,6 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             [divider.center_top(), divider.center_bottom()],
             Stroke::new(1.0, t.border),
         );
-
         ui.vertical(|right| {
             right.set_min_width(right_width);
             right.set_max_width(right_width);
@@ -349,7 +390,6 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                 .small().color(t.text_muted));
         });
     });
-
     ui.add_space(8.0);
     let has_source = if d.use_file { d.file.is_some() } else { !d.wm.text.trim().is_empty() };
     let ready = has_source && selected_pages(d, count).is_ok_and(|pages| !pages.is_empty());
@@ -363,7 +403,6 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             cancel = true;
         }
     });
-
     #[cfg(not(target_arch = "wasm32"))]
     if browse {
         let dialog = rfd::AsyncFileDialog::new()
@@ -376,13 +415,9 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                 std::sync::Arc::new(b),
             ));
         });
-    }
     #[cfg(target_arch = "wasm32")]
     let _ = browse;
-
     (apply, cancel)
-}
-
 /// Large page preview used by the two-column watermark dialog.
 fn watermark_preview(
     ui: &mut egui::Ui,
@@ -405,7 +440,6 @@ fn watermark_preview(
     let page = Rect::from_center_size(canvas.center(), page_size);
     painter.rect_filled(page, CornerRadius::same(2), Color32::WHITE);
     painter.rect_stroke(page, CornerRadius::same(2), Stroke::new(1.0, t.border), egui::StrokeKind::Outside);
-
     let draw_content = || {
         painter.text(page.min + vec2(16.0, 20.0), egui::Align2::LEFT_CENTER, "PDF 文档预览",
             egui::FontId::proportional(10.0), Color32::from_gray(190));
@@ -467,8 +501,6 @@ fn watermark_preview(
         }
     };
     if wm.behind { draw_mark(); draw_content(); } else { draw_content(); draw_mark(); }
-}
-
 /// The dialog for `kind`; returns (apply, cancel).
 pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: MarkKind) -> (bool, bool) {
     if kind == MarkKind::Watermark {
@@ -478,7 +510,6 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
     let current = app.views[i].current;
     let Some(doc) = app.session.get(id) else { return (false, true) };
     let count = doc.info.pages.len();
-    let page = doc.info.pages.get(current).map(|p| (p.width as f64, p.height as f64)).unwrap_or((612.0, 792.0));
     let units = app.units;
     let d = &mut app.marks_draft;
     let mut browse = false;
@@ -493,7 +524,13 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
     match kind {
         MarkKind::HeaderFooter => {
             ui.horizontal(|ui| {
-                ui.label(tl!("Font: Helvetica"));
+                // The standard faces a header can be drawn in (#3754).
+                ui.label(tl!("Font:"));
+                egui::ComboBox::from_id_salt("hf-font").selected_text(d.hf.font.label()).width(100.0).show_ui(ui, |ui| {
+                    for f in [FontFamily::Helvetica, FontFamily::Times, FontFamily::Courier] {
+                        ui.selectable_value(&mut d.hf.font, f, f.label());
+                    }
+                });
                 ui.label(tl!("Size"));
                 ui.add(egui::DragValue::new(&mut d.hf.font_size).range(4.0..=72.0).speed(0.5));
                 ui.add(widgets::checkbox(&mut d.hf.underline, tl!("Underline")));
@@ -556,6 +593,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                 ui.label(tl!("Start page number"));
                 ui.add(egui::DragValue::new(&mut d.hf.start_number).range(1..=999_999));
             });
+            ui.add(widgets::checkbox(&mut d.hf.shrink, tl!("Shrink the page content to make room for the header and footer")));
         }
         MarkKind::Watermark => {
             ui.horizontal(|ui| {
@@ -692,13 +730,31 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
             .small().color(t.text_muted));
     }
     ui.add_space(8.0);
-    // Preview of the current page.
+    // The preview: the current page (or the page stepped to), or the first one the range selects
+    // if it leaves that out, drawn from its thumbnail at its displayed size (after /Rotate), the
+    // frame the engine lays the marks out in.
+    let target = shown_preview(&d.range, &mut d.preview, current, count);
+    let page = doc.info.pages.get(target).map(|p| (p.width as f64, p.height as f64)).unwrap_or((612.0, 792.0));
+    let picture = app.views.get_mut(i).and_then(|view| {
+        view.need_thumbnail(target, true);
+        view.thumb_id(target)
+    });
+    let tint = if kind == MarkKind::Background && !d.use_file { behind(d.bg.color, d.bg.opacity) } else { Color32::WHITE };
     let hf = d.hf.clone();
-    let (wm, bg, fit) = (d.wm.clone(), d.bg.clone(), d.fit);
+    let size_h = page.1.max(1.0);
+    let (wm, fit) = (d.wm.clone(), d.fit);
     let file_name = d.use_file.then(|| d.file.as_ref().map(|f| f.0.clone())).flatten();
     ui.horizontal(|ui| {
-        preview(ui, t, page, |p, r, s| match kind {
+        preview(ui, t, page, picture, tint, |p, r, s| match kind {
             MarkKind::HeaderFooter => {
+                if hf.shrink {
+                    // The band the page content shrinks into, centred across.
+                    let (top, bottom) = hf.bands();
+                    let k = ((size_h - top - bottom) / size_h).clamp(0.0, 1.0) as f32;
+                    let band = Rect::from_min_max(pos2(r.left(), r.top() + top as f32 * s), pos2(r.right(), r.bottom() - bottom as f32 * s));
+                    let content = Rect::from_center_size(band.center(), vec2(r.width() * k, band.height().max(0.0)));
+                    p.rect_filled(content, CornerRadius::ZERO, Color32::from_gray(232));
+                }
                 for (k, text) in hf.text.iter().enumerate() {
                     if text.trim().is_empty() {
                         continue;
@@ -710,7 +766,10 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                         1 => (r.center().x, egui::Align2::CENTER_CENTER),
                         _ => (r.right() - hf.margins[3] as f32 * s, egui::Align2::RIGHT_CENTER),
                     };
-                    p.text(pos2(x, y), align, shown, egui::FontId::proportional((hf.font_size as f32 * s).max(5.0)), rgb32(hf.color));
+                    // Courier previews in the monospaced UI face, the others proportional.
+                    let size = (hf.font_size as f32 * s).max(5.0);
+                    let font = if hf.font == FontFamily::Courier { egui::FontId::monospace(size) } else { egui::FontId::proportional(size) };
+                    p.text(pos2(x, y), align, shown, font, rgb32(hf.color));
                 }
             }
             MarkKind::Watermark if file_name.is_some() => {
@@ -773,19 +832,28 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                     Color32::GRAY,
                 );
             }
-            MarkKind::Background => {
-                p.rect_filled(r, CornerRadius::ZERO, rgb32(bg.color).gamma_multiply(bg.opacity as f32));
-            }
+            // A colour is the page's tint.
+            MarkKind::Background => {}
         });
         ui.vertical(|ui| {
-            ui.label(
-                egui::RichText::new(crate::i18n::fmt(
-                    tl!("Preview: page {p} of {n}"),
-                    &[("p", &(current + 1).to_string()), ("n", &count.to_string())],
-                ))
-                .small()
-                .color(t.text_faint),
-            );
+            ui.horizontal(|ui| {
+                // Steps through the pages the range selects.
+                let (back, next) = (step_preview(&d.range, target, count, false), step_preview(&d.range, target, count, true));
+                if ui.add_enabled_ui(back.is_some(), |ui| icons::button(ui, "chevron-left", 22.0, false, tl!("Previous page"))).inner.clicked() {
+                    d.preview = back.or(d.preview);
+                }
+                ui.label(
+                    egui::RichText::new(crate::i18n::fmt(
+                        tl!("Preview: page {p} of {n}"),
+                        &[("p", &(target + 1).to_string()), ("n", &count.to_string())],
+                    ))
+                    .small()
+                    .color(t.text_faint),
+                );
+                if ui.add_enabled_ui(next.is_some(), |ui| icons::button(ui, "chevron-right", 22.0, false, tl!("Next page"))).inner.clicked() {
+                    d.preview = next.or(d.preview);
+                }
+            });
             let n = selected_pages(d, count).map(|p| p.len()).unwrap_or(0);
             let applies =
                 if n == 1 { tl!("Applies to 1 page").to_string() } else { crate::i18n::fmt(tl!("Applies to {n} pages"), &[("n", &n.to_string())]) };
@@ -1025,6 +1093,61 @@ mod tests {
     }
 
     #[test]
+    fn the_preview_shows_a_page_the_range_selects() {
+        let all = PageRange::default();
+        assert_eq!(preview_page(&all, 2, 5), 2, "the current page when the range selects it");
+        let even = PageRange { all: true, subset: Subset::Even, ..PageRange::default() };
+        assert_eq!(preview_page(&even, 0, 5), 1, "otherwise the first page the range selects");
+        let later = PageRange { all: false, from: 3, to: 4, subset: Subset::All };
+        assert_eq!(preview_page(&later, 0, 5), 2);
+        let none = PageRange { all: false, from: 4, to: 2, subset: Subset::All };
+        assert_eq!(preview_page(&none, 1, 5), 1, "the current page when the range selects none");
+        assert_eq!(preview_page(&all, 0, 0), 0, "no pages at all");
+    }
+
+    #[test]
+    fn the_preview_steps_through_the_pages_the_range_selects() {
+        let odd = PageRange { all: true, subset: Subset::Odd, ..PageRange::default() };
+        // Pages 1, 3 and 5 (0-based 0, 2, 4) of 5.
+        assert_eq!(step_preview(&odd, 0, 5, true), Some(2));
+        assert_eq!(step_preview(&odd, 2, 5, true), Some(4));
+        assert_eq!(step_preview(&odd, 4, 5, true), None, "the last page has no next");
+        assert_eq!(step_preview(&odd, 4, 5, false), Some(2));
+        assert_eq!(step_preview(&odd, 0, 5, false), None, "the first page has no previous");
+        // From a page the range leaves out, to the nearest one it selects on that side.
+        assert_eq!(step_preview(&odd, 1, 5, true), Some(2));
+        assert_eq!(step_preview(&odd, 1, 5, false), Some(0));
+        assert_eq!(step_preview(&odd, 0, 0, true), None, "no pages at all");
+        // A page stepped to is previewed while the range selects it, and the range's first page
+        // once a new range leaves it out.
+        assert_eq!(preview_page(&odd, 2, 5), 2);
+        let later = PageRange { all: false, from: 4, to: 5, subset: Subset::All };
+        assert_eq!(preview_page(&later, 2, 5), 3);
+        // Narrowing the range past the page stepped to keeps the page shown instead, also once
+        // the range is widened again.
+        let mut stepped = Some(4);
+        let first_two = PageRange { all: false, from: 1, to: 2, subset: Subset::All };
+        assert_eq!(shown_preview(&first_two, &mut stepped, 1, 5), 0);
+        assert_eq!(stepped, Some(0));
+        assert_eq!(shown_preview(&PageRange::default(), &mut stepped, 1, 5), 0);
+        // A page stepped to inside the range stays; with none stepped to, the current page shows.
+        let mut stepped = Some(2);
+        assert_eq!(shown_preview(&odd, &mut stepped, 0, 5), 2);
+        assert_eq!(stepped, Some(2));
+        let mut stepped = None;
+        assert_eq!(shown_preview(&odd, &mut stepped, 4, 5), 4);
+        assert_eq!(stepped, None);
+    }
+
+    #[test]
+    fn a_background_tints_the_page_it_is_behind() {
+        assert_eq!(behind([1.0, 0.0, 0.0], 1.0), Color32::from_rgb(255, 0, 0));
+        assert_eq!(behind([1.0, 0.0, 0.0], 0.0), Color32::WHITE);
+        assert_eq!(behind([0.0, 0.0, 0.0], 0.5), Color32::from_rgb(128, 128, 128));
+        assert_eq!(behind([0.2, 0.4, 0.6], f64::NAN), behind([0.2, 0.4, 0.6], 1.0), "opaque, as the engine has it");
+    }
+
+    #[test]
     fn strict_custom_page_range_works_with_chinese_watermark() {
         let mut d = MarksDraft::default();
         d.custom_enabled = true;
@@ -1034,9 +1157,6 @@ mod tests {
         assert!(selected_pages(&d, 10).is_err());
         d.custom_pages = "4-2".to_owned();
         assert!(selected_pages(&d, 10).is_err());
-    }
-
-    #[test]
     fn the_watermark_edit_carries_the_offset() {
         let mut d = MarksDraft::default();
         d.wm.text = "DRAFT".into();

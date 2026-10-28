@@ -1,16 +1,16 @@
-name: Publish v0.10.22 沃飞翼览 PDF (edited Chinese font consistency and punctuation)
+name: Publish v1.0.1 沃飞翼览 PDF (upstream v0.14.0 integration)
 
 on:
   push:
     branches:
-      - v0.10.1-localappdata-msi
+      - v1.0.1-develop
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: localappdata-msi-v0.10.22
+  group: localappdata-msi-v1.0.1
   cancel-in-progress: true
 
 jobs:
@@ -144,13 +144,13 @@ jobs:
       - name: Verify noninteractive install and uninstall
         shell: pwsh
         run: |
-          $msi = Get-Item "dist/release/pdfcraft-0.10.22-windows-${{ matrix.arch }}-localappdata.msi"
+          $msi = Get-Item "dist/release/pdfcraft-1.0.1-windows-${{ matrix.arch }}-localappdata.msi"
           & .\packaging\windows\test-local-install.ps1 -Path $msi.FullName
 
       - uses: actions/upload-artifact@v4
         with:
           name: local-msi-${{ matrix.arch }}
-          path: dist/release/pdfcraft-0.10.22-windows-${{ matrix.arch }}-localappdata.msi
+          path: dist/release/pdfcraft-1.0.1-windows-${{ matrix.arch }}-localappdata.msi
           if-no-files-found: error
           retention-days: 30
 
@@ -172,19 +172,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -s dist/msi/pdfcraft-0.10.22-windows-x64-localappdata.msi
-          test -s dist/msi/pdfcraft-0.10.22-windows-x86-localappdata.msi
+          test -s dist/msi/pdfcraft-1.0.1-windows-x64-localappdata.msi
+          test -s dist/msi/pdfcraft-1.0.1-windows-x86-localappdata.msi
           test "$(find dist/msi -maxdepth 1 -type f -name '*.msi' | wc -l)" -eq 2
 
       - name: Publish release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v0.10.22-wofei.1
+          RELEASE_TAG: v1.0.1
         run: |
           set -euo pipefail
           cat > release-notes.md <<'EOF'
-          沃飞翼览 PDF 0.10.22 企业定制版，基于 PdfCraft 开源项目（MIT OR Apache-2.0）。
+          沃飞翼览 PDF 1.0.1 企业定制版，基于上游 PdfCraft v0.14.0（MIT OR Apache-2.0）。
 
           - Per-user installation path: %LOCALAPPDATA%\pdfcraft
           - Non-roaming app data: %LOCALAPPDATA%\pdfcraft\PdfCraftData
@@ -210,12 +210,12 @@ jobs:
           - These packages are unsigned unless Windows signing is separately configured.
           EOF
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" --title '沃飞翼览 PDF v0.10.22 - 中文编辑字体一致性修复 (x64/x86)' --notes-file release-notes.md --prerelease
+            gh release edit "$RELEASE_TAG" --title '沃飞翼览 PDF v1.0.1 - 上游 v0.14.0 功能更新 (x64/x86)' --notes-file release-notes.md
             gh release upload "$RELEASE_TAG" dist/msi/*.msi --clobber
           else
             gh release create "$RELEASE_TAG" dist/msi/*.msi \
               --target "$GITHUB_SHA" \
-              --title '沃飞翼览 PDF v0.10.22 - 中文编辑字体一致性修复 (x64/x86)' \
+              --title '沃飞翼览 PDF v1.0.1 - 上游 v0.14.0 功能更新 (x64/x86)' \
               --notes-file release-notes.md \
-              --prerelease --latest=false
+             
           fi
