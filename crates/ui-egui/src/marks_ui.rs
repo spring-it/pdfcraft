@@ -221,6 +221,8 @@ const WATERMARK_PREVIEW_COLUMN_MAX_WIDTH: f32 = 600.0;
 const WATERMARK_COLUMN_GAP: f32 = 20.0;
 fn watermark_preview_height(viewport_height: f32) -> f32 {
     (viewport_height - 230.0).clamp(WATERMARK_PREVIEW_MIN_HEIGHT, WATERMARK_PREVIEW_HEIGHT)
+}
+
 /// The live preview is a schematic, not a pixel-exact PDF raster. Widen very narrow/tall
 /// page mockups so the watermark is easier to inspect without increasing the modal height.
 /// This only changes the preview drawing; the saved PDF page geometry is untouched.
@@ -236,11 +238,15 @@ fn watermark_preview_page_size(size: (f64, f64), canvas_size: egui::Vec2) -> egu
         .max(page_height * WATERMARK_PREVIEW_MIN_PAGE_ASPECT)
         .min(max_width);
     vec2(page_width, page_height)
+}
+
 fn watermark_column_widths(available_width: f32) -> (f32, f32) {
     let right = (available_width - (WATERMARK_SETTINGS_COLUMN_WIDTH + WATERMARK_COLUMN_GAP))
         .clamp(WATERMARK_PREVIEW_COLUMN_MIN_WIDTH, WATERMARK_PREVIEW_COLUMN_MAX_WIDTH);
     let left = (available_width - right - WATERMARK_COLUMN_GAP).clamp(180.0, WATERMARK_SETTINGS_COLUMN_WIDTH);
     (left, right)
+}
+
 /// A responsive two-column watermark dialog: settings on the left, live preview on the right.
 fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool, bool) {
     let Some((i, id)) = app.active_ids() else { return (false, true) };
@@ -415,9 +421,12 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                 std::sync::Arc::new(b),
             ));
         });
+    }
     #[cfg(target_arch = "wasm32")]
     let _ = browse;
     (apply, cancel)
+}
+
 /// Large page preview used by the two-column watermark dialog.
 fn watermark_preview(
     ui: &mut egui::Ui,
