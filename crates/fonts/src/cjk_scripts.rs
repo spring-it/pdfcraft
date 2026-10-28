@@ -3,7 +3,7 @@
 //! `#[path]` and the crate's tests use it as a module, so the two can't drift.
 
 /// The CJK families embedded whole: the Japanese faces documents and the renderer use.
-pub const WHOLE_CJK_FAMILIES: [&str; 3] = ["Shippori Mincho", "BIZ UDPGothic", "BIZ UDMincho"];
+pub const WHOLE_CJK_FAMILIES: [&str; 4] = ["Shippori Mincho", "BIZ UDPGothic", "BIZ UDMincho", "LXGW WenKai TC"];
 
 /// Any other CJK face over this size is left out.
 pub const MAX_OTHER_CJK_BYTES: u64 = 4 << 20;
