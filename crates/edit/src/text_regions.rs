@@ -19,7 +19,7 @@ struct FallbackGroup {
 fn chinese_text_run(text: &str) -> bool {
     let mut has_han = false;
     for ch in text.chars() {
-        if is_han_character(ch) {
+        if matches!(ch, '\u{3400}'..='\u{4DBF}' | '\u{4E00}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '\u{20000}'..='\u{2FA1F}') {
             has_han = true;
         } else if !matches!(ch, ' ' | '　' | '、' | '。' | '，' | '：' | '；' | '？' | '！' | '（' | '）' | '《' | '》' | '“' | '”') {
             return false;
