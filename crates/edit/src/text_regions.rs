@@ -586,6 +586,7 @@ pub(super) fn rewrite_styled_block(
             && style.family.is_none()
             && style.bold.is_none()
             && overrides.get(&index).is_none_or(|r| r.resource.is_none() && r.family.is_none())
+            && !style.ranges.iter().any(|r| r.range.start < range.end && range.start < r.range.end && (r.resource.is_some() || r.family.is_some()))
             && !metrics.get(&source.font).is_some_and(|m| source_encodes(m, span_text))
             && pdfcraft_fonts::ui_chinese_fonts().iter().any(|face| span_text.chars().all(|ch| japanese_glyph_from(face, ch).is_ok()));
         if uniform_han {
