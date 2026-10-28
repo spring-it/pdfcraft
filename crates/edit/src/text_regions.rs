@@ -26,6 +26,8 @@ fn chinese_text_run(text: &str) -> bool {
         }
     }
     has_han
+}
+
 fn same_plane(a: &TextLine, b: &TextLine) -> bool {
     let at = Matrix(a.origin.tm).then(&Matrix(a.origin.ctm));
     let bt = Matrix(b.origin.tm).then(&Matrix(b.origin.ctm));
