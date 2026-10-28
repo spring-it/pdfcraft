@@ -2217,8 +2217,14 @@ fn no_hebrew_font() -> EditError {
 /// (#2593: the Japanese faces have no қ, ғ, ҳ, ә, ө, ү, ұ or һ).
 fn type3_faces(text: &str, family: crate::added::Family, bold: bool, prefer_chinese: bool) -> Result<(Vec<&'static CraftFont>, bool), EditError> {
     let japanese = pdfcraft_fonts::document_japanese_fonts_for_style(family == crate::added::Family::Times, bold);
-    let chinese = pdfcraft_fonts::ui_chinese_fonts();
+    let mut chinese = pdfcraft_fonts::ui_chinese_fonts();
     let latin = pdfcraft_fonts::document_latin_fonts(bold);
+    let has_han = text.chars().any(is_han_character);
+    // Chinese faces are useful for Han glyphs (and preferred for a Chinese source font), but
+    // must not steal Latin/Cyrillic-only replacements from the bundled Inter face.
+    if !has_han && !prefer_chinese {
+        chinese.clear();
+    }
     if !text.chars().any(crate::bidi::is_hebrew) {
         let faces: Vec<&'static CraftFont> = if prefer_chinese {
             chinese.into_iter().chain(japanese).chain(latin).collect()
@@ -2258,8 +2264,31 @@ fn type3_font(
     // Keep one preferred face for the generated font's metadata, but choose the outline for each
     // character independently. A line can mix characters covered by different licensed faces;
     // refusing the whole edit just because the preferred face lacks one glyph was too restrictive.
-    let face = if hebrew { faces.first().copied() } else { fallback_face(&faces, &chars, |face, ch| japanese_glyph_from(face, ch).is_ok()) }
-        .ok_or_else(|| no_fallback_font(text))?;
+    let has_han = chars.iter().any(|ch| is_han_character(*ch));
+    let japanese = pdfcraft_fonts::document_japanese_fonts_for_style(family == crate::added::Family::Times, bold);
+    let chinese = pdfcraft_fonts::ui_chinese_fonts();
+    let latin = pdfcraft_fonts::document_latin_fonts(bold);
+    // Pick the Type 3 face from the script-appropriate family, then use the full ordered list
+    // below for per-glyph fallback. Otherwise a Chinese font that happens to cover Latin and
+    // Cyrillic can incorrectly become the face for an entire Japanese or Uzbek edit.
+    let preferred_faces = if prefer_chinese {
+        chinese
+    } else if has_han {
+        japanese
+    } else if japanese.iter().any(|face| chars.iter().all(|ch| japanese_glyph_from(face, *ch).is_ok())) {
+        japanese
+    } else if latin.iter().any(|face| chars.iter().all(|ch| japanese_glyph_from(face, *ch).is_ok())) {
+        latin
+    } else {
+        japanese
+    };
+    let face = if hebrew {
+        faces.first().copied()
+    } else {
+        fallback_face(&preferred_faces, &chars, |face, ch| japanese_glyph_from(face, ch).is_ok())
+            .or_else(|| faces.first().copied())
+    }
+    .ok_or_else(|| no_fallback_font(text))?;
     let per_font = max_glyphs.clamp(1, MAX_TYPE3_GLYPHS);
     let ordered_faces: Vec<_> = std::iter::once(face)
         .chain(faces.iter().copied().filter(|candidate| !std::ptr::eq(*candidate, face)))
