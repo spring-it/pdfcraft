@@ -7860,6 +7860,7 @@ trailer << /Root 1 0 R >>
     /// substitutes a CJK face; PdfCraft previously fell back to a Latin font, leaving Han glyphs
     /// blank. This exercises both the local Windows font selection and the full PDF render path.
     #[cfg(windows)]
+    #[test]
     fn non_embedded_simplified_chinese_cid_fonts_draw_with_windows_system_font() {
         use hayro::hayro_interpret::font::FallbackFontQuery;
         use hayro::hayro_interpret::hayro_cmap::CharacterCollection;
@@ -7884,6 +7885,8 @@ trailer << /Root 1 0 R >>
         let page = render_first_page(pdf.into_bytes());
         let inked = page.rgba.as_chunks::<4>().0.iter().filter(|pixel| pixel[0] < 128).count();
         assert!(inked > 1000, "Chinese text should render with the Windows CJK fallback, got {inked} dark pixels");
+    }
+
     /// Half-width katakana are common in Japanese documents set in a non-embedded Mincho font
     /// such as HeiseiMin-W3. The Mincho substitute must have those glyphs: one that lacks them
     /// (Shippori Mincho) draws them as .notdef.
