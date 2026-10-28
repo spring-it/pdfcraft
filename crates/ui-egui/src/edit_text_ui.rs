@@ -1953,6 +1953,9 @@ mod tests {
         assert!(defs.families[&FontFamily::Proportional].iter().all(|name| !name.starts_with("pdf-editor-han-")));
         assert!(defs.families[&FontFamily::Monospace].iter().all(|name| !name.starts_with("pdf-editor-han-")));
         ctx.end_pass().textures_delta.clear();
+    }
+
+    #[test]
     fn a_loaded_font_is_applied_to_the_paragraph_being_edited() {
         // Loading a font used to only register it on the page: the paragraph kept its source
         // face until the font was found again in the document-font menu (#2591).
