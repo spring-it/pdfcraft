@@ -2034,8 +2034,11 @@ mod prompt_button_tests {
     }
 }
 
+#[cfg(test)]
 mod watermark_dialog_layout_tests {
     use super::*;
+
+    #[test]
     fn watermark_dialog_keeps_enough_width_for_settings_and_preview() {
         assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1600.0), 1320.0);
         assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Background), 1600.0), 720.0);
@@ -2043,3 +2046,5 @@ mod watermark_dialog_layout_tests {
         assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1000.0), 952.0);
         assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 900.0), 852.0);
         assert!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1600.0) >= 640.0 + 600.0 + 40.0);
+    }
+}
