@@ -2219,10 +2219,11 @@ fn type3_faces(text: &str, family: crate::added::Family, bold: bool, prefer_chin
     let japanese = pdfcraft_fonts::document_japanese_fonts_for_style(family == crate::added::Family::Times, bold);
     let mut chinese = pdfcraft_fonts::ui_chinese_fonts();
     let latin = pdfcraft_fonts::document_latin_fonts(bold);
-    let has_han = text.chars().any(is_han_character);
-    // Chinese faces are useful for Han glyphs (and preferred for a Chinese source font), but
-    // must not steal Latin/Cyrillic-only replacements from the bundled Inter face.
-    if !has_han && !prefer_chinese {
+    // Chinese fallback faces are used only when the source font identifies Chinese text.
+    // Otherwise a Chinese font can steal a Han glyph from the Japanese document face and split
+    // a mixed Japanese/Cyrillic run into extra Type 3 subsets. Pure Chinese styled spans take the
+    // dedicated uniform-Han path in text_regions.rs.
+    if !prefer_chinese {
         chinese.clear();
     }
     if !text.chars().any(crate::bidi::is_hebrew) {
