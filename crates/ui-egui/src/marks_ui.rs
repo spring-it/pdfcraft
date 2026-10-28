@@ -510,6 +510,8 @@ fn watermark_preview(
         }
     };
     if wm.behind { draw_mark(); draw_content(); } else { draw_content(); draw_mark(); }
+}
+
 /// The dialog for `kind`; returns (apply, cancel).
 pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: MarkKind) -> (bool, bool) {
     if kind == MarkKind::Watermark {
