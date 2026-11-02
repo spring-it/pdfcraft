@@ -11,6 +11,11 @@ fn windows_chinese_menus_keep_legacy_fallback_stack() {
         assert!(defs.families.values().all(|stack| !stack.contains(&name)), "PDF editing face {name} must not enter a menu font stack");
     }
     assert_eq!(defs.families[&FontFamily::Proportional][0], "Inter");
+    #[cfg(not(target_arch = "wasm32"))]
+    assert!(matches!(
+        installed_fallback_need(CjkPreference::SimplifiedChinese, false),
+        crate::system_fonts::Need::Hans
+    ));
 }
 
 /// Arabic and Kurdish switch stock chrome to mirror from the right; English switches it

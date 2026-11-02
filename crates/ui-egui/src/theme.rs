@@ -289,7 +289,9 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
                 stack.push(name.to_owned());
             }
         }
-        let need = installed_fallback_need(cjk, !pdfcraft_fonts::ui_chinese_fonts().is_empty());
+        // Chinese document fonts are editor-only (see font_definitions_for_platform):
+        // menus must use the installed OS CJK face, not the bundled WenKai document face.
+        let need = installed_fallback_need(cjk, false);
         if let Some(data) = fallback(need) {
             fonts.font_data.insert(SYSTEM_FALLBACK.to_owned(), data);
             let japanese: Vec<String> = pdfcraft_fonts::ui_japanese_fonts().iter().map(|f| f.name()).collect();
