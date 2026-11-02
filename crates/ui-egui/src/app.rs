@@ -30,6 +30,13 @@ impl Default for PdfCraftApp {
     }
 }
 
+fn branded_window_title(name: Option<String>, mark: &str) -> String {
+    name.map_or_else(
+        || "沃飞翼览 PDF".to_owned(),
+        |name| format!("{name}{mark} — 沃飞翼览 PDF"),
+    )
+}
+
 impl PdfCraftApp {
     /// The window's title and, on the web, the page's, from the active document (#3640). Done in
     /// `logic` too, which also runs while the window or browser tab is hidden: a document opened
@@ -41,8 +48,10 @@ impl PdfCraftApp {
         let dirty = self.active.is_some_and(|i| self.has_unsaved_work(i));
         let mark = if dirty { " •" } else { "" };
         let titled = |name: Option<String>| {
-            name.or_else(|| self.combine_showing().then(|| tl!("Combine files").to_owned()))
-                .map_or_else(|| "沃飞翼览 PDF".to_owned(), |name| format!("{name}{mark} — 沃飞翼览 PDF"))
+            branded_window_title(
+                name.or_else(|| self.combine_showing().then(|| tl!("Combine files").to_owned())),
+                mark,
+            )
         };
         let title = titled(self.active.and_then(|i| crate::canvas::tab_label(self, i)));
         // The web page's title is what an embedding host reads to tell which file opened, so it
@@ -695,13 +704,18 @@ impl eframe::App for PdfCraftApp {
 
 #[cfg(test)]
 mod branded_title_tests {
-    use super::*;
+    use super::branded_window_title;
 
     #[test]
     fn branded_window_title_uses_company_name_without_a_document() {
+        assert_eq!(branded_window_title(None, ""), "沃飞翼览 PDF");
+    }
+
+    #[test]
+    fn branded_window_title_keeps_document_name_and_dirty_marker() {
         assert_eq!(
-            None::<String>.map_or_else(|| "沃飞翼览 PDF".to_owned(), |name| format!("{name} — 沃飞翼览 PDF")),
-            "沃飞翼览 PDF",
+            branded_window_title(Some("合同.pdf".to_owned()), " •"),
+            "合同.pdf • — 沃飞翼览 PDF",
         );
     }
 }
