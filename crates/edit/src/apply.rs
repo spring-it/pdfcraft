@@ -1,5 +1,5 @@
 use super::marks::{
-    Background, Context, HeaderFooter, MarkKind, Watermark, add_picture_resource, bates_start, expand, matrix_number, n, picture, rgb, shrink_matrix,
+    Background, Context, HeaderFooter, MarkKind, Watermark, add_picture_resource, bates_start, expand, matrix_number, n, picture, picture_at, rgb, shrink_matrix,
 };
 use super::place::{
     END, Isolation, add_page_resources, add_resources, begin, check, check_on_top, contents, free_font_name, isolation, page_fonts, page_list, place,
@@ -136,6 +136,10 @@ pub fn add_watermark(doc: &mut Document, pages: &[usize], wm: &Watermark, replac
         && wm.rotation.is_finite()
         && wm.font_size.is_finite()
         && wm.font_size >= 0.0
+        && wm.scale.is_finite()
+        && wm.raster_dpi.is_finite()
+        && wm.raster_dpi >= 0.0
+        && wm.tile_gap.iter().all(|gap| gap.is_finite())
         && wm.offset.iter().all(|o| o.is_finite()))
     {
         return Err(EditError::Invalid("invalid watermark settings".into()));
@@ -156,7 +160,47 @@ pub fn add_watermark(doc: &mut Document, pages: &[usize], wm: &Watermark, replac
         if let Some(src) = &wm.source {
             let mut content = begin(MarkKind::Watermark, "Watermark", page.view_matrix(doc));
             content.push_str(&format!("/PCGS{} gs\n", (opacity * 100.0).round() as i64));
-            content.push_str(&picture(src, (w, h), wm.scale, wm.rotation, wm.offset));
+            // Native file marks keep their fit-to-page scaling. Rasterized text carries its own
+            // DPI and keeps the requested point size on every page.
+            if wm.tile || wm.raster_dpi > 0.0 {
+                let (dw, dh) = if wm.raster_dpi > 0.0 {
+                    (src.size.0 / wm.raster_dpi, src.size.1 / wm.raster_dpi)
+                } else {
+                    let k = (w / src.size.0.max(0.01)).min(h / src.size.1.max(0.01)) * wm.scale.clamp(0.05, 1.0);
+                    (src.size.0 * k, src.size.1 * k)
+                };
+                if !(dw.is_finite() && dh.is_finite() && dw > 0.0 && dh > 0.0) {
+                    return Err(EditError::Invalid("invalid watermark image size".into()));
+                }
+                if wm.tile {
+                    let step_x = (dw + wm.tile_gap[0].clamp(20.0, 260.0)).max(20.0);
+                    let step_y = (dh + wm.tile_gap[1].clamp(20.0, 260.0)).max(20.0);
+                    let mut draw_count = 0usize;
+                    let mut row = 0usize;
+                    let mut y = -dh;
+                    while y <= h + dh && draw_count < 1200 {
+                        let shift = if row % 2 == 0 { 0.0 } else { step_x / 2.0 };
+                        let mut x = -dw;
+                        while x <= w + dw && draw_count < 1200 {
+                            content.push_str(&picture_at(src, (dw, dh), wm.rotation,
+                                (x + shift + wm.offset[0], y + wm.offset[1])));
+                            x += step_x;
+                            draw_count += 1;
+                        }
+                        y += step_y;
+                        row += 1;
+                    }
+                } else {
+                    let col = usize::from(wm.position.min(8)) % 3;
+                    let row = usize::from(wm.position.min(8)) / 3;
+                    let xs = [34.0 + dw / 2.0, w / 2.0, w - 34.0 - dw / 2.0];
+                    let ys = [h - 34.0 - dh / 2.0, h / 2.0, 34.0 + dh / 2.0];
+                    content.push_str(&picture_at(src, (dw, dh), wm.rotation,
+                        (xs[col] + wm.offset[0], ys[row] + wm.offset[1])));
+                }
+            } else {
+                content.push_str(&picture(src, (w, h), wm.scale, wm.rotation, wm.offset));
+            }
             content.push_str(END);
             add_resources(doc, &page, Some(opacity), None)?;
             add_picture_resource(doc, &page_list(doc)[i].clone(), src)?;
