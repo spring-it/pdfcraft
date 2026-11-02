@@ -157,7 +157,7 @@ impl CharacterPreparation<'_> {
                 && style.family.is_none()
                 && style.bold.is_none()
                 && overrides.get(&index).is_none_or(|r| r.resource.is_none() && r.family.is_none())
-                && !metrics.get(&source.font).is_some_and(|m| source_encodes(m, span_text))
+                && !resolver.metrics.get(&source.font).is_some_and(|m| source_encodes(m, span_text))
                 && pdfcraft_fonts::ui_chinese_fonts().iter().any(|face| span_text.chars().all(|ch| japanese_glyph_from(face, ch).is_ok()));
             if uniform_han {
                 let han_chars: Vec<char> = span_text.chars().collect();
