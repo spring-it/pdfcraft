@@ -4,7 +4,7 @@
 //! and any `Arab`, `Telu`, `Hebr`, `Thai` or `Deva` face), to keep the web build within hosting
 //! limits (Cloudflare Pages: 25 MiB per file). Native builds also read the optional
 //! `fonts/simplified-chinese-manifest.txt` (LXGW WenKai Lite); it is never embedded on wasm.
-//! `CRAFT_FONTS_REQUIRED` makes both the checkout and that native manifest required.
+//! `CRAFT_FONTS_REQUIRED` requires the checkout and a native Hans face; it may come from the separate manifest or the main manifest.
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -46,7 +46,12 @@ fn craft_fonts(dir: &std::path::Path, required: bool) -> Result<String, String> 
         println!("cargo::rerun-if-changed={}", chinese.display());
         match chinese.try_exists() {
             Ok(false) if required => {
-                return Err(format!("{}: CRAFT_FONTS_REQUIRED is set but the simplified-Chinese font manifest is missing", chinese.display()));
+                // The company font checkout keeps LXGW WenKai TC in its main manifest instead of
+                // shipping the optional simplified-chinese-manifest.txt. It is a native Hans face
+                // and is embedded under the same 16 MiB native-only CJK cap.
+                if !out.contains("family: \\"LXGW WenKai TC\\"") {
+                    return Err(format!("{}: CRAFT_FONTS_REQUIRED is set but neither the simplified-Chinese manifest nor an embedded LXGW WenKai TC Hans face is available", chinese.display()));
+                }
             }
             Ok(false) => {}
             Ok(true) => match manifest(dir, &chinese, false, required) {

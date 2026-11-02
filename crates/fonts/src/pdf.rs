@@ -530,13 +530,21 @@ fn be(b: &[u8]) -> u32 {
     b.iter().fold(0u32, |a, x| (a << 8) | u32::from(*x))
 }
 
-fn style_from_name(name: &str) -> (bool, bool) {
+fn style_from_name(name: &str) -> (Option<bool>, bool) {
     let name = name.to_ascii_lowercase();
     let name = name.split_once('+').map_or(name.as_str(), |(_, n)| n);
-    (
-        ["bold", "black", "heavy", "semibold", "demi"].iter().any(|s| name.contains(s)),
-        ["italic", "oblique", "slanted"].iter().any(|s| name.contains(s)),
-    )
+    let named_bold = ["bold", "black", "heavy", "semibold", "demi", "extrabold", "ultrabold"]
+        .iter()
+        .any(|s| name.contains(s));
+    let tokens: Vec<_> = name.split(|c: char| !c.is_ascii_alphanumeric()).collect();
+    let named_regular = ["regular", "normal", "book", "light", "thin", "extralight", "ultralight", "roman", "medium", "plain"]
+        .iter()
+        .any(|s| tokens.contains(s))
+        || ["regular", "normal", "light", "thin", "extralight", "ultralight", "roman", "medium", "plain"]
+            .iter()
+            .any(|s| name.ends_with(s));
+    let bold = if named_bold { Some(true) } else if named_regular { Some(false) } else { None };
+    (bold, ["italic", "oblique", "slanted"].iter().any(|s| name.contains(s)))
 }
 
 /// The next entry of a `begin… end…` section: `N` tokens, or `None` at its `end` operator or
@@ -644,8 +652,10 @@ impl Metrics {
             })
             .unwrap_or_default();
         m.subset = base.len() > 7 && base.as_bytes()[6] == b'+' && base[..6].bytes().all(|b| b.is_ascii_uppercase());
-        let (bold, italic) = style_from_name(&base);
-        m.bold |= bold;
+        let (named_bold, italic) = style_from_name(&base);
+        if let Some(named_bold) = named_bold {
+            m.bold = named_bold;
+        }
         m.italic |= italic;
         m.base_font = base;
         if m.composite && m.subset {
@@ -766,7 +776,9 @@ impl Metrics {
             let angle = d.get(b"ItalicAngle").and_then(|v| doc.resolve(v).as_f64()).unwrap_or(0.0);
             let weight = d.get(b"FontWeight").and_then(|v| doc.resolve(v).as_f64()).unwrap_or(0.0);
             m.italic |= flags & 64 != 0 || angle.abs() > 0.1;
-            m.bold |= flags & 262_144 != 0 || weight >= 600.0;
+            // PDF ForceBold is a small-size rendering hint, not the face's actual weight.
+            // Treating it as a bold face makes regular CJK text appear bold in the editor.
+            m.bold |= weight >= 600.0;
             // Type 3 descriptors may omit these metrics; the glyph-space FontBBox still applies.
             let ascent = d.get(b"Ascent").and_then(|v| doc.resolve(v).as_f64());
             let descent = d.get(b"Descent").and_then(|v| doc.resolve(v).as_f64());

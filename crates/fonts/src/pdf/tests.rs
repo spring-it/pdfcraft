@@ -200,10 +200,36 @@ fn metrics_with_flags(flags: Option<Object>) -> Metrics {
     Metrics::from_dict(&doc, &font)
 }
 
+fn metrics_with_descriptor(base_font: Option<&str>, flags: Option<Object>, weight: Option<f64>) -> Metrics {
+    let mut doc = Document::new_empty();
+    let mut descriptor = Dict::new();
+    if let Some(flags) = flags { descriptor.set(b"Flags".to_vec(), flags); }
+    if let Some(weight) = weight { descriptor.set(b"FontWeight".to_vec(), Object::Real(weight)); }
+    let mut entries = vec![("Subtype", Object::name("TrueType")), ("FontDescriptor", Object::Dict(descriptor))];
+    if let Some(name) = base_font { entries.push(("BaseFont", Object::name(name))); }
+    let font = font(&mut doc, entries);
+    Metrics::from_dict(&doc, &font)
+}
+
+#[test]
+fn explicit_regular_font_name_overrides_inconsistent_descriptor_weight() {
+    let metrics = metrics_with_descriptor(Some("ABCDEF+STSong-Light"), Some(Object::Int(262_144)), Some(700.0));
+    assert!(!metrics.bold, "an explicit Light face must not be changed to bold by a bad descriptor");
+}
+
+#[test]
+fn explicit_bold_name_and_unambiguous_font_weight_are_still_honoured() {
+    let named = metrics_with_descriptor(Some("ABCDEF+STSong-Bold"), None, None);
+    assert!(named.bold);
+    let weighted = metrics_with_descriptor(Some("CustomFace"), None, Some(700.0));
+    assert!(weighted.bold);
+}
+
 #[test]
 fn font_descriptor_flags_stay_within_the_u32_domain() {
     let valid = metrics_with_flags(Some(Object::Int(64 | 262_144)));
-    assert!(valid.italic && valid.bold);
+    assert!(valid.italic);
+    assert!(!valid.bold, "ForceBold is a rendering hint, not proof that the face is bold");
 
     for flags in [Some(Object::Int(-1)), Some(Object::Int(4_294_967_296)), Some(Object::Bool(true)), None] {
         let metrics = metrics_with_flags(flags);

@@ -10,7 +10,7 @@ pub const MAX_OTHER_CJK_BYTES: u64 = 4 << 20;
 
 /// Reviewed native-only UI fallback from the separate Chinese manifest.
 /// It is never included in the browser payload. Other CJK families keep the 4 MiB cap.
-pub const NATIVE_UI_CJK_FAMILIES: [&str; 1] = ["LXGW WenKai Lite"];
+pub const NATIVE_UI_CJK_FAMILIES: [&str; 2] = ["LXGW WenKai Lite", "LXGW WenKai TC"];
 pub const MAX_NATIVE_UI_CJK_BYTES: u64 = 16 << 20;
 
 /// ISO 15924 codes of the Han, Japanese and Korean scripts, Hangul on its own included.

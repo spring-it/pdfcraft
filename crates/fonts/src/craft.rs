@@ -371,5 +371,8 @@ mod tests {
             assert_eq!(ui.first().map(|f| f.family), Some("BIZ UDPGothic"));
         }
         assert_eq!(document_japanese_font().map(|f| f.family), Some("Shippori Mincho"));
+        if std::env::var_os("CRAFT_FONTS_REQUIRED").is_some() {
+            assert!(ui_zh.iter().any(|f| f.family == "LXGW WenKai TC"), "the pinned company font manifest must embed its Simplified Chinese fallback");
+        }
     }
 }
