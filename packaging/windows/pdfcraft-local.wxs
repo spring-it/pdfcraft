@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Per-user, no-wizard MSI for the dedicated 沃飞翼览 PDF v1.0.1 release.
+     A distinct UpgradeCode keeps it independent from the original per-machine MSI.
+     The portable marker keeps settings, logs, recovery and IDs under LocalAppData,
+     not in the roaming AppData folder. No HKLM registrations or system associations. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="沃飞翼览 PDF"
+      Manufacturer="沃飞长空科技股份有限公司"
+      Version="$(var.Version)"
+      UpgradeCode="C39A5F0D-991B-414B-9B9C-18E689194C73"
+      Scope="perUser"
+      Compressed="yes"
+      Language="1033">
+    <SummaryInformation Description="沃飞翼览 PDF 当前用户本地安装" Manufacturer="沃飞长空科技股份有限公司" />
+    <Launch Condition="ALLUSERS &lt;&gt; 1 OR (Installed AND REMOVE = &quot;ALL&quot;)"
+        Message="此安装包仅供当前 Windows 用户安装，请勿设置 ALLUSERS=1。" />
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+        DowngradeErrorMessage="已安装更新版本的沃飞翼览 PDF，不能降级安装。" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <Icon Id="PdfcraftIcon.ico" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="PdfcraftIcon.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/spring-it/pdfcraft" />
+
+    <!-- LocalAppDataFolder resolves to the installing user's %LOCALAPPDATA%. -->
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="pdfcraft">
+        <Directory Id="ModelsFolder" Name="models" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+    <!-- DesktopFolder resolves to the current user desktop, including redirected desktops. -->
+    <StandardDirectory Id="DesktopFolder" />
+
+    <!-- Intentionally no UIRef or authored dialogs. msiexec /qn requires zero clicks. -->
+    <Feature Id="Main" Title="PdfCraft" Level="1">
+      <ComponentGroupRef Id="PdfcraftLocalFiles" />
+      <ComponentGroupRef Id="PdfcraftModels" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="PdfcraftLocalFiles" Directory="INSTALLFOLDER">
+      <!-- ICE38: components installed in a user-profile directory use HKCU key paths. -->
+      <Component Id="PdfcraftLocalApp" Guid="A855963E-BFCC-414E-BB0E-909A77F89240">
+        <File Id="PdfcraftExe" Source="$(var.BinDir)\pdfcraft.exe" />
+        <File Id="PdfcraftCliExe" Source="$(var.BinDir)\pdfcraft-cli.exe" />
+        <File Id="PdfcraftPortableMarker" Source="$(var.BinDir)\portable.txt" />
+        <File Id="PdfcraftDocumentIconLicense" Source="$(var.BinDir)\LICENSE-document.txt" />
+        <File Id="PdfcraftIconSourceLicense" Source="$(var.BinDir)\LICENSE-source.txt" />
+        <File Id="PdfcraftLucideLicense" Source="$(var.BinDir)\LICENSE-lucide.txt" />
+        <File Id="PdfcraftOflInterLicense" Source="$(var.BinDir)\OFL-Inter.txt" />
+        <File Id="PdfcraftOflJetBrainsMonoLicense" Source="$(var.BinDir)\OFL-JetBrainsMono.txt" />
+        <File Id="PdfcraftOflDancingScriptLicense" Source="$(var.BinDir)\OFL-DancingScript.txt" />
+        <File Id="PdfcraftCraftFontsAttribution" Source="$(var.BinDir)\CRAFT-FONTS-ATTRIBUTION.md" />
+        <File Id="PdfcraftOflShipporiMincho" Source="$(var.BinDir)\OFL-ShipporiMincho.txt" />
+        <File Id="PdfcraftOflBizUdpgothic" Source="$(var.BinDir)\OFL-BIZ-UDPGothic.txt" />
+        <File Id="PdfcraftOflBizUdmincho" Source="$(var.BinDir)\OFL-BIZ-UDMincho.txt" />
+        <File Id="PdfcraftOflLxgwWenKaiTc" Source="$(var.BinDir)\OFL-LXGW-WenKai-TC.txt" />
+        <File Id="PdfcraftOflNotoSansArabic" Source="$(var.BinDir)\OFL-NotoSansArabic.txt" />
+        <File Id="PdfcraftOflNotoSansThai" Source="$(var.BinDir)\OFL-NotoSansThai.txt" />
+        <File Id="PdfcraftMitLicense" Source="$(var.BinDir)\LICENSE-MIT" />
+        <File Id="PdfcraftApacheLicense" Source="$(var.BinDir)\LICENSE-APACHE" />
+        <File Id="PdfcraftNotice" Source="$(var.BinDir)\NOTICE" />
+        <RegistryValue Root="HKCU" Key="Software\PdfCraft\LocalMsi" Name="Payload"
+            Type="integer" Value="1" KeyPath="yes" />
+        <!-- Remove only an empty directory; PdfCraftData is user data and must survive uninstall. -->
+        <RemoveFolder Id="RemoveLocalAppFolder" Directory="INSTALLFOLDER" On="uninstall" />
+      </Component>
+      <!-- Per-user PDF "Open with" registration. FriendlyAppName is the label Windows
+           displays in the Open with picker; registering OpenWithProgids offers the app
+           without changing the user's existing default PDF handler. -->
+      <Component Id="PdfcraftLocalPdfRegistration" Guid="5C20F3A1-DA2D-49D2-9F1D-12A5B1A4F911">
+        <RegistryValue Root="HKCU" Key="Software\Classes\Applications\pdfcraft.exe"
+            Name="FriendlyAppName" Type="string" Value="沃飞翼览 PDF" KeyPath="yes" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\Applications\pdfcraft.exe\DefaultIcon"
+            Type="string" Value="&quot;[#PdfcraftExe]&quot;,-2" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\Applications\pdfcraft.exe\SupportedTypes"
+            Name=".pdf" Type="string" Value="" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\Applications\pdfcraft.exe\shell\open\command"
+            Type="string" Value="&quot;[#PdfcraftExe]&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\PdfCraft.Document"
+            Type="string" Value="沃飞翼览 PDF 文档" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\PdfCraft.Document\DefaultIcon"
+            Type="string" Value="&quot;[#PdfcraftExe]&quot;,-2" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\PdfCraft.Document\shell\open\command"
+            Type="string" Value="&quot;[#PdfcraftExe]&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\.pdf\OpenWithProgids"
+            Name="PdfCraft.Document" Type="string" Value="" />
+        <RegistryValue Root="HKCU" Key="Software\PdfCraft\Capabilities"
+            Name="ApplicationName" Type="string" Value="沃飞翼览 PDF" />
+        <RegistryValue Root="HKCU" Key="Software\PdfCraft\Capabilities"
+            Name="ApplicationDescription" Type="string" Value="沃飞翼览 PDF 阅读与处理工具" />
+        <RegistryValue Root="HKCU" Key="Software\PdfCraft\Capabilities"
+            Name="ApplicationIcon" Type="string" Value="&quot;[#PdfcraftExe]&quot;,-2" />
+        <RegistryValue Root="HKCU" Key="Software\PdfCraft\Capabilities\FileAssociations"
+            Name=".pdf" Type="string" Value="PdfCraft.Document" />
+        <RegistryValue Root="HKCU" Key="Software\RegisteredApplications"
+            Name="沃飞翼览 PDF" Type="string" Value="Software\PdfCraft\Capabilities" />
+      </Component>
+      <!-- Always create a per-user desktop shortcut, including during /qn installs. -->
+      <Component Id="PdfcraftLocalDesktopShortcut" Directory="DesktopFolder" Guid="*">
+        <Shortcut Id="DesktopShortcut" Name="沃飞翼览 PDF"
+            Description="沃飞翼览 PDF 阅读器" Target="[#PdfcraftExe]"
+            WorkingDirectory="INSTALLFOLDER" Icon="PdfcraftIcon.ico" IconIndex="0" />
+        <RegistryValue Root="HKCU" Key="Software\PdfCraft\LocalMsi" Name="DesktopShortcut"
+            Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="PdfcraftLocalShortcut" Directory="ProgramMenuFolder" Guid="*">
+        <Shortcut Id="StartMenuShortcut" Name="沃飞翼览 PDF"
+            Description="沃飞长空内部 PDF 阅读与处理工具" Target="[#PdfcraftExe]"
+            WorkingDirectory="INSTALLFOLDER" Icon="PdfcraftIcon.ico" IconIndex="0" />
+        <RegistryValue Root="HKCU" Key="Software\PdfCraft\LocalMsi" Name="StartMenu"
+            Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>
