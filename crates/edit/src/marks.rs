@@ -136,6 +136,15 @@ pub struct Watermark {
     pub behind: bool,
     /// Offset of the centre from the page centre, in points (right, up).
     pub offset: [f64; 2],
+    /// Repeat the watermark across the selected pages instead of placing it once.
+    pub tile: bool,
+    /// Extra space between tiled watermarks, in points (horizontal, vertical).
+    pub tile_gap: [f64; 2],
+    /// Single watermark location in a 3x3 grid: 0=top-left, 4=center, 8=bottom-right.
+    pub position: u8,
+    /// Text rendered into a PNG at this many pixels per PDF point.
+    /// Zero keeps original image/PDF mark sizing behaviour.
+    pub raster_dpi: f64,
 }
 
 impl Watermark {
@@ -161,6 +170,10 @@ impl Default for Watermark {
             rotation: 45.0,
             behind: false,
             offset: [0.0; 2],
+            tile: false,
+            tile_gap: [90.0, 90.0],
+            position: 4,
+            raster_dpi: 0.0,
         }
     }
 }
@@ -203,6 +216,26 @@ pub(crate) fn picture(src: &MarkSource, page: (f64, f64), scale: f64, rotation: 
         format!("{} 0 0 {} {} {} cm", n(k), n(k), n(-dw / 2.0), n(-dh / 2.0))
     };
     format!("{} {} {} {} {} {} cm\n{place}\n/PCPic{} Do\n", n(c), n(s), n(-s), n(c), n(cx), n(cy), src.xobject.num)
+}
+
+/// Draw one picture at a specific physical size, in PDF display-space points.
+/// The same XObject can be reused by many tiled positions without duplicating its bytes.
+pub(crate) fn picture_at(src: &MarkSource, size: (f64, f64), rotation: f64, centre: (f64, f64)) -> String {
+    let (dw, dh) = size;
+    let (sn, cs) = rotation.to_radians().sin_cos();
+    let (cx, cy) = centre;
+    let place = if src.image {
+        format!("{} 0 0 {} {} {} cm", n(dw), n(dh), n(-dw / 2.0), n(-dh / 2.0))
+    } else {
+        let (sw, sh) = (src.size.0.max(0.01), src.size.1.max(0.01));
+        let sx = dw / sw;
+        let sy = dh / sh;
+        format!("{} 0 0 {} {} {} cm", n(sx), n(sy), n(-dw / 2.0), n(-dh / 2.0))
+    };
+    format!(
+        "q\\n{} {} {} {} {} {} cm\\n{place}\\n/PCPic{} Do\\nQ\\n",
+        n(cs), n(sn), n(-sn), n(cs), n(cx), n(cy), src.xobject.num
+    )
 }
 
 /// Register a mark picture in the page's own resources (`/PCPic<num>`).
