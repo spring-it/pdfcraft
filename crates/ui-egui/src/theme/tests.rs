@@ -1,5 +1,18 @@
 use super::*;
 
+/// Chinese document-editing faces stay out of the application menu stacks on Windows. The OS
+/// sans font remains the menu fallback, as before the bundled WenKai document face was added.
+#[test]
+fn windows_chinese_menus_keep_legacy_fallback_stack() {
+    let defs = font_definitions_for_platform(true, FontPolicyPlatform::Windows);
+    for face in pdfcraft_fonts::ui_chinese_fonts() {
+        let name = face.name();
+        assert!(!defs.font_data.contains_key(&name), "PDF editing face {name} must not replace Windows menu fonts");
+        assert!(defs.families.values().all(|stack| !stack.contains(&name)), "PDF editing face {name} must not enter a menu font stack");
+    }
+    assert_eq!(defs.families[&FontFamily::Proportional][0], "Inter");
+}
+
 /// Arabic and Kurdish switch stock chrome to mirror from the right; English switches it
 /// back. This is the `Style::right_to_left` half of the explicit RTL policy.
 #[test]
