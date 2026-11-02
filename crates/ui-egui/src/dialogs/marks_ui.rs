@@ -1388,6 +1388,32 @@ mod company_watermark_tests {
     }
 
     #[test]
+    fn watermark_preview_column_grows_without_changing_settings_width() {
+        assert_eq!(watermark_column_widths(1280.0), (640.0, 600.0));
+        assert_eq!(watermark_column_widths(1120.0), (640.0, 460.0));
+        assert_eq!(watermark_column_widths(900.0), (640.0, 240.0));
+    }
+
+    #[test]
+    fn watermark_preview_widens_tall_page_mockup_without_changing_output_geometry() {
+        let canvas = vec2(600.0, 670.0);
+        let tall = watermark_preview_page_size((80.0, 200.0), canvas);
+        assert!(
+            tall.x / tall.y >= WATERMARK_PREVIEW_MIN_PAGE_ASPECT - 0.001,
+            "tall page preview should use the wider schematic aspect ratio: {tall:?}"
+        );
+        assert!(tall.x <= 576.0, "preview page must stay inside the canvas: {tall:?}");
+        assert!(tall.y <= 646.0, "preview page must stay inside the canvas: {tall:?}");
+
+        let normal_portrait = watermark_preview_page_size((612.0, 792.0), canvas);
+        let original_aspect = 612.0_f32 / 792.0_f32;
+        assert!(
+            (normal_portrait.x / normal_portrait.y - original_aspect).abs() < 0.01,
+            "ordinary portrait pages should retain their natural aspect ratio: {normal_portrait:?}"
+        );
+    }
+
+    #[test]
     fn watermark_dialog_defaults_match_reference() {
         let d = MarksDraft::default();
         assert_eq!(d.wm.text, "内部资料");
