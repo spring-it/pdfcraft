@@ -1,12 +1,19 @@
-PdfCraft app icon (pdfcraft.svg, pdfcraft-small.svg and every file derived from them in this
-directory: pdfcraft-1024.png, pdfcraft.icns, pdfcraft.ico, hicolor/).
+PdfCraft custom red PDF application/document icon family
 
-Original artwork made for this project by the project owner, drawn in ArtCraft and vectorised for
-PdfCraft (no third-party material). Licensed like the rest of PdfCraft, under either of
+Covered files include pdfcraft-source.webp, pdfcraft.svg, pdfcraft-small.svg,
+pdfcraft-1024.png, pdfcraft.icns, pdfcraft.ico, pdfcraft-document.svg,
+pdfcraft-document.ico and the derived files under hicolor/.
 
-  * Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
-  * MIT license (https://opensource.org/licenses/MIT)
+The artwork was generated with ChatGPT from prompts provided by the requester
+and supplied by the requester. The requester licenses this artwork under
+either the MIT License or the Apache License, Version 2.0, at the recipient's
+option, to the extent permitted by applicable law. See LICENSE-source.txt for
+the complete provenance and licensing note. The full license texts are the
+repository-root LICENSE-MIT and LICENSE-APACHE files.
 
-at your option.
+The artwork is not the original ArtCraft artwork and is not an ArtCraft mark.
+No OpenAI endorsement or affiliation is implied. ChatGPT output may not be
+unique, and this note does not guarantee the absence of third-party rights.
 
-Regenerate the derived files with packaging/icons.sh.
+Other bundled UI icons and dependencies retain their own licenses. See the
+repository-root NOTICE, ATTRIBUTION.toml and assets/icons/LICENSE-lucide.txt.

@@ -1,55 +1,29 @@
-# PdfCraft app icon
+# ChatGPT-generated red PDF app icon
 
-<img src="pdfcraft-small.svg" alt="PdfCraft app icon: an engraved lion's head on red" width="128">
+This red PDF app/document icon family is used by the customized **沃飞翼览 PDF v0.10.16** release. The master artwork was generated with ChatGPT from prompts provided by the requester, then supplied by the requester for this project.
 
-**Creature:** a lion, in a frontal head-and-shoulders portrait, mane running off the bottom of the tile.
+<img src="pdfcraft-small.svg" alt="ChatGPT-generated red PDF document icon" width="128">
 
-**Style:** an engraving (woodcut-weight line work) portrait in the Crafting Apps "owl template" framing:
-a full-bleed colour field, no frame or roundel, the animal looking at the viewer and filling the tile.
+The master artwork and its platform variants use the same supplied output. The icon family is separate from the original ArtCraft brand assets and is not an ArtCraft mark. The project does not claim OpenAI endorsement or affiliation.
 
-**Palette:** exactly three colours.
+## Platform resources
 
-| Colour | Hex | Used for |
-|---|---|---|
-| Ink | `#0b0b0c` | line work and the figure's contour |
-| Paper | `#efe9dc` | the figure (the lion's silhouette) |
-| PdfCraft red (app colour) | `#b70228` | the full-bleed field |
-
-**Tile:** `viewBox="0 0 512 512"`, a rounded square with `rx=112` that clips everything. Windows and Linux
-icons use the full-bleed tile. macOS icons put it on Apple's grid (an 824 px body centred on a transparent
-1024 px canvas).
-
-**Provenance:** the project owner's original drawing, made in ArtCraft (2880 px, keyed to the palette), then
-vectorised (potrace; no filtering or warping).
-Licence: [LICENSE.txt](LICENSE.txt) (`MIT OR Apache-2.0`, like the repo).
-
-## Files
-
-| File | What it is |
+| Path | Used by |
 |---|---|
-| `pdfcraft.svg` | the master vector (traced at 2048 px); every PNG, `.ico` and `.icns` is rendered from it |
-| `pdfcraft-small.svg` | a lighter vector (traced at 1024 px) for places where size matters, such as this README |
-| `pdfcraft-1024.png` | 1024 px on Apple's grid; also the runtime Dock icon on macOS |
-| `pdfcraft.icns` | macOS icon (16–1024 px) |
-| `pdfcraft.ico` | Windows icon (16–256 px), embedded in `pdfcraft.exe` by `apps/pdfcraft/build.rs` |
-| `pdfcraft-document.svg` | Windows PDF file icon master: a Lucide document outline, red badge and outlined PDF lettering; no font dependency |
-| `pdfcraft-document.ico` | Windows PDF file icon (16–256 px), embedded as resource 2 in `pdfcraft.exe` |
-| `hicolor/<n>x<n>/apps/ai.storyteller.pdfcraft.png` | Linux hicolor theme, 16–512 px; the 256 px one is the runtime icon on Windows and Linux |
-| `hicolor/scalable/apps/ai.storyteller.pdfcraft.svg` | Linux scalable icon (copy of the master) |
+| `pdfcraft-source.webp` | Source copy of the ChatGPT-generated artwork |
+| `pdfcraft.svg`, `pdfcraft-small.svg` | SVG wrappers containing the supplied raster artwork |
+| `pdfcraft-1024.png`, `pdfcraft.icns` | macOS dock, window and app bundle icon |
+| `pdfcraft.ico` | Windows executable resources, desktop and Start menu shortcuts, MSI Add/Remove Programs icon |
+| `pdfcraft-document.svg`, `pdfcraft-document.ico` | Same red artwork for Windows PDF document icon resource 2 |
+| `hicolor/<size>x<size>/apps/ai.storyteller.pdfcraft.png` | Linux theme icons (16–512 px); 256 px variant is also used by the in-app runtime |
+| `hicolor/scalable/apps/ai.storyteller.pdfcraft.svg` | Linux scalable icon |
 
-Where it shows: `apps/pdfcraft/src/main.rs` sets the window icon (Dock, taskbar, Alt-Tab, launcher) and the
-Wayland app id `ai.storyteller.pdfcraft`; `packaging/linux/ai.storyteller.pdfcraft.desktop` names the
-hicolor icon.
+The Windows executable embeds `pdfcraft.ico` and `pdfcraft-document.ico` in `apps/pdfcraft/build.rs`. The MSI uses the same artwork for its application icon, shortcuts and PDF file association. The application runtime uses the PNG variants in `apps/pdfcraft/src/main.rs`.
 
-Windows PDF files use resource 2 (`"pdfcraft.exe",-2`) when PdfCraft is chosen as the default
-reader; the app keeps resource 1. The document outline is adapted from Lucide `file-text`
-1.49.0 (ISC); its badge and outlined lettering are original (`MIT OR Apache-2.0`), covered by
-[LICENSE-document.txt](LICENSE-document.txt). Both icons are embedded, requiring no runtime
-sidecar. This provides a file type icon; first-page thumbnails still need a thumbnail provider.
+To regenerate the platform variants from the master SVG, use `packaging/icons.sh` with `resvg`. The ICNS is also generated on macOS. The asset paths and hashes are recorded in `ATTRIBUTION.toml`.
 
-## Regenerate
+## Provenance and licence
 
-```sh
-packaging/icons.sh        # needs resvg and python3; iconutil (macOS) for the .icns
-cargo xtask assets        # then update the sha256 values in ATTRIBUTION.toml and run with --write
-```
+The requester licenses this icon artwork family under **MIT OR Apache-2.0**, at the recipient's option, to the extent permitted by applicable law. See [LICENSE-source.txt](LICENSE-source.txt) for the provenance, license grant and OpenAI Terms of Use caveat. The Windows installer includes that file as `LICENSE-source.txt`, along with the root project licenses, `NOTICE`, `LICENSE-document.txt` and the separate UI icon notice `LICENSE-lucide.txt`.
+
+ChatGPT output may not be unique. This record is not a guarantee that no third-party rights could apply; the requester remains responsible for evaluating the output and its intended use.
