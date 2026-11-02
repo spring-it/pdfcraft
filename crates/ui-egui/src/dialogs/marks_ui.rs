@@ -518,6 +518,13 @@ fn watermark_column_widths(available_width: f32) -> (f32, f32) {
 
 /// A responsive two-column watermark dialog: settings on the left, live preview on the right.
 fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool, bool) {
+    // Watermark defaults/templates are Chinese even when the interface language is English.
+    // Use the licensed company CJK fallback only inside this dialog; generic menus keep OS CJK.
+    for font in ui.style_mut().text_styles.values_mut() {
+        if font.family != egui::FontFamily::Monospace {
+            font.family = egui::FontFamily::Name("company".into());
+        }
+    }
     let Some((i, id)) = app.active_ids() else { return (false, true) };
     let current = app.views[i].current;
     let Some(doc) = app.session.get(id) else { return (false, true) };
@@ -526,7 +533,7 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     let d = &mut app.marks_draft;
     let mut browse = false;
     let title = if d.replace { "更新水印" } else { "添加水印" };
-    ui.label(egui::RichText::new(title).font(theme::semibold(18.0)));
+    ui.label(egui::RichText::new(title).font(theme::brand(18.0)));
     ui.add_space(8.0);
     // Keep the modal content-sized: no expanding ScrollArea and no max height.
     // The live preview grows on standard windows and scales down on short viewports.
@@ -625,7 +632,7 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                     ui.add(egui::DragValue::new(&mut d.wm.offset[1]).range(-MAX_OFFSET..=MAX_OFFSET).suffix(" pt"));
                 });
                 ui.add_space(8.0);
-                ui.label(egui::RichText::new("页面范围选项").font(theme::semibold(12.5)));
+                ui.label(egui::RichText::new("页面范围选项").font(theme::brand(12.5)));
                 d.range.ui(ui, count);
                 ui.checkbox(&mut d.custom_enabled, "自定义页码");
                 if d.custom_enabled {
@@ -650,7 +657,7 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
         ui.vertical(|right| {
             right.set_min_width(right_width);
             right.set_max_width(right_width);
-            right.label(egui::RichText::new("实时预览").font(theme::semibold(15.0)));
+            right.label(egui::RichText::new("实时预览").font(theme::brand(15.0)));
             right.add_space(6.0);
             let file_name = d.file.as_ref().filter(|_| d.use_file).map(|f| f.0.as_str());
             watermark_preview(right, t, page, &d.wm, file_name, d.use_file, right_width, preview_height);
@@ -720,7 +727,7 @@ fn watermark_preview(
     painter.rect_stroke(page, CornerRadius::same(2), Stroke::new(1.0, t.border), egui::StrokeKind::Outside);
     let draw_content = || {
         painter.text(page.min + vec2(16.0, 20.0), egui::Align2::LEFT_CENTER, "PDF 文档预览",
-            egui::FontId::proportional(10.0), Color32::from_gray(190));
+            theme::company(10.0), Color32::from_gray(190));
         for row in 0..12 {
             let y = page.top() + 42.0 + row as f32 * ((page.height() - 60.0) / 12.0);
             let right = if row % 4 == 3 { page.right() - 60.0 } else { page.right() - 18.0 };
@@ -735,16 +742,16 @@ fn watermark_preview(
                 let centre = page.center() + vec2(wm.offset[0] as f32 * scale, -wm.offset[1] as f32 * scale);
                 let rect = Rect::from_center_size(centre, vec2(side, side));
                 painter.rect_stroke(rect, CornerRadius::ZERO, Stroke::new(1.0, Color32::GRAY), egui::StrokeKind::Inside);
-                painter.text(centre, egui::Align2::CENTER_CENTER, name, egui::FontId::proportional(10.0), Color32::GRAY);
+                painter.text(centre, egui::Align2::CENTER_CENTER, name, theme::company(10.0), Color32::GRAY);
             } else {
                 painter.text(page.center(), egui::Align2::CENTER_CENTER, "请选择水印文件",
-                    egui::FontId::proportional(12.0), Color32::GRAY);
+                    theme::company(12.0), Color32::GRAY);
             }
             return;
         }
         let text = if wm.text.trim().is_empty() { "内部资料" } else { wm.text.trim() };
         let size = (wm.font_size as f32 * scale).max(5.0);
-        let galley = painter.layout_no_wrap(text.to_string(), egui::FontId::proportional(size),
+        let galley = painter.layout_no_wrap(text.to_string(), theme::company(size),
             rgb32(wm.color).gamma_multiply(wm.opacity as f32));
         let angle = -(wm.rotation as f32).to_radians();
         let half = galley.size() / 2.0;
