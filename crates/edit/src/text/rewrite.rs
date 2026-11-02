@@ -867,7 +867,7 @@ pub(crate) fn rewrite_block_from(
     let right_edge = if anchored_right { (b.rect[2] - b.rect[0]).max(0.0) } else { width };
     let movement = drawn_movement(emit.ctm, dx, dy)?;
     let tm = emit_text_matrix(o, emit)?;
-    let type3 = if !reuse && needs_type3(&flat) { Some(type3_font(doc, &mut fonts_res, &flat, family, bold, max_glyphs)?) } else { None };
+    let type3 = if !reuse && needs_type3(&flat) { Some(type3_font(doc, &mut fonts_res, &flat, family, bold, max_glyphs, chinese_font_name(&b.base_font))?) } else { None };
     let source_metrics = source.metrics.as_ref().filter(|_| reuse);
     let advance = Advance {
         source: source_metrics,
