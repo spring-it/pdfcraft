@@ -1540,7 +1540,7 @@ fn dialog_about(ui: &mut egui::Ui, req: &mut Pending) -> bool {
             ui.horizontal(|ui| {
                 widgets::artcraft_mark(ui, 40.0);
                 ui.vertical(|ui| {
-                    ui.label(egui::RichText::new("沃飞翼览 PDF").font(theme::semibold(20.0)));
+                    ui.label(egui::RichText::new("沃飞翼览 PDF").font(theme::brand(20.0)));
                     ui.label(crate::i18n::fmt(tl!("Version {v}"), &[("v", &pdfcraft_engine::build_info::version())]));
                 });
             });

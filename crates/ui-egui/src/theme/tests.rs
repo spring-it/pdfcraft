@@ -1,14 +1,28 @@
 use super::*;
 
-/// Chinese document-editing faces stay out of the application menu stacks on Windows. The OS
-/// sans font remains the menu fallback, as before the bundled WenKai document face was added.
+/// Chinese document-editing faces stay out of generic application/menu stacks on Windows.
+/// Only company-specific copy uses them as a final glyph fallback; normal menus still use OS CJK.
 #[test]
 fn windows_chinese_menus_keep_legacy_fallback_stack() {
     let defs = font_definitions_for_platform(true, FontPolicyPlatform::Windows);
+    let company = &defs.families[&FontFamily::Name("company".into())];
+    let brand = &defs.families[&FontFamily::Name("brand".into())];
+    let general = [
+        FontFamily::Proportional,
+        FontFamily::Monospace,
+        FontFamily::Name("medium".into()),
+        FontFamily::Name("semibold".into()),
+    ];
+    assert_eq!(company.first().map(String::as_str), Some("Inter"));
+    assert_eq!(brand.first().map(String::as_str), Some("Inter-SemiBold"));
     for face in pdfcraft_fonts::ui_chinese_fonts() {
         let name = face.name();
-        assert!(!defs.font_data.contains_key(&name), "PDF editing face {name} must not replace Windows menu fonts");
-        assert!(defs.families.values().all(|stack| !stack.contains(&name)), "PDF editing face {name} must not enter a menu font stack");
+        assert!(defs.font_data.contains_key(&name), "company copy fallback {name} must be registered");
+        assert!(company.contains(&name), "company copy must be able to draw {name}");
+        assert!(brand.contains(&name), "brand copy must be able to draw {name}");
+        for family in &general {
+            assert!(!defs.families[family].contains(&name), "PDF editing face {name} must not enter a generic menu stack");
+        }
     }
     assert_eq!(defs.families[&FontFamily::Proportional][0], "Inter");
     #[cfg(not(target_arch = "wasm32"))]

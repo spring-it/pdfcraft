@@ -76,11 +76,11 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         egui::Frame::NONE.inner_margin(egui::Margin { left: 36, right: 36, top: 28, bottom: 28 }).show(ui, |ui| {
-            ui.label(egui::RichText::new("沃飞翼览 PDF").font(theme::semibold(24.0)));
+            ui.label(egui::RichText::new("沃飞翼览 PDF").font(theme::brand(24.0)));
             ui.label(
                 egui::RichText::new("企业定制 PDF 工作台。文档处理在本地完成，保护公司资料安全。")
                     .color(t.text_muted)
-                    .font(theme::regular(14.0)),
+                    .font(theme::company(14.0)),
             );
             ui.add_space(14.0);
             egui::Frame::NONE
@@ -90,8 +90,8 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 .inner_margin(egui::Margin::same(14))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.label(egui::RichText::new("沃飞翼览 PDF 企业定制版").font(theme::semibold(15.0)));
-                    ui.label(egui::RichText::new("支持 PDF 阅读、文本编辑、页面管理和企业水印。").color(t.text_muted));
+                    ui.label(egui::RichText::new("沃飞翼览 PDF 企业定制版").font(theme::brand(15.0)));
+                    ui.label(egui::RichText::new("支持 PDF 阅读、文本编辑、页面管理和企业水印。").color(t.text_muted).font(theme::company(13.0)));
                 });
             ui.add_space(22.0);
 
@@ -185,7 +185,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 });
                 ui.add_space(8.0);
                 if app.recent.is_empty() {
-                    ui.label(egui::RichText::new(tl!("Files you open in 沃飞翼览 PDF appear here. Drop a PDF anywhere to open it.")).color(t.text_muted));
+                    ui.label(egui::RichText::new(tl!("Files you open in 沃飞翼览 PDF appear here. Drop a PDF anywhere to open it.")).color(t.text_muted).font(theme::company(14.0)));
                 }
             }
             let mut open = None;

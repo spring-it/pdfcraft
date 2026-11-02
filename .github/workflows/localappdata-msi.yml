@@ -196,6 +196,7 @@ jobs:
           test "$(find dist/msi -maxdepth 1 -type f -name '*.msi' | wc -l)" -eq 2
 
       - name: Publish release
+        if: github.ref == 'refs/heads/v1.0.2-develop'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

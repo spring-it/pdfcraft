@@ -296,9 +296,12 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
             fonts.font_data.insert(SYSTEM_FALLBACK.to_owned(), data);
             let japanese: Vec<String> = pdfcraft_fonts::ui_japanese_fonts().iter().map(|f| f.name()).collect();
             for stack in fonts.families.values_mut() {
+                let chinese: Vec<String> = pdfcraft_fonts::ui_chinese_fonts().iter().map(|f| f.name()).collect();
                 let at = match need {
-                    Need::Other => None,
-                    Need::Hans | Need::Hant => stack.iter().position(|n| japanese.contains(n)),
+                    // Prefer an installed OS face before the bundled last-resort brand glyphs.
+                    Need::Other => stack.iter().position(|n| chinese.contains(n)),
+                    Need::Hans | Need::Hant => stack.iter().position(|n| japanese.contains(n))
+                        .or_else(|| stack.iter().position(|n| chinese.contains(n))),
                 };
                 stack.insert(at.unwrap_or(stack.len()), SYSTEM_FALLBACK.to_owned());
             }
@@ -373,9 +376,9 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
     // Keep missing Latin/Cyrillic letters in the app's own faces (for example Bulgarian ѝ,
     // absent from JetBrains Mono), before egui's defaults or optional system/CJK fallbacks.
     fonts.families.entry(FontFamily::Monospace).or_default().insert(1, "Inter".to_owned());
-    // Keep Chinese document-writing fonts out of the interface. Before 0.10.17 the
-    // Chinese menus used the installed OS sans font, not a bundled WenKai face.
-    // Japanese UI fallback faces remain available to Japanese labels.
+    // Keep Chinese document-writing fonts out of the general interface/menu stacks.
+    // The company-specific labels get dedicated company and brand families below;
+    // their licensed Han face is only a last-resort glyph fallback for that copy.
     for face in pdfcraft_fonts::ui_cjk_fonts(prefer_hans) {
         if face.covers("Hans") || face.covers("Hant") {
             continue;
@@ -416,6 +419,26 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
         stack.extend(fallback.iter().cloned());
         fonts.families.insert(FontFamily::Name(fam.into()), stack);
     }
+
+    // The Chinese company name and its short descriptions are not menu labels. Give only
+    // those strings a dedicated last-resort Han fallback, leaving regular/semibold menus
+    // on the installed OS CJK font exactly as before.
+    let mut company = fallback.clone();
+    let mut brand = fonts.families[&FontFamily::Name("semibold".into())].clone();
+    for face in pdfcraft_fonts::ui_chinese_fonts() {
+        let name = face.name();
+        if !fonts.font_data.contains_key(&name) {
+            add(&mut fonts, &name, face.bytes);
+        }
+        if !company.contains(&name) {
+            company.push(name.clone());
+        }
+        if !brand.contains(&name) {
+            brand.push(name);
+        }
+    }
+    fonts.families.insert(FontFamily::Name("company".into()), company);
+    fonts.families.insert(FontFamily::Name("brand".into()), brand);
     fonts
 }
 
@@ -427,6 +450,15 @@ pub fn medium(size: f32) -> FontId {
 }
 pub fn semibold(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name("semibold".into()))
+}
+/// Font stack for company-specific copy: Inter first, with a licensed Han fallback for the
+/// Chinese product name and descriptions when the Windows installation has no CJK system face.
+pub fn company(size: f32) -> FontId {
+    FontId::new(size, FontFamily::Name("company".into()))
+}
+/// Semibold Latin branding with a last-resort Han fallback for the Chinese product name.
+pub fn brand(size: f32) -> FontId {
+    FontId::new(size, FontFamily::Name("brand".into()))
 }
 
 /// Install the palette, widget styling, text sizes and right-to-left flag for the chosen theme.

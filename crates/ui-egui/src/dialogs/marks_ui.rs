@@ -1122,8 +1122,8 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
     (apply, cancel)
 }
 
-/// The first character of the dialog's text that applying would refuse (the standard fonts can't
-/// draw it), as the engine decides it. Pictures draw no text.
+/// The first character of header/footer PDF text that applying would refuse (the standard fonts can't
+/// draw it), as the engine decides it. Watermark/background text is rasterized separately.
 fn undrawable(kind: MarkKind, d: &MarksDraft) -> Option<char> {
     match kind {
         MarkKind::HeaderFooter => d.hf.first_undrawable(),
@@ -1244,14 +1244,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn text_applying_would_refuse_is_caught_in_the_dialog() {
+    fn header_footer_refusal_is_caught_before_applying() {
         let mut d = MarksDraft::default();
         d.hf.text[5] = "Страница <<1>> из <<n>> / Page <<1>> of <<n>>".into();
         assert_eq!(undrawable(MarkKind::HeaderFooter, &d), Some('С'), "#2013: refused before OK, not after");
         d.hf.text[5] = "Page <<1>> of <<n>> — café".into();
         assert_eq!(undrawable(MarkKind::HeaderFooter, &d), None);
         d.wm.text = "ΑΠΟΡΡΗΤΟ".into();
-        assert_eq!(undrawable(MarkKind::Watermark, &d), Some('Α'));
+        assert_eq!(undrawable(MarkKind::Watermark, &d), None, "watermark text is rasterized instead of encoded with PDF standard fonts");
         d.use_file = true;
         assert_eq!(undrawable(MarkKind::Watermark, &d), None, "a picture watermark draws no text");
         assert_eq!(undrawable(MarkKind::Background, &d), None);
