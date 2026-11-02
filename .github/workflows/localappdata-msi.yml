@@ -5,6 +5,8 @@ on:
     branches:
       - v1.0.2-develop
       - upstream-v0.17.0-sync
+    paths-ignore:
+      - Cargo.lock
   workflow_dispatch:
 
 permissions:
@@ -93,6 +95,23 @@ jobs:
           name: v1.0.2-cargo-lock
           path: Cargo.lock
           if-no-files-found: error
+
+      - name: Commit refreshed v1.0.2 Cargo.lock
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "chore(lockfile): refresh v1.0.2 workspace resolution"
+            if ($LASTEXITCODE -ne 0) { throw 'Cargo.lock commit failed' }
+            git push origin "HEAD:$env:GITHUB_REF_NAME"
+            if ($LASTEXITCODE -ne 0) { throw 'Cargo.lock push failed' }
+          } else {
+            Write-Host 'Cargo.lock already matches the resolved v1.0.2 workspace.'
+          }
 
       - name: Install NASM for 32-bit native dependencies
         if: matrix.arch == 'x86'
