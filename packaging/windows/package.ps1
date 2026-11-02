@@ -68,26 +68,6 @@ if (-not $SkipBuild) {
 # Validate the upstream asset attribution manifest before packaging.
 Invoke-Native "Validate bundled asset attribution" { cargo xtask assets --check }
 
-# The S3 model origin can return HTTP 403 in some runner regions. Seed the exact
-# v0.17.0 official model bundle from the public GitHub release, then let xtask
-# verify the manifest SHA-256 values instead of attempting the blocked origin.
-if (-not (Test-Path (Join-Path $Models 'text-detection.rten'))) {
-    $ModelTemp = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }
-    $ModelArchive = Join-Path $ModelTemp 'pdfcraft-0.17.0-windows-x64-portable.zip'
-    $ModelExtract = Join-Path $ModelTemp 'pdfcraft-0.17.0-model-bundle'
-    if (-not (Test-Path $ModelArchive)) {
-        $ModelUrl = 'https://github.com/storytold/pdfcraft/releases/download/v0.17.0/pdfcraft-0.17.0-windows-x64-portable.zip'
-        Invoke-WebRequest -Uri $ModelUrl -OutFile $ModelArchive -MaximumRedirection 10
-    }
-    if (-not (Test-Path $ModelExtract)) {
-        Expand-Archive -LiteralPath $ModelArchive -DestinationPath $ModelExtract -Force
-    }
-    $ModelSource = Get-ChildItem -Path $ModelExtract -Directory -Recurse |
-        Where-Object { $_.Name -eq 'models' } | Select-Object -First 1
-    if (-not $ModelSource) { throw 'The official v0.17.0 portable archive did not contain its models directory' }
-    New-Item -ItemType Directory -Force -Path $Models | Out-Null
-    Copy-Item -Path (Join-Path $ModelSource.FullName '*') -Destination $Models -Recurse -Force
-}
   Invoke-Native "cargo build ($Target)" { cargo build --release --locked -p pdfcraft -p pdfcraft-cli --target $Target }
 }
 
@@ -158,6 +138,29 @@ if ($LocalAppDataMsi) { Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Stag
 # the MSI and the portable zip take the whole folder, so new models ship without naming them here.
 $Models = Join-Path $Stage 'models'
 New-Item -ItemType Directory -Force -Path $Models | Out-Null
+
+# The S3 model origin can return HTTP 403 in some runner regions. Seed the exact
+# v0.17.0 official model bundle from the public GitHub release, then let xtask
+# verify each manifest SHA-256 and licence before packaging.
+if (-not (Test-Path (Join-Path $Models 'text-detection.rten'))) {
+  $ModelTemp = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }
+  $ModelArchive = Join-Path $ModelTemp 'pdfcraft-0.17.0-windows-x64-portable.zip'
+  $ModelExtract = Join-Path $ModelTemp 'pdfcraft-0.17.0-model-bundle'
+  if (-not (Test-Path $ModelArchive)) {
+    $ModelUrl = 'https://github.com/storytold/pdfcraft/releases/download/v0.17.0/pdfcraft-0.17.0-windows-x64-portable.zip'
+    Invoke-WebRequest -Uri $ModelUrl -OutFile $ModelArchive -MaximumRedirection 10
+    if (-not (Test-Path $ModelArchive)) { throw 'Could not download the official v0.17.0 model bundle' }
+  }
+  if (-not (Test-Path $ModelExtract)) {
+    Expand-Archive -LiteralPath $ModelArchive -DestinationPath $ModelExtract -Force
+  }
+  $ModelSource = Get-ChildItem -Path $ModelExtract -Directory -Recurse |
+    Where-Object { $_.Name -eq 'models' } | Select-Object -First 1
+  if (-not $ModelSource -or -not (Test-Path (Join-Path $ModelSource.FullName 'text-detection.rten'))) {
+    throw 'The official v0.17.0 portable archive did not contain its verified models directory'
+  }
+  Copy-Item -Path (Join-Path $ModelSource.FullName '*') -Destination $Models -Recurse -Force
+}
 Push-Location $Root
 try { Invoke-Native 'cargo xtask models' { cargo xtask models $Models } } finally { Pop-Location }
 Remove-Item -Force (Join-Path $Models '*.part') -ErrorAction SilentlyContinue
