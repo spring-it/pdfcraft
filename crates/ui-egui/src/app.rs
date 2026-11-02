@@ -42,7 +42,7 @@ impl PdfCraftApp {
         let mark = if dirty { " •" } else { "" };
         let titled = |name: Option<String>| {
             name.or_else(|| self.combine_showing().then(|| tl!("Combine files").to_owned()))
-                .map_or_else(|| "PdfCraft".to_owned(), |name| format!("{name}{mark} — PdfCraft"))
+                .map_or_else(|| "沃飞翼览 PDF".to_owned(), |name| format!("{name}{mark} — 沃飞翼览 PDF"))
         };
         let title = titled(self.active.and_then(|i| crate::canvas::tab_label(self, i)));
         // The web page's title is what an embedding host reads to tell which file opened, so it
@@ -690,5 +690,18 @@ impl eframe::App for PdfCraftApp {
             control.finish_frame(&ctx, self);
             self.control = Some(control);
         }
+    }
+}
+
+#[cfg(test)]
+mod branded_title_tests {
+    use super::*;
+
+    #[test]
+    fn branded_window_title_uses_company_name_without_a_document() {
+        assert_eq!(
+            None::<String>.map_or_else(|| "沃飞翼览 PDF".to_owned(), |name| format!("{name} — 沃飞翼览 PDF")),
+            "沃飞翼览 PDF",
+        );
     }
 }

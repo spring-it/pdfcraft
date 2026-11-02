@@ -62,6 +62,7 @@ pub use redact_ui::{HiddenDraft, PagesDraft as RedactPagesDraft, RedactPrefs, Se
 pub mod i18n;
 pub mod theme;
 mod widgets;
+mod watermark_text;
 
 use pdfcraft_engine::{DocId, Session};
 

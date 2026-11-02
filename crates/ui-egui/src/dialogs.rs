@@ -24,6 +24,22 @@ use prompts::{full_screen_prompt, link_prompt, password, remote_link_prompt, sav
 
 const INFO_KEYS: [&str; 4] = ["Title", "Author", "Subject", "Keywords"];
 
+const WATERMARK_DIALOG_WIDTH: f32 = 1320.0;
+const MARKS_DIALOG_WIDTH: f32 = 720.0;
+
+fn dialog_width(dialog: Dialog, viewport_width: f32) -> f32 {
+    let desired = match dialog {
+        Dialog::Properties(_) => 640.0,
+        Dialog::Print => 820.0,
+        Dialog::FieldProps | Dialog::BulkFieldProps => 600.0,
+        Dialog::About => 780.0,
+        Dialog::Marks(pdfcraft_engine::MarkKind::Watermark) => WATERMARK_DIALOG_WIDTH,
+        Dialog::Marks(_) => MARKS_DIALOG_WIDTH,
+        _ => 520.0,
+    };
+    desired.min((viewport_width - 48.0).max(320.0))
+}
+
 /// What the dialog's widgets asked for this frame; acted on after the modal is drawn.
 #[derive(Default)]
 struct Pending {
@@ -123,14 +139,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     }
     let mut req = Pending::default();
     let modal = widgets::show_modal(ctx, "dialog", |ui| {
-        ui.set_width(match dialog {
-            Dialog::Properties(_) => 640.0,
-            Dialog::Print => 820.0,
-            Dialog::FieldProps | Dialog::BulkFieldProps => 600.0,
-            Dialog::About => 780.0,
-            Dialog::PinTool => 540.0,
-            _ => 520.0,
-        });
+        ui.set_width(dialog_width(dialog, ctx.content_rect().width()));
         if dialog_body(ui, app, dialog, &mut req) {
             dialog_footer(ui, app, dialog, &mut req);
         }
@@ -402,7 +411,6 @@ fn dialog_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, dialog: Dialog, req: &m
             return false;
         }
         Dialog::Marks(kind) => {
-            ui.set_width(720.0);
             let (go, cancel) = crate::marks_ui::body(ui, app, &t, kind);
             req.apply = go;
             req.marks_now = req.apply;
@@ -1896,8 +1904,10 @@ fn finish_edits(app: &mut PdfCraftApp, dialog: Dialog, req: &mut Pending) {
         && let (Dialog::Marks(kind), Some((_, id))) = (dialog, app.active_ids())
     {
         let count = app.session.get(id).map(|d| d.info.pages.len()).unwrap_or(0);
-        let edit = crate::marks_ui::edit(&app.marks_draft, kind, count);
-        app.apply_edit(edit);
+        match crate::marks_ui::edit(&app.marks_draft, kind, count) {
+            Ok(edit) => { app.apply_edit(edit); }
+            Err(error) => app.notify(error),
+        }
     }
     if req.boxes_now
         && let Some((i, id)) = app.active_ids()
@@ -2006,4 +2016,22 @@ fn draft_changes(app: &PdfCraftApp) -> Option<Vec<Edit>> {
 
 fn yes(b: bool) -> String {
     tl!(if b { "Yes" } else { "No" }).to_string()
+}
+
+
+#[cfg(test)]
+mod watermark_dialog_layout_tests {
+    use super::*;
+
+    #[test]
+    fn watermark_dialog_keeps_enough_width_for_settings_and_preview() {
+        assert!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1600.0) >= 640.0 + 600.0 + 40.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1600.0), 1320.0);
+    }
+
+    #[test]
+    fn watermark_dialog_width_clamps_to_the_available_viewport() {
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 900.0), 852.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 500.0), 452.0);
+    }
 }
