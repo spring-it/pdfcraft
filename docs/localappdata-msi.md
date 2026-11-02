@@ -1,4 +1,4 @@
-# 沃飞翼览 PDF v1.0.1：Windows 当前用户 MSI
+# 沃飞翼览 PDF v1.0.2：Windows 当前用户 MSI
 
 This development branch starts at the upstream `v0.17.0` tag. It builds **two MSI packages**, `x64` and `x86`, that install for the **current user** under:
 
@@ -15,8 +15,8 @@ This development branch starts at the upstream `v0.17.0` tag. It builds **two MS
 Use the MSI matching the Windows architecture:
 
 ```powershell
-msiexec.exe /i "pdfcraft-1.0.1-windows-x64-localappdata.msi" /qn /norestart /L*v "%TEMP%\pdfcraft-install.log"
-msiexec.exe /i "pdfcraft-1.0.1-windows-x86-localappdata.msi" /qn /norestart /L*v "%TEMP%\pdfcraft-install.log"
+msiexec.exe /i "pdfcraft-1.0.2-windows-x64-localappdata.msi" /qn /norestart /L*v "%TEMP%\pdfcraft-install.log"
+msiexec.exe /i "pdfcraft-1.0.2-windows-x86-localappdata.msi" /qn /norestart /L*v "%TEMP%\pdfcraft-install.log"
 ```
 
 Choose **one** of these commands, not both. `/qn` suppresses the installer UI entirely; no Next or Finish clicks are required. Without `/qn`, this MSI still has **no authored installer wizard**, although Windows may show system progress or security prompts depending on policy and file signing. The MSI does not need elevation for a normal per-user install.
@@ -24,7 +24,7 @@ Choose **one** of these commands, not both. `/qn` suppresses the installer UI en
 Uninstall without prompts:
 
 ```powershell
-msiexec.exe /x "pdfcraft-1.0.1-windows-x64-localappdata.msi" /qn /norestart
+msiexec.exe /x "pdfcraft-1.0.2-windows-x64-localappdata.msi" /qn /norestart
 ```
 
 For an x86 install use the x86 MSI in the uninstall command. Exit status 0 means success; 3010 means Windows requests a reboot.
@@ -41,7 +41,7 @@ The Windows workflow checks out `spring-it/craft-fonts` at pinned revision `fa03
 
 ## Build and release
 
-On the `v1.0.1-develop` branch, `.github/workflows/localappdata-msi.yml` builds both architectures on Windows runners, checks MSI metadata, tests real `/qn` installs and uninstalls, then publishes exactly the two MSI assets to the **release** `v1.0.1`. The original v0.10.1 release is not modified.
+On the `v1.0.2-develop` branch, `.github/workflows/localappdata-msi.yml` builds both architectures on Windows runners, checks MSI metadata, tests real `/qn` installs and uninstalls, then publishes exactly the two MSI assets to the **release** `v1.0.2`. The original v0.10.1 release is not modified.
 
 Locally, install Rust MSVC targets and WiX 5.0.2, then run:
 
@@ -53,7 +53,7 @@ pwsh packaging/windows/package.ps1 -Arch x86 -LocalAppDataMsi
 Signing is optional in the existing packaging script; if no signing credentials are configured, Windows may display SmartScreen warnings for the unsigned installers. `/qn` controls Windows Installer UI, not OS-enforced security warnings.
 
 
-## 沃飞翼览 PDF 定制版（v1.0.1）
+## 沃飞翼览 PDF 定制版（v1.0.2）
 
 - 用户可见名称为“沃飞翼览 PDF”；Rust crate、PDF CLI 和安装目录仍保持 pdfcraft，避免破坏原 MSI 升级路径。
 - 首页已去掉 ArtCraft 社区卡片；工具栏已去掉 Discord 入口；首页增加“添加水印”一键入口：未打开文档时先选择 PDF，成功打开后直接进入水印对话框。
