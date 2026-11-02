@@ -387,25 +387,9 @@ pub(super) fn type3_font(
 ) -> Result<Type3Fallback, EditError> {
     let (faces, hebrew) = type3_faces(text, family, bold, prefer_chinese)?;
     let chinese_fallbacks = pdfcraft_fonts::ui_chinese_fonts();
-    // For a non-Chinese source font, Japanese faces get first refusal, but a missing Han glyph
-    // may still come from a licensed Chinese face. Keep Chinese faces out of the styled paragraph
-    // chooser above; this fallback list is specific to single-line replacement.
-    let faces: Vec<&'static CraftFont> = if !prefer_chinese {
-        let japanese = pdfcraft_fonts::document_japanese_fonts_for_style(family == crate::added::Family::Times, bold);
-        let latin = pdfcraft_fonts::document_latin_fonts(bold);
-        if hebrew {
-            let hebrew_face = faces.first().copied().ok_or_else(no_hebrew_font)?;
-            std::iter::once(hebrew_face)
-                .chain(japanese)
-                .chain(chinese_fallbacks.iter().copied())
-                .chain(latin)
-                .collect()
-        } else {
-            japanese.into_iter().chain(chinese_fallbacks.iter().copied()).chain(latin).collect()
-        }
-    } else {
-        faces
-    };
+    // type3_faces includes Chinese fallback faces only for a Chinese source font. A Japanese
+    // document must not silently substitute a Chinese face for a glyph missing from its Japanese
+    // fonts: that changes the document's script appearance and makes an impossible edit succeed.
     // Each unique character once, in order of first appearance.
     let mut chars = Vec::new();
     let mut seen = std::collections::HashSet::new();
