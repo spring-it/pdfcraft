@@ -49,7 +49,7 @@ fn craft_fonts(dir: &std::path::Path, required: bool) -> Result<String, String> 
                 // The company font checkout keeps LXGW WenKai TC in its main manifest instead of
                 // shipping the optional simplified-chinese-manifest.txt. It is a native Hans face
                 // and is embedded under the same 16 MiB native-only CJK cap.
-                if !out.contains("family: \\"LXGW WenKai TC\\"") {
+                if !out.contains("family: \"LXGW WenKai TC\"") {
                     return Err(format!("{}: CRAFT_FONTS_REQUIRED is set but neither the simplified-Chinese manifest nor an embedded LXGW WenKai TC Hans face is available", chinese.display()));
                 }
             }
