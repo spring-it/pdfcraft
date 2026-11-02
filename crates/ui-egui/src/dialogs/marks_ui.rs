@@ -1363,3 +1363,53 @@ mod tests {
         }
     }
 }
+
+
+#[cfg(test)]
+mod company_watermark_tests {
+    use super::*;
+
+    #[test]
+    fn watermark_dialog_preview_scales_to_viewport_without_forcing_modal_height() {
+        for viewport_height in [480.0_f32, 600.0, 720.0, 900.0, 1080.0] {
+            let preview = watermark_preview_height(viewport_height);
+            assert!(
+                (WATERMARK_PREVIEW_MIN_HEIGHT..=WATERMARK_PREVIEW_HEIGHT).contains(&preview),
+                "preview height {preview} must stay within bounds for viewport {viewport_height}"
+            );
+        }
+        assert_eq!(watermark_preview_height(400.0), WATERMARK_PREVIEW_MIN_HEIGHT);
+        assert_eq!(watermark_preview_height(480.0), 250.0);
+        assert_eq!(watermark_preview_height(600.0), 370.0);
+        assert_eq!(watermark_preview_height(720.0), 490.0);
+        assert_eq!(watermark_preview_height(900.0), WATERMARK_PREVIEW_HEIGHT);
+        assert_eq!(watermark_preview_height(1080.0), WATERMARK_PREVIEW_HEIGHT);
+    }
+
+    #[test]
+    fn watermark_dialog_defaults_match_reference() {
+        let d = MarksDraft::default();
+        assert_eq!(d.wm.text, "内部资料");
+        assert_eq!(d.wm.font_size, 15.0);
+        assert_eq!(d.wm.opacity, 0.10);
+        assert_eq!(d.wm.rotation, -45.0);
+        assert_eq!(d.wm.color, [0.5, 0.5, 0.5]);
+        assert!(d.wm.tile);
+        assert_eq!(d.wm.tile_gap, [80.0, 120.0]);
+        assert_eq!(d.wm.offset, [0.0, 0.0]);
+        assert!(!d.wm.behind);
+        assert_eq!(d.font_family, 0);
+    }
+
+    #[test]
+    fn strict_custom_page_range_works_with_chinese_watermark() {
+        let mut d = MarksDraft::default();
+        d.custom_enabled = true;
+        d.custom_pages = "1-3， 5, 8-10".to_owned();
+        assert_eq!(selected_pages(&d, 10).unwrap(), [0, 1, 2, 4, 7, 8, 9]);
+        d.custom_pages = "11".to_owned();
+        assert!(selected_pages(&d, 10).is_err());
+        d.custom_pages = "4-2".to_owned();
+        assert!(selected_pages(&d, 10).is_err());
+    }
+}
