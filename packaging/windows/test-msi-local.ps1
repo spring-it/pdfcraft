@@ -69,7 +69,7 @@ $requiredModels = @('text-detection.onnx', 'text-recognition.onnx')
 $foundModels = @{}
 $requiredLicenseFiles = @('LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'LICENSE-document.txt', 'LICENSE-source.txt', 'LICENSE-lucide.txt', 'OFL-Inter.txt', 'OFL-JetBrainsMono.txt', 'OFL-DancingScript.txt', 'CRAFT-FONTS-ATTRIBUTION.md', 'OFL-ShipporiMincho.txt', 'OFL-BIZ-UDPGothic.txt', 'OFL-BIZ-UDMincho.txt', 'OFL-LXGW-WenKai-TC.txt', 'OFL-NotoSansArabic.txt', 'OFL-NotoSansThai.txt')
 $foundLicenseFiles = @{}
-$view = $Database.OpenView('SELECT \`File\`.\`FileName\`, \`Component\`.\`Directory_\` FROM \`File\`, \`Component\` WHERE \`File\`.\`Component_\` = \`Component\`.\`Component\`')
+$view = $Database.OpenView('SELECT `File`.`FileName`, `Component`.`Directory_` FROM `File`, `Component` WHERE `File`.`Component_` = `Component`.`Component`')
 try {
   [void] $view.Execute()
   while ($record = $view.Fetch()) {
