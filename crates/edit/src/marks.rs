@@ -233,7 +233,7 @@ pub(crate) fn picture_at(src: &MarkSource, size: (f64, f64), rotation: f64, cent
         format!("{} 0 0 {} {} {} cm", n(sx), n(sy), n(-dw / 2.0), n(-dh / 2.0))
     };
     format!(
-        "q\\n{} {} {} {} {} {} cm\\n{place}\\n/PCPic{} Do\\nQ\\n",
+        "q\n{} {} {} {} {} {} cm\n{place}\n/PCPic{} Do\nQ\n",
         n(cs), n(sn), n(-sn), n(cs), n(cx), n(cy), src.xobject.num
     )
 }
