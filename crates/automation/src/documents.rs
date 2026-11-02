@@ -531,6 +531,8 @@ impl Automation {
                         a.opt_num("offset_x")?.unwrap_or(0.0).clamp(-WATERMARK_MAX_OFFSET, WATERMARK_MAX_OFFSET),
                         a.opt_num("offset_y")?.unwrap_or(0.0).clamp(-WATERMARK_MAX_OFFSET, WATERMARK_MAX_OFFSET),
                     ],
+                    // Preserve the engine's defaults for the newer placement, tiling and raster options.
+                    ..d
                 };
                 Edit::AddWatermark { pages, settings: wm, replace, file }
             }
