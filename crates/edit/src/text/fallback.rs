@@ -339,19 +339,41 @@ fn no_hebrew_font() -> EditError {
 /// and the bundled Latin one for anything it lacks; other text takes the Japanese faces, and the
 /// bundled Latin face behind them, which covers the Latin, Greek and Cyrillic letters they lack
 /// (#2593: the Japanese faces have no қ, ғ, ҳ, ә, ө, ү, ұ or һ).
-pub(crate) fn type3_faces(text: &str, family: crate::added::Family, bold: bool) -> Result<(Vec<&'static CraftFont>, bool), EditError> {
+/// Recognise common Chinese source-font names so Han text keeps a Chinese document face.
+pub(super) fn chinese_font_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    ["simsun", "simhei", "stsong", "fangsong", "kaiti", "yahei", "dengxian", "mingliu", "jhenghei", "wenkai", "lxgw", "fzsong", "fangzheng", "songti", "heiti", "adobegb", "gb1"]
+        .iter().any(|part| lower.contains(part))
+}
+
+pub(crate) fn is_han_character(ch: char) -> bool {
+    matches!(ch, '\u{3400}'..='\u{4DBF}' | '\u{4E00}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '\u{20000}'..='\u{2FA1F}')
+}
+
+pub(crate) fn type3_faces(text: &str, family: crate::added::Family, bold: bool, prefer_chinese: bool) -> Result<(Vec<&'static CraftFont>, bool), EditError> {
     let japanese = pdfcraft_fonts::document_japanese_fonts_for_style(family == crate::added::Family::Times, bold);
+    let mut chinese = pdfcraft_fonts::ui_chinese_fonts();
     let latin = pdfcraft_fonts::document_latin_fonts(bold);
-    if !text.chars().any(crate::bidi::is_hebrew) {
-        return Ok((japanese.into_iter().chain(latin).collect(), false));
+    // Chinese fallback faces are used only when the source font identifies Chinese text.
+    // Otherwise a Chinese font can steal a Han glyph from the Japanese document face and split
+    // a mixed Japanese/Cyrillic run into extra Type 3 subsets. Pure Chinese styled spans take the
+    // dedicated uniform-Han path in text_regions.rs.
+    if !prefer_chinese {
+        chinese.clear();
     }
-    // Points are drawn on their letter with the font's positioning, which a one-glyph-per-
-    // character Type 3 font can't do; refuse rather than print them beside the letter.
+    if !text.chars().any(crate::bidi::is_hebrew) {
+        let faces: Vec<&'static CraftFont> = if prefer_chinese {
+            chinese.into_iter().chain(japanese).chain(latin).collect()
+        } else {
+            japanese.into_iter().chain(chinese).chain(latin).collect()
+        };
+        return Ok((faces, false));
+    }
     if text.chars().any(crate::bidi::is_hebrew_mark) {
         return Err(EditError::Invalid("Hebrew points (niqqud) can't be written into a PDF yet; type the text without them".into()));
     }
     let hebrew = pdfcraft_fonts::document_hebrew_font(bold).ok_or_else(no_hebrew_font)?;
-    Ok((std::iter::once(hebrew).chain(japanese).chain(latin).collect(), true))
+    Ok((std::iter::once(hebrew).chain(japanese).chain(chinese).chain(latin).collect(), true))
 }
 
 pub(super) fn type3_font(
@@ -361,8 +383,29 @@ pub(super) fn type3_font(
     family: crate::added::Family,
     bold: bool,
     max_glyphs: usize,
+    prefer_chinese: bool,
 ) -> Result<Type3Fallback, EditError> {
-    let (faces, hebrew) = type3_faces(text, family, bold)?;
+    let (faces, hebrew) = type3_faces(text, family, bold, prefer_chinese)?;
+    let chinese_fallbacks = pdfcraft_fonts::ui_chinese_fonts();
+    // For a non-Chinese source font, Japanese faces get first refusal, but a missing Han glyph
+    // may still come from a licensed Chinese face. Keep Chinese faces out of the styled paragraph
+    // chooser above; this fallback list is specific to single-line replacement.
+    let faces: Vec<&'static CraftFont> = if !prefer_chinese {
+        let japanese = pdfcraft_fonts::document_japanese_fonts_for_style(family == crate::added::Family::Times, bold);
+        let latin = pdfcraft_fonts::document_latin_fonts(bold);
+        if hebrew {
+            let hebrew_face = faces.first().copied().ok_or_else(no_hebrew_font)?;
+            std::iter::once(hebrew_face)
+                .chain(japanese)
+                .chain(chinese_fallbacks.iter().copied())
+                .chain(latin)
+                .collect()
+        } else {
+            japanese.into_iter().chain(chinese_fallbacks.iter().copied()).chain(latin).collect()
+        }
+    } else {
+        faces
+    };
     // Each unique character once, in order of first appearance.
     let mut chars = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -374,25 +417,51 @@ pub(super) fn type3_font(
     if chars.is_empty() {
         return Err(EditError::Invalid("replacement text is empty".into()));
     }
-    // The faces differ in coverage (e.g. of Cyrillic), so use the best face that has every
-    // character. When none has them all, the best face reports the character it lacks. Hebrew
-    // text keeps the Hebrew face and takes each character it lacks from the next face that has it.
-    let face = if hebrew { faces.first().copied() } else { fallback_face(&faces, &chars, |face, ch| japanese_glyph_from(face, ch).is_ok()) }
-        .ok_or_else(|| no_fallback_font(text))?;
-    let others: &[&CraftFont] = if hebrew { faces.get(1..).unwrap_or_default() } else { &[] };
-    // Every outline is read before the document is touched, so a character that fails leaves it
-    // as it was. Each font takes the next `per_font` characters; codes restart at 1 in each.
+    // Keep one preferred face for the generated font's metadata, but choose the outline for each
+    // character independently. A line can mix characters covered by different licensed faces;
+    // refusing the whole edit just because the preferred face lacks one glyph was too restrictive.
+    let has_han = chars.iter().any(|ch| is_han_character(*ch));
+    let japanese = pdfcraft_fonts::document_japanese_fonts_for_style(family == crate::added::Family::Times, bold);
+    let latin = pdfcraft_fonts::document_latin_fonts(bold);
+    // Pick the Type 3 face from the script-appropriate family, then use the full ordered list
+    // below for per-glyph fallback. Otherwise a Chinese font that happens to cover Latin and
+    // Cyrillic can incorrectly become the face for an entire Japanese or Uzbek edit.
+    let preferred_faces = if prefer_chinese && has_han {
+        chinese_fallbacks.clone()
+    } else if has_han {
+        japanese
+    } else if japanese.iter().any(|face| chars.iter().all(|ch| japanese_glyph_from(face, *ch).is_ok())) {
+        japanese
+    } else if latin.iter().any(|face| chars.iter().all(|ch| japanese_glyph_from(face, *ch).is_ok())) {
+        latin
+    } else {
+        japanese
+    };
+    let face = if hebrew {
+        faces.first().copied()
+    } else {
+        fallback_face(&preferred_faces, &chars, |face, ch| japanese_glyph_from(face, ch).is_ok())
+            .or_else(|| faces.first().copied())
+    }
+    .ok_or_else(|| no_fallback_font(text))?;
     let per_font = max_glyphs.clamp(1, MAX_TYPE3_GLYPHS);
+    let ordered_faces: Vec<_> = std::iter::once(face)
+        .chain(faces.iter().copied().filter(|candidate| !std::ptr::eq(*candidate, face)))
+        .collect();
     let mut glyphs = Vec::with_capacity(chars.len());
     for (i, ch) in chars.into_iter().enumerate() {
-        // The chosen face first, then the faces after it (Hebrew text takes a character the Hebrew
-        // face lacks from the next face that has it); a character no face draws is reported once.
-        let mut drawn = type3_glyph(face, ch)?;
-        for f in others.iter().copied() {
-            if drawn.is_some() {
+        // Japanese faces keep first refusal. Chinese fallback faces may supply a missing Han glyph,
+        // but must not steal Latin, Greek or Cyrillic from the bundled document font.
+        let mut drawn = None;
+        for candidate in ordered_faces.iter().copied() {
+            let is_chinese_fallback = chinese_fallbacks.iter().any(|other| std::ptr::eq(*other, candidate));
+            if is_chinese_fallback && !is_han_character(ch) {
+                continue;
+            }
+            if let Some(glyph) = type3_glyph(candidate, ch)? {
+                drawn = Some(glyph);
                 break;
             }
-            drawn = type3_glyph(f, ch)?;
         }
         let Some((path, width)) = drawn else { return Err(no_glyph_for(face, ch)) };
         let code = u8::try_from((i % per_font).saturating_add(1))

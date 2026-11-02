@@ -10,6 +10,25 @@ use super::{
 // A glyph budget worth 64 full batches (15,360 glyphs with the production batch size).
 // Lowering the internal batch size for tests lowers the budget by the same ratio.
 const MAX_STYLED_FALLBACK_BATCHES: usize = 64;
+fn is_han_character(ch: char) -> bool {
+    matches!(ch, '\u{3400}'..='\u{4DBF}' | '\u{4E00}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '\u{20000}'..='\u{2FA1F}')
+}
+
+fn chinese_font_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    ["simsun", "simhei", "stsong", "fangsong", "kaiti", "yahei", "dengxian", "mingliu", "jhenghei", "wenkai", "lxgw", "fzsong", "fangzheng", "songti", "heiti", "adobegb", "gb1"]
+        .iter().any(|part| lower.contains(part))
+}
+
+fn chinese_text_run(text: &str) -> bool {
+    let mut has_han = false;
+    for ch in text.chars() {
+        if is_han_character(ch) { has_han = true; }
+        else if !matches!(ch, ' ' | '　' | '、' | '。' | '，' | '：' | '；' | '？' | '！' | '（' | '）' | '《' | '》' | '“' | '”') { return false; }
+    }
+    has_han
+}
+
 
 struct FallbackGroup {
     face: &'static CraftFont,
@@ -130,8 +149,29 @@ impl CharacterPreparation<'_> {
         let mut resolver = FontResolver { doc, fonts, metrics, full_faces: HashMap::new(), programs: HashMap::new() };
         for (range, index) in spans {
             let source = lines.get(index).unwrap_or(first);
+            let span_text = draft.get(range.clone()).unwrap_or_default();
+            let uniform_han = !span_text.is_empty()
+                && chinese_text_run(span_text)
+                && span_text.chars().collect::<std::collections::HashSet<_>>().len() <= MAX_TYPE3_GLYPHS
+                && style.resource.is_none()
+                && style.family.is_none()
+                && style.bold.is_none()
+                && overrides.get(&index).is_none_or(|r| r.resource.is_none() && r.family.is_none())
+                && !metrics.get(&source.font).is_some_and(|m| source_encodes(m, span_text))
+                && pdfcraft_fonts::ui_chinese_fonts().iter().any(|face| span_text.chars().all(|ch| japanese_glyph_from(face, ch).is_ok()));
+            if uniform_han {
+                let han_chars: Vec<char> = span_text.chars().collect();
+                let faces = pdfcraft_fonts::ui_chinese_fonts();
+                let face = fallback_face(&faces, &han_chars, |face, ch| japanese_glyph_from(face, ch).is_ok())
+                    .ok_or_else(|| no_fallback_font(span_text))?;
+                for ch in span_text.chars() {
+                    fallback.prepare_with_face(source, ch, face, chars.len())?;
+                    chars.push((ch, index, String::new()));
+                }
+                continue;
+            }
             let start = range.start;
-            for (offset, ch) in draft.get(range).unwrap_or_default().char_indices() {
+            for (offset, ch) in span_text.char_indices() {
                 if ch == '\n' {
                     chars.push((ch, index, source.font.clone()));
                     continue;
@@ -188,13 +228,11 @@ impl FallbackBuilder {
         }
     }
 
-    fn prepare(&mut self, source: &TextLine, ch: char, text: &str, position: usize) -> Result<String, EditError> {
+    fn prepare_with_face(&mut self, source: &TextLine, ch: char, face: &'static CraftFont, position: usize) -> Result<(), EditError> {
         let key = (source.base_font.clone(), source.bold, ch);
         let group_index = if let Some(index) = self.names.get(&key) {
             *index
         } else {
-            let (faces, _) = type3_faces(text, source_family(&source.base_font), source.bold)?;
-            let face = fallback_face(&faces, &[ch], |face, ch| japanese_glyph_from(face, ch).is_ok()).ok_or_else(|| no_fallback_font(text))?;
             let index = self.groups.iter().position(|group| std::ptr::eq(group.face, face)).unwrap_or_else(|| {
                 let index = self.groups.len();
                 self.groups.push(FallbackGroup { face, seen: Default::default(), glyphs: Vec::new(), positions: Vec::new() });
@@ -218,6 +256,14 @@ impl FallbackBuilder {
             self.glyphs = self.glyphs.saturating_add(1);
         }
         group.positions.push(position);
+        Ok(())
+    }
+
+    fn prepare(&mut self, source: &TextLine, ch: char, text: &str, position: usize) -> Result<String, EditError> {
+        let prefer_chinese = chinese_font_name(&source.base_font);
+        let (faces, _) = type3_faces(text, source_family(&source.base_font), source.bold, prefer_chinese)?;
+        let face = fallback_face(&faces, &[ch], |face, ch| japanese_glyph_from(face, ch).is_ok()).ok_or_else(|| no_fallback_font(text))?;
+        self.prepare_with_face(source, ch, face, position)?;
         Ok(String::new())
     }
 }
