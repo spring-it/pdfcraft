@@ -65,7 +65,8 @@ $desktopKey = First 'SELECT `KeyPath` FROM `Component` WHERE `Component` = ''Pdf
 Require ($desktopReg -and $desktopKey -eq $desktopReg) 'Desktop shortcut component must use HKCU keypath'
 
 $hasMarker = $false
-$modelCount = 0
+$requiredModels = @('text-detection.onnx', 'text-recognition.onnx')
+$foundModels = @{}
 $requiredLicenseFiles = @('LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'LICENSE-document.txt', 'LICENSE-source.txt', 'LICENSE-lucide.txt', 'OFL-Inter.txt', 'OFL-JetBrainsMono.txt', 'OFL-DancingScript.txt', 'CRAFT-FONTS-ATTRIBUTION.md', 'OFL-ShipporiMincho.txt', 'OFL-BIZ-UDPGothic.txt', 'OFL-BIZ-UDMincho.txt', 'OFL-LXGW-WenKai-TC.txt', 'OFL-NotoSansArabic.txt', 'OFL-NotoSansThai.txt')
 $foundLicenseFiles = @{}
 $view = $Database.OpenView('SELECT `File`.`FileName`, `Component`.`Directory_` FROM `File`, `Component` WHERE `File`.`Component_` = `Component`.`Component`')
@@ -77,15 +78,21 @@ try {
     if ($filename -match '(^|\|)portable\.txt$') { $hasMarker = $true }
     foreach ($licenseFile in $requiredLicenseFiles) {
       if ($filename -match ('(^|\|)' + [regex]::Escape($licenseFile) + '$')) { $foundLicenseFiles[$licenseFile] = $true }
+    if ($directory -eq 'ModelsFolder') {
+      foreach ($modelName in $requiredModels) {
+        if ($filename -match ('(^|\|)' + [regex]::Escape($modelName) + '$')) { $foundModels[$modelName] = $true }
+      }
     }
     if ($directory -eq 'ModelsFolder' -and $filename -match '\.rten$') { $modelCount++ }
   }
 } finally { [void] $view.Close() }
 Require $hasMarker 'portable.txt is required so settings/logs stay in LocalAppData'
-Require ($modelCount -ge 2) "at least 2 OCR models are required, got $modelCount"
+foreach ($modelName in $requiredModels) {
+  Require ($foundModels.ContainsKey($modelName)) "MSI must package the required OCR model $modelName"
+}
 foreach ($licenseFile in $requiredLicenseFiles) {
   Require ($foundLicenseFiles.ContainsKey($licenseFile)) "MSI must package the required license/provenance file $licenseFile"
 }
 [void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Database)
 [void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Installer)
-Write-Output 'ok: no wizard, current-user Desktop and Start Menu shortcuts, HKCU registry, %LOCALAPPDATA%\pdfcraft, portable data, OCR models'
+Write-Output 'ok: no wizard, current-user Desktop and Start Menu shortcuts, HKCU registry, %LOCALAPPDATA%\pdfcraft, portable data, ONNX OCR models'
