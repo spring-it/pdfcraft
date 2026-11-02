@@ -1358,8 +1358,9 @@ mod tests {
         d.wm.text = "DRAFT".into();
         d.wm.offset = [-72.0, 36.0];
         match edit(&d, MarkKind::Watermark, 3) {
-            Edit::AddWatermark { settings, .. } => assert_eq!(settings.offset, [-72.0, 36.0]),
-            other => panic!("expected AddWatermark, got {other:?}"),
+            Ok(Edit::AddWatermark { settings, .. }) => assert_eq!(settings.offset, [-72.0, 36.0]),
+            Ok(other) => panic!("expected AddWatermark, got {other:?}"),
+            Err(error) => panic!("watermark settings should be valid: {error}"),
         }
     }
 }
