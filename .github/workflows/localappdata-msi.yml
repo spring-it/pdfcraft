@@ -139,14 +139,16 @@ jobs:
         if: matrix.arch == 'x64'
         shell: pwsh
         run: |
-          cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui windows_chinese_menus_keep_legacy_fallback_stack -- --nocapture
-          if ($LASTEXITCODE -ne 0) { throw 'Chinese menu font regression test failed' }
+          cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui --test it chinese_ui_text_prefers_the_chinese_face -- --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Chinese UI font fallback regression test failed' }
+          cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui --test it non_chinese_ui_keeps_the_installed_face_last -- --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Non-Chinese UI fallback ordering regression test failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-edit chinese_styled_edit_uses_one_face_and_size_for_the_whole_han_run -- --nocapture
           if ($LASTEXITCODE -ne 0) { throw 'Chinese edited text font consistency test failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-edit chinese_punctuation_in_a_modified_paragraph_keeps_one_face_and_weight -- --nocapture
           if ($LASTEXITCODE -ne 0) { throw 'Edited Chinese punctuation font consistency test failed' }
-          cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui edited_chinese_uses_one_document_face_without_changing_ui_families -- --nocapture
-          if ($LASTEXITCODE -ne 0) { throw 'Live Chinese editor font regression test failed' }
+          cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui --lib a_loaded_font_is_applied_to_the_paragraph_being_edited -- --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Inline text editor font selection regression test failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui branded_window_title_tests -- --nocapture
           if ($LASTEXITCODE -ne 0) { throw 'Window title branding tests failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-fonts pdf::tests::font_descriptor_flags_stay_within_the_u32_domain -- --nocapture
@@ -155,8 +157,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Explicit regular/light font-weight regression test failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-fonts craft_fonts_are_optional_and_consistent -- --nocapture
           if ($LASTEXITCODE -ne 0) { throw 'Required bundled fallback font test failed' }
-          cargo test --locked --target ${{ matrix.target }} -p pdfcraft-render non_embedded_simplified_chinese_cid_fonts_draw_with_windows_system_font -- --nocapture
-          if ($LASTEXITCODE -ne 0) { throw 'Non-embedded Chinese CID font fallback test failed' }
+          cargo test --locked --target ${{ matrix.target }} -p pdfcraft-render non_embedded_chinese_and_korean_cid_fonts_draw_with_an_installed_face -- --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Non-embedded Chinese/Korean CID font fallback test failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui watermark_text::tests -- --nocapture
           if ($LASTEXITCODE -ne 0) { throw 'Chinese watermark rasterization tests failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-edit --lib
@@ -167,8 +169,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Watermark dialog defaults test failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui watermark_dialog_preview_scales_to_viewport_without_forcing_modal_height -- --nocapture
           if ($LASTEXITCODE -ne 0) { throw 'Responsive watermark dialog height test failed' }
-          cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui --test dialog_chrome watermark_dialog_stays_content_sized_across_frames -- --nocapture
-          if ($LASTEXITCODE -ne 0) { throw 'Watermark dialog geometry regression test failed' }
+          cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui --test it dialog_chrome::dialog_buttons_follow_the_content_after_a_taller_tab -- --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Dialog content sizing regression test failed' }
 
       - name: Build per-user MSI
         shell: pwsh
