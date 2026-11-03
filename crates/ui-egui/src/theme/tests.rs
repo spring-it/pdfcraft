@@ -27,7 +27,7 @@ fn windows_chinese_menus_keep_legacy_fallback_stack() {
     assert_eq!(defs.families[&FontFamily::Proportional][0], "Inter");
     #[cfg(not(target_arch = "wasm32"))]
     assert!(matches!(
-        installed_fallback_need(CjkPreference::SimplifiedChinese, false),
+        installed_fallback_need(CjkPreference::SimplifiedChinese),
         crate::system_fonts::Need::Hans
     ));
 }
