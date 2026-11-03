@@ -34,7 +34,7 @@ fn harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, P
 #[test]
 fn home_shows_welcome_and_tools() {
     let h = harness(|_| {});
-    h.get_by_label_contains("沃飞翼览 PDF");
+    h.get_by_label("沃飞翼览 PDF");
     assert!(h.query_all_by_label("Organize pages").count() >= 2, "tool list + home card");
     h.get_by_label("Open file");
 }
@@ -238,7 +238,7 @@ fn another_tab_coming_forward_puts_the_expanded_all_tools_away() {
     h.state_mut().set_option("home", "").unwrap();
     h.run_steps(3);
     assert!(!h.state().all_tools_full);
-    h.get_by_label_contains("沃飞翼览 PDF");
+    h.get_by_label("沃飞翼览 PDF");
     // Another document's tab.
     let mut h = harness(|app| {
         app.open_bytes("one.pdf", None, FIXTURE.to_vec()).expect("fixture opens");
@@ -258,7 +258,7 @@ fn going_home_with_no_document_puts_the_expanded_all_tools_away() {
     h.state_mut().set_option("home", "").unwrap();
     h.run_steps(3);
     assert!(!h.state().all_tools_full);
-    h.get_by_label_contains("沃飞翼览 PDF");
+    h.get_by_label("沃飞翼览 PDF");
 }
 
 #[test]
@@ -637,12 +637,12 @@ fn tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight() {
             app.open_bytes(&name(i), None, FIXTURE.to_vec()).unwrap();
         }
     });
-    let open = h.get_by_label("Open").rect();
+    let open = h.get_by_role_and_label(egui::accesskit::Role::Button, "Open").rect();
     let window = h.root().rect();
     assert!(open.right() <= window.right() - 1.0, "Open {open:?} must remain inside the window {window:?}");
     let mut previous_right = f32::MIN;
     for i in 0..5 {
-        let tab = h.get_by_label(&name(i)).rect();
+        let tab = h.get_by_role_and_label(egui::accesskit::Role::Tab, &name(i)).rect();
         assert!(tab.left() >= previous_right - 0.5, "tabs must not overlap: {i} at {tab:?}");
         assert!(tab.right() <= open.left() + 0.5, "every tab fits before Open: {i} at {tab:?}, Open at {open:?}");
         assert!(tab.width() >= 179.0, "tabs keep most of their name: {i} is {tab:?}");
@@ -656,21 +656,21 @@ fn tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight() {
     }
     h.run_steps(6);
     assert_eq!((enabled(&h, "Scroll tabs left"), enabled(&h, "Scroll tabs right")), (Some(true), Some(false)));
-    let first = h.get_by_label(&name(0)).rect();
-    h.get_by_label("Scroll tabs left").click();
+    let first = h.get_by_role_and_label(egui::accesskit::Role::Tab, &name(0)).rect();
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Scroll tabs left").click();
     h.run_steps(4);
-    assert!(h.get_by_label(&name(0)).rect().left() > first.left(), "the left arrow scrolls the tabs back");
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::Tab, &name(0)).rect().left() > first.left(), "the left arrow scrolls the tabs back");
     assert_eq!(enabled(&h, "Scroll tabs right"), Some(true), "and then there is more to the right");
-    let open = h.get_by_label("Open").rect();
-    let right = h.get_by_label("Scroll tabs right").rect();
-    assert!(right.right() <= open.left() + 0.5 && open.right() <= h.get_by_label("Discord").rect().left());
+    let open = h.get_by_role_and_label(egui::accesskit::Role::Button, "Open").rect();
+    let right = h.get_by_role_and_label(egui::accesskit::Role::Button, "Scroll tabs right").rect();
+    assert!(right.right() <= open.left() + 0.5 && open.right() <= h.get_by_role_and_label(egui::accesskit::Role::Button, "Discord").rect().left());
     // Twenty: Open stays in sight left of Discord.
     for i in 0..13 {
         h.state_mut().open_bytes(&format!("more-{i:02}.pdf"), None, FIXTURE.to_vec()).unwrap();
     }
     h.run_steps(4);
-    let open = h.get_by_label("Open").rect();
-    let discord = h.get_by_label("Discord").rect();
+    let open = h.get_by_role_and_label(egui::accesskit::Role::Button, "Open").rect();
+    let discord = h.get_by_role_and_label(egui::accesskit::Role::Button, "Discord").rect();
     assert!(open.left() > 0.0 && open.right() <= discord.left(), "Open {open:?} stays in sight left of Discord {discord:?}");
 }
 
@@ -1400,7 +1400,7 @@ fn closing_the_last_active_tab_selects_the_previous_one_then_home() {
         assert!(app.session.get(ids[removed]).is_none());
     }
     assert_eq!(h.state().active, None);
-    h.get_by_label_contains("沃飞翼览 PDF");
+    h.get_by_label("沃飞翼览 PDF");
 }
 
 #[test]
