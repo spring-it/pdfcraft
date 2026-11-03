@@ -214,16 +214,16 @@ fn fallback_faces_share_the_interface_baseline() {
 }
 
 /// The policy only exists on native platforms (`installed_font_definitions` has no installed
-/// faces on wasm), so the test must not use it in a wasm test build.
+/// faces on wasm), so the test must not use it in a wasm test build. The company font stack keeps
+/// the bundled Hans face as a last resort, so Simplified Chinese still requests a real system Hans
+/// face first; Traditional Chinese requests Hant, and the default interface requests Other.
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
-fn traditional_chinese_keeps_an_installed_face_when_hans_is_embedded() {
+fn installed_fallback_need_respects_company_cjk_preferences() {
     use crate::system_fonts::Need;
-    assert_eq!(installed_fallback_need(CjkPreference::SimplifiedChinese, true), Need::Other);
-    assert_eq!(installed_fallback_need(CjkPreference::SimplifiedChinese, false), Need::Hans);
-    assert_eq!(installed_fallback_need(CjkPreference::TraditionalChinese, true), Need::Hant);
-    assert_eq!(installed_fallback_need(CjkPreference::TraditionalChinese, false), Need::Hant);
-    assert_eq!(installed_fallback_need(CjkPreference::Default, true), Need::Other);
+    assert_eq!(installed_fallback_need(CjkPreference::SimplifiedChinese), Need::Hans);
+    assert_eq!(installed_fallback_need(CjkPreference::TraditionalChinese), Need::Hant);
+    assert_eq!(installed_fallback_need(CjkPreference::Default), Need::Other);
 }
 
 #[test]
