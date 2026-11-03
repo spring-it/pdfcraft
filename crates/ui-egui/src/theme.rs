@@ -231,13 +231,11 @@ pub const SYSTEM_HEBREW_FALLBACK: &str = "system-hebrew-fallback";
 /// The name of the installed Hangul (Korean) face [`installed_font_definitions`] may add.
 pub const SYSTEM_HANGUL_FALLBACK: &str = "system-hangul-fallback";
 
-/// Which installed face an interface language needs, given whether the build embeds a `Hans`
-/// face.
+/// Which operating-system fallback to request for the interface language.
 ///
-/// A bundled `Hans` face serves Simplified Chinese, so the installed face stays last there. It
-/// cannot serve Traditional Chinese: a Traditional interface keeps an installed `Hant` face
-/// before the Japanese faces even when a Simplified-only face is embedded, or Traditional-only
-/// characters would fall through to a Japanese face first.
+/// The bundled Hans face is not part of the generic base stacks, so Simplified Chinese must still
+/// request a real system Hans face. The bundled face is added after the system face below as a
+/// last resort for glyphs that the OS face does not contain.
 #[cfg(not(target_arch = "wasm32"))]
 fn installed_fallback_need(cjk: CjkPreference) -> crate::system_fonts::Need {
     use crate::system_fonts::Need;
@@ -250,20 +248,14 @@ fn installed_fallback_need(cjk: CjkPreference) -> crate::system_fonts::Need {
     }
 }
 
-/// What [`install_fonts_for`] installs: [`font_definitions_for`], then, on desktop, one face
-/// already installed on this machine. It only draws characters no embedded face has.
+/// What [`install_fonts_for`] installs: [`font_definitions_for`], plus script-aware system
+/// fallbacks on desktop. For Chinese interfaces the OS CJK face is preferred, with the bundled
+/// licensed Hans face retained immediately after it as a last resort for missing glyphs. This
+/// keeps the historical Windows menu appearance while avoiding tofu on machines whose system
+/// font lacks a catalog character. Outside Chinese interfaces the general installed face remains
+/// the last fallback (for example, an Arabic file name in a build without craft-fonts).
 ///
-/// - In a Simplified Chinese interface built without an embedded `Hans` face (#826), it is a
-///   Simplified Chinese system face (Microsoft YaHei, PingFang SC, …), placed before the Japanese
-///   craft-fonts faces: they lack hundreds of the catalog's characters (欢, 导, 签, …), and one
-///   line drawn from two faces with different vertical metrics would not sit on one baseline.
-/// - A Traditional Chinese interface always uses an installed `Hant` face before the Japanese
-///   faces, even when a Simplified-only `Hans` face is embedded: that face cannot supply
-///   Traditional-only characters (說, 體, …).
-/// - Otherwise it is the last fallback of every family (an Arabic file name in a build without
-///   craft-fonts).
-///
-/// Installed Devanagari, Telugu, Sinhala, Tamil, Hebrew and Hangul faces, when there are, end
+/// /// Installed Devanagari, Telugu, Sinhala, Tamil, Hebrew and Hangul faces, when there are, end
 /// every family just before that one, so Hindi, Telugu (#1531), Sinhala and Tamil (#1688) and
 /// Korean text, such as a file name or a tab title, and Hebrew file names (#586) draw in a build
 /// without such faces.
@@ -334,10 +326,9 @@ pub fn font_definitions() -> FontDefinitions {
     font_definitions_for(false)
 }
 
-/// [`font_definitions`] with the CJK fallback order for the UI language. Simplified Chinese
-/// must come first in Chinese mode: otherwise shared characters render in the Japanese face
-/// while Simplified-only characters (e.g. U+6B22 欢) fall through to the Chinese face, and
-/// the mixed vertical metrics sink them below the line.
+/// [`font_definitions`] with the requested CJK preference for embedded CJK faces. Windows
+/// keeps bundled Hans/Hant document faces out of generic menu stacks; [`installed_font_definitions`]
+/// adds the system CJK face first and the bundled Hans face as a last resort for Chinese interfaces.
 pub fn font_definitions_for(prefer_hans: bool) -> FontDefinitions {
     font_definitions_for_platform(prefer_hans, current_font_policy_platform())
 }
