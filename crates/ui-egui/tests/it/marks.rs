@@ -317,7 +317,8 @@ fn page_pictures(h: &Harness<'static, PdfCraftApp>, _page: usize) -> Vec<(usize,
             && rect.height() <= 211.0
             && rect.right() <= label.left() + 2.0
             && (rect.center().y - label.center().y).abs() < 120.0;
-        in_preview.then(|| (index, rect, mesh.vertices.first()?.color))
+        let Some(color) = mesh.vertices.first().map(|vertex| vertex.color) else { return None };
+        in_preview.then_some((index, rect, color))
     }).collect()
 }
 
