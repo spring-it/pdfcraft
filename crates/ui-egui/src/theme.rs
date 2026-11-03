@@ -291,17 +291,18 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
         }
         // Chinese document fonts are editor-only (see font_definitions_for_platform):
         // menus must use the installed OS CJK face, not the bundled WenKai document face.
-        let need = installed_fallback_need(cjk, false);
+        let need = installed_fallback_need(cjk, !pdfcraft_fonts::ui_chinese_fonts().is_empty());
         if let Some(data) = fallback(need) {
             fonts.font_data.insert(SYSTEM_FALLBACK.to_owned(), data);
             let japanese: Vec<String> = pdfcraft_fonts::ui_japanese_fonts().iter().map(|f| f.name()).collect();
             for stack in fonts.families.values_mut() {
-                let chinese: Vec<String> = pdfcraft_fonts::ui_chinese_fonts().iter().map(|f| f.name()).collect();
                 let at = match need {
                     // Prefer an installed OS face before the bundled last-resort brand glyphs.
-                    Need::Other => stack.iter().position(|n| chinese.contains(n)),
-                    Need::Hans | Need::Hant => stack.iter().position(|n| japanese.contains(n))
-                        .or_else(|| stack.iter().position(|n| chinese.contains(n))),
+                    // `Other` is the catch-all and belongs after every script-specific face.
+                    Need::Other => None,
+                    // Without an embedded Hans/Hant face, prefer the installed script face
+                    // before the Japanese fallback stack.
+                    Need::Hans | Need::Hant => stack.iter().position(|n| japanese.contains(n)),
                 };
                 stack.insert(at.unwrap_or(stack.len()), SYSTEM_FALLBACK.to_owned());
             }
@@ -376,11 +377,11 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
     // Keep missing Latin/Cyrillic letters in the app's own faces (for example Bulgarian ѝ,
     // absent from JetBrains Mono), before egui's defaults or optional system/CJK fallbacks.
     fonts.families.entry(FontFamily::Monospace).or_default().insert(1, "Inter".to_owned());
-    // Keep Chinese document-writing fonts out of the general interface/menu stacks.
-    // The company-specific labels get dedicated company and brand families below;
-    // their licensed Han face is only a last-resort glyph fallback for that copy.
+    // Simplified Chinese UI uses its bundled Hans face before Japanese fallback.
+    // Other interface languages keep Chinese document-writing faces in the dedicated
+    // company and brand families, rather than changing their general menu typography.
     for face in pdfcraft_fonts::ui_cjk_fonts(prefer_hans) {
-        if face.covers("Hans") || face.covers("Hant") {
+        if !prefer_hans && (face.covers("Hans") || face.covers("Hant")) {
             continue;
         }
         let name = face.name();

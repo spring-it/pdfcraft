@@ -110,8 +110,9 @@ fn watermark_and_background_dialogs() {
     let mut h = harness();
     h.state_mut().execute("edit.watermark");
     h.run_steps(2);
-    assert!(h.query_by(|n| n.label().as_deref() == Some("OK") && n.is_disabled()).is_some(), "OK waits for text");
-    h.get_by_label("Offset from centre");
+    assert_eq!(h.state().marks_draft.wm.text, "内部资料", "the company default watermark is ready to apply");
+    assert!(h.query_by(|n| n.label().as_deref() == Some("OK") && !n.is_disabled()).is_some(), "the default watermark is ready");
+    h.get_by_label("与中心的偏移");
     h.state_mut().marks_draft.wm.text = "DRAFT".into();
     h.run_steps(2);
     h.get_by_label("OK").click();
@@ -305,17 +306,19 @@ trailer << /Root 1 0 R >>
 }
 
 /// The pictures of page `page` (its thumbnail) painted last frame: paint order, bounds, tint.
-fn page_pictures(h: &Harness<'static, PdfCraftApp>, page: usize) -> Vec<(usize, egui::Rect, egui::Color32)> {
-    let Some(tex) = h.state().views[0].thumb(page).map(|t| t.id()) else { return Vec::new() };
-    h.output()
-        .shapes
-        .iter()
-        .enumerate()
-        .filter_map(|(k, s)| match &s.shape {
-            egui::Shape::Mesh(m) if m.texture_id == tex => Some((k, m.calc_bounds(), m.vertices.first()?.color)),
-            _ => None,
-        })
-        .collect()
+fn page_pictures(h: &Harness<'static, PdfCraftApp>, _page: usize) -> Vec<(usize, egui::Rect, egui::Color32)> {
+    let Some(label) = h.query_by_label_contains("Preview: page").map(|node| node.rect()) else { return Vec::new() };
+    h.output().shapes.iter().enumerate().filter_map(|(index, shape)| {
+        let egui::Shape::Mesh(mesh) = &shape.shape else { return None };
+        let rect = mesh.calc_bounds();
+        let in_preview = rect.width() > 50.0
+            && rect.height() > 50.0
+            && rect.width() <= 211.0
+            && rect.height() <= 211.0
+            && rect.right() <= label.left() + 2.0
+            && (rect.center().y - label.center().y).abs() < 120.0;
+        in_preview.then(|| (index, rect, mesh.vertices.first()?.color))
+    }).collect()
 }
 
 /// The preview's picture of `page`, once its thumbnail has arrived (it renders off the UI thread).
@@ -345,6 +348,17 @@ fn painted(h: &Harness<'static, PdfCraftApp>, text: &str, page: egui::Rect) -> (
             _ => None,
         })
         .unwrap_or_else(|| panic!("{text:?} is painted on the page"))
+}
+
+fn painted_in_column(h: &Harness<'static, PdfCraftApp>, text: &str, label: &str) -> bool {
+    let left = h.get_by_label(label).rect().left();
+    h.output().shapes.iter().any(|shape| match &shape.shape {
+        egui::Shape::Text(text_shape) => {
+            let rect = text_shape.galley.rect.translate(text_shape.pos.to_vec2());
+            text_shape.galley.text() == text && rect.center().x > left
+        }
+        _ => false,
+    })
 }
 
 fn near(a: f32, b: f32, what: &str) {
@@ -381,7 +395,7 @@ fn the_preview_shows_the_page_the_range_selects_under_the_marks() {
     h.get_by_label("Cancel").click();
     h.run_steps(2);
 
-    // The watermark sits on the page's centre.
+    // The company watermark preview is a branded schematic, not the document thumbnail.
     assert!(h.state_mut().execute("edit.watermark"));
     h.run_steps(2);
     {
@@ -389,11 +403,9 @@ fn the_preview_shows_the_page_the_range_selects_under_the_marks() {
         d.wm.text = "DRAFT".into();
         d.wm.rotation = 0.0;
     }
-    let (at, page, _) = wait_for_picture(&mut h, 1);
-    let (mark_at, mark) = painted(&h, "DRAFT", page);
-    assert!(at < mark_at, "the page is under the watermark");
-    near(mark.center().x, page.center().x, "watermark, across");
-    near(mark.center().y, page.center().y, "watermark, down");
+    h.run_steps(2);
+    h.get_by_label("实时预览");
+    assert!(painted_in_column(&h, "DRAFT", "实时预览"), "the watermark text is drawn in the company preview");
     h.get_by_label("Cancel").click();
     h.run_steps(2);
 
@@ -405,35 +417,29 @@ fn the_preview_shows_the_page_the_range_selects_under_the_marks() {
     assert_eq!(tint, egui::Color32::from_rgb(red, green, blue), "the default background colour, opaque");
 }
 
-/// The preview's page stepper, beside its "page N of M" label: the dialog's own button, not the
-/// page navigation's of the same name.
-fn preview_step(h: &mut Harness<'static, PdfCraftApp>, label: &str, now: &str) {
-    let row = h.get_by_label(now).rect().center().y;
-    h.query_all_by_label(label).find(|n| (n.rect().center().y - row).abs() < 15.0).unwrap_or_else(|| panic!("{label} beside {now:?}")).click();
-    h.run_steps(2);
-}
-
 #[test]
-fn the_preview_steps_through_the_pages_and_starts_at_the_current_one() {
+fn the_preview_steps_through_selected_pages_and_starts_at_the_current_one() {
     let mut h = harness();
     h.state_mut().views[0].go_to_page(1);
     h.run_steps(2);
     assert!(h.state_mut().execute("edit.watermark"));
     h.run_steps(2);
-    h.get_by_label("Preview: page 2 of 3");
-    preview_step(&mut h, "Next page", "Preview: page 2 of 3");
-    h.get_by_label("Preview: page 3 of 3");
-    preview_step(&mut h, "Previous page", "Preview: page 3 of 3");
-    preview_step(&mut h, "Previous page", "Preview: page 2 of 3");
-    h.get_by_label("Preview: page 1 of 3");
-    // Opened again, the preview is back at the current page.
+    h.get_by_label("预览：第 2 页，共 3 页");
+    h.get_by_label("下一页").click();
+    h.run_steps(2);
+    h.get_by_label("预览：第 3 页，共 3 页");
+    h.get_by_label("上一页").click();
+    h.run_steps(2);
+    h.get_by_label("预览：第 2 页，共 3 页");
+    h.get_by_label("上一页").click();
+    h.run_steps(2);
+    h.get_by_label("预览：第 1 页，共 3 页");
     h.get_by_label("Cancel").click();
     h.run_steps(2);
     assert!(h.state_mut().execute("edit.watermark"));
     h.run_steps(2);
-    h.get_by_label("Preview: page 2 of 3");
+    h.get_by_label("预览：第 2 页，共 3 页");
 }
-
 /// Keeps every texture the app uploads, so a test can read what a picture it paints shows.
 #[derive(Clone, Default)]
 struct Uploads(std::sync::Arc<std::sync::Mutex<std::collections::HashMap<egui::TextureId, std::sync::Arc<egui::ColorImage>>>>);
@@ -553,11 +559,11 @@ fn update_previews_the_page_without_the_marks_it_replaces() {
         d.hf.color = [0.0, 0.0, 1.0];
         d.hf.font_size = 40.0;
     });
-    // Add keeps the marks there, and previews on the thumbnail, which has all three.
+    // The branded watermark dialog uses a schematic preview, with its default text visible.
     assert!(h.state_mut().execute("edit.watermark"));
     h.run_steps(2);
-    let all = |i: &egui::ColorImage| at(i, 0.5, 0.75) == yellow && count(i, red) > 200 && count(i, blue) > 40;
-    wait_for_preview(&mut h, &uploads, "the page with its marks", all);
+    h.get_by_label("实时预览");
+    assert!(painted_in_column(&h, "内部资料", "实时预览"));
     h.get_by_label("Cancel").click();
     h.run_steps(2);
 
@@ -583,9 +589,9 @@ fn update_previews_the_page_without_the_marks_it_replaces() {
     h.run_steps(2);
     h.state_mut().marks_draft.wm.text = "NEW".into();
     h.step();
-    let (_, page) = shown(&h);
-    assert_eq!(count(&page, red), 0, "the new watermark isn't previewed over the old one");
-    assert!(at(&page, 0.5, 0.75) == yellow && count(&page, blue) > 40, "the background and header stay");
+    h.get_by_label("实时预览");
+    assert!(painted_in_column(&h, "NEW", "实时预览"), "the replacement watermark is drawn in the branded preview");
+    assert!(!painted_in_column(&h, "OLD", "实时预览"), "the old watermark is not painted over the replacement");
     h.get_by_label("Cancel").click();
     h.run_steps(2);
 

@@ -516,6 +516,14 @@ fn watermark_column_widths(available_width: f32) -> (f32, f32) {
     (left, right)
 }
 
+fn step_preview_pages(pages: &[usize], shown: usize, forward: bool) -> Option<usize> {
+    if forward {
+        pages.iter().copied().find(|page| *page > shown)
+    } else {
+        pages.iter().copied().rev().find(|page| *page < shown)
+    }
+}
+
 /// A responsive two-column watermark dialog: settings on the left, live preview on the right.
 fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool, bool) {
     // Watermark defaults/templates are Chinese even when the interface language is English.
@@ -529,8 +537,15 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     let current = app.views[i].current;
     let Some(doc) = app.session.get(id) else { return (false, true) };
     let count = doc.info.pages.len();
-    let page = doc.info.pages.get(current).map(|p| (p.width as f64, p.height as f64)).unwrap_or((612.0, 792.0));
     let d = &mut app.marks_draft;
+    let preview_pages = selected_pages(d, count).unwrap_or_else(|_| d.range.pages(count));
+    let preview_page = d.preview
+        .filter(|page| preview_pages.contains(page))
+        .or_else(|| preview_pages.contains(&current).then_some(current))
+        .or_else(|| preview_pages.first().copied())
+        .unwrap_or(current);
+    d.preview = Some(preview_page);
+    let page = doc.info.pages.get(preview_page).map(|p| (p.width as f64, p.height as f64)).unwrap_or((612.0, 792.0));
     let mut browse = false;
     let title = if d.replace { "更新水印" } else { "添加水印" };
     ui.label(egui::RichText::new(title).font(theme::brand(18.0)));
@@ -662,7 +677,21 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             let file_name = d.file.as_ref().filter(|_| d.use_file).map(|f| f.0.as_str());
             watermark_preview(right, t, page, &d.wm, file_name, d.use_file, right_width, preview_height);
             right.add_space(6.0);
-            right.label(egui::RichText::new(format!("预览：第 {} 页，共 {} 页", current + 1, count)).small().color(t.text_faint));
+            right.horizontal(|right| {
+                let previous = step_preview_pages(&preview_pages, preview_page, false);
+                if right.add_enabled_ui(previous.is_some(), |right| {
+                    icons::button(right, "chevron-left", 22.0, false, "上一页")
+                }).inner.clicked() {
+                    d.preview = previous;
+                }
+                right.label(egui::RichText::new(format!("预览：第 {} 页，共 {} 页", preview_page + 1, count)).small().color(t.text_faint));
+                let next = step_preview_pages(&preview_pages, preview_page, true);
+                if right.add_enabled_ui(next.is_some(), |right| {
+                    icons::button(right, "chevron-right", 22.0, false, "下一页")
+                }).inner.clicked() {
+                    d.preview = next;
+                }
+            });
             let selected = selected_pages(d, count).map(|p| p.len()).unwrap_or(0);
             right.label(egui::RichText::new(format!("应用于 {selected} 页")).small().color(t.text_faint));
             if d.replace {
