@@ -58,11 +58,11 @@ impl PageRange {
     pub(crate) fn ui(&mut self, ui: &mut egui::Ui, count: usize) {
         ui.horizontal(|ui| {
             widgets::radio_value(ui, &mut self.all, true, tl!("All pages"));
-            widgets::radio_value(ui, &mut self.all, false, tl!("Pages from"));
-            ui.add_enabled(!self.all, egui::DragValue::new(&mut self.from).range(1..=count.max(1)));
-            ui.label(tl!("to"));
-            ui.add_enabled(!self.all, egui::DragValue::new(&mut self.to).range(1..=count.max(1)));
-            ui.label(tl!("Subset"));
+            let pages_from = widgets::radio_value(ui, &mut self.all, false, tl!("Pages from"));
+            ui.add_enabled(!self.all, egui::DragValue::new(&mut self.from).range(1..=count.max(1))).labelled_by(pages_from.id);
+            let to_label = ui.label(tl!("to"));
+            ui.add_enabled(!self.all, egui::DragValue::new(&mut self.to).range(1..=count.max(1))).labelled_by(to_label.id);
+            let subset_label = ui.label(tl!("Subset"));
             let label = match self.subset {
                 Subset::All => tl!("All pages in range"),
                 Subset::Even => tl!("Even pages only"),
@@ -72,7 +72,7 @@ impl PageRange {
                 ui.selectable_value(&mut self.subset, Subset::All, tl!("All pages in range"));
                 ui.selectable_value(&mut self.subset, Subset::Even, tl!("Even pages only"));
                 ui.selectable_value(&mut self.subset, Subset::Odd, tl!("Odd pages only"));
-            });
+            }).response.labelled_by(subset_label.id);
         });
     }
 }
@@ -589,16 +589,16 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                     widgets::radio_value(ui, &mut d.wm.tile, false, "单个水印");
                 });
                 ui.horizontal_wrapped(|ui| {
-                    ui.label("字体");
+                    let font_label = ui.label("字体");
                     egui::ComboBox::from_id_salt("wofei-watermark-font")
                         .selected_text(["微软雅黑", "黑体", "Arial", "Georgia", "等宽字体"][d.font_family.min(4)])
                         .show_ui(ui, |ui| {
                             for (i, label) in ["微软雅黑", "黑体", "Arial", "Georgia", "等宽字体"].iter().enumerate() {
                                 ui.selectable_value(&mut d.font_family, i, *label);
                             }
-                        });
-                    ui.label("字号");
-                    ui.add(egui::Slider::new(&mut d.wm.font_size, 8.0..=100.0).suffix(" pt"));
+                        }).response.labelled_by(font_label.id);
+                    let size_label = ui.label("字号");
+                    ui.add(egui::Slider::new(&mut d.wm.font_size, 8.0..=100.0).suffix(" pt")).labelled_by(size_label.id);
                     ui.label("颜色");
                     color_button(ui, &mut d.wm.color);
                 });
@@ -607,12 +607,13 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                     for angle in [-45.0, 0.0, 45.0] {
                         widgets::radio_value(ui, &mut d.wm.rotation, angle, if angle == 0.0 { "无".to_owned() } else { format!("{angle:.0}°") });
                     }
-                    ui.add(egui::DragValue::new(&mut d.wm.rotation).range(-180.0..=180.0).suffix("°"));
+                    ui.add(egui::DragValue::new(&mut d.wm.rotation).range(-180.0..=180.0).suffix("°"))
+                        .accessible_name("旋转角度");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("不透明度");
+                    let opacity_label = ui.label("不透明度");
                     let mut pct = d.wm.opacity * 100.0;
-                    if ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix("%")).changed() {
+                    if ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix("%")).labelled_by(opacity_label.id).changed() {
                         d.wm.opacity = pct / 100.0;
                     }
                 });
@@ -623,10 +624,12 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                 });
                 if d.wm.tile {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label("横向间距");
-                        ui.add(egui::Slider::new(&mut d.wm.tile_gap[0], 20.0..=260.0).suffix(" pt"));
-                        ui.label("纵向间距");
-                        ui.add(egui::Slider::new(&mut d.wm.tile_gap[1], 20.0..=260.0).suffix(" pt"));
+                        let horizontal_gap_label = ui.label("横向间距");
+                        ui.add(egui::Slider::new(&mut d.wm.tile_gap[0], 20.0..=260.0).suffix(" pt"))
+                            .labelled_by(horizontal_gap_label.id);
+                        let vertical_gap_label = ui.label("纵向间距");
+                        ui.add(egui::Slider::new(&mut d.wm.tile_gap[1], 20.0..=260.0).suffix(" pt"))
+                            .labelled_by(vertical_gap_label.id);
                     });
                 } else {
                     ui.horizontal(|ui| {
@@ -641,10 +644,10 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                 }
                 ui.horizontal_wrapped(|ui| {
                     ui.label("与中心的偏移");
-                    ui.label("水平");
-                    ui.add(egui::DragValue::new(&mut d.wm.offset[0]).range(-MAX_OFFSET..=MAX_OFFSET).suffix(" pt"));
-                    ui.label("垂直");
-                    ui.add(egui::DragValue::new(&mut d.wm.offset[1]).range(-MAX_OFFSET..=MAX_OFFSET).suffix(" pt"));
+                    ui.add(egui::DragValue::new(&mut d.wm.offset[0]).range(-MAX_OFFSET..=MAX_OFFSET).suffix(" pt"))
+                        .accessible_name("水平偏移");
+                    ui.add(egui::DragValue::new(&mut d.wm.offset[1]).range(-MAX_OFFSET..=MAX_OFFSET).suffix(" pt"))
+                        .accessible_name("垂直偏移");
                 });
                 ui.add_space(8.0);
                 ui.label(egui::RichText::new("页面范围选项").font(theme::brand(12.5)));
