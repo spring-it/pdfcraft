@@ -111,6 +111,29 @@ fn watermark_dialog_stays_content_sized_across_frames() {
     // repeatedly. A full-height separator used to make the modal re-center and
     // move its controls out of view on subsequent frames.
     h.run_steps(4);
+
+    // Every watermark input must have a programmatic name, including the numeric
+    // editor paired with each slider and the shared page-range controls.
+    for (role, label) in [
+        (Role::ComboBox, "字体"),
+        (Role::Slider, "字号"),
+        (Role::SpinButton, "字号"),
+        (Role::SpinButton, "旋转角度"),
+        (Role::Slider, "不透明度"),
+        (Role::SpinButton, "不透明度"),
+        (Role::Slider, "横向间距"),
+        (Role::SpinButton, "横向间距"),
+        (Role::Slider, "纵向间距"),
+        (Role::SpinButton, "纵向间距"),
+        (Role::SpinButton, "水平偏移"),
+        (Role::SpinButton, "垂直偏移"),
+        (Role::SpinButton, "Pages from"),
+        (Role::SpinButton, "to"),
+        (Role::ComboBox, "Subset"),
+    ] {
+        h.get_by_role_and_label(role, label).rect();
+    }
+
     let mut previous_top: Option<f32> = None;
     for frame in 0..6 {
         h.run_steps(1);
