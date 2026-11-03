@@ -377,11 +377,11 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
     // Keep missing Latin/Cyrillic letters in the app's own faces (for example Bulgarian ѝ,
     // absent from JetBrains Mono), before egui's defaults or optional system/CJK fallbacks.
     fonts.families.entry(FontFamily::Monospace).or_default().insert(1, "Inter".to_owned());
-    // Simplified Chinese UI uses its bundled Hans face before Japanese fallback.
-    // Other interface languages keep Chinese document-writing faces in the dedicated
-    // company and brand families, rather than changing their general menu typography.
+    // Generic UI/menu stacks keep the historical installed OS CJK fallback for every UI
+    // locale. Bundled Hans/Hant document-writing faces are registered only in the dedicated
+    // company and brand families below, never as a general menu fallback.
     for face in pdfcraft_fonts::ui_cjk_fonts(prefer_hans) {
-        if !prefer_hans && (face.covers("Hans") || face.covers("Hant")) {
+        if face.covers("Hans") || face.covers("Hant") {
             continue;
         }
         let name = face.name();
