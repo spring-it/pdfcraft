@@ -998,6 +998,13 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
     ui.add_space(8.0);
     ui.label(egui::RichText::new(tl!("Page Range Options")).font(theme::semibold(12.5)));
     d.range.ui(ui, count);
+    let selected_count = d.range.pages(count).len();
+    let applies = if selected_count == 1 {
+        tl!("Applies to 1 page").to_string()
+    } else {
+        crate::i18n::fmt(tl!("Applies to {n} pages"), &[("n", &selected_count.to_string())])
+    };
+    ui.label(egui::RichText::new(applies).small().color(t.text_faint));
     ui.add_space(8.0);
     // The preview: the current page (or the page stepped to), or the first one the range selects
     // if it leaves that out, drawn from its thumbnail at its displayed size (after /Rotate), the
@@ -1104,10 +1111,6 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                     d.preview = next.or(d.preview);
                 }
             });
-            let n = d.range.pages(count).len();
-            let applies =
-                if n == 1 { tl!("Applies to 1 page").to_string() } else { crate::i18n::fmt(tl!("Applies to {n} pages"), &[("n", &n.to_string())]) };
-            ui.label(egui::RichText::new(applies).small().color(t.text_faint));
             if d.replace {
                 ui.label(egui::RichText::new(tl!("Replaces the existing one on those pages.")).small().color(t.text_faint));
             }
