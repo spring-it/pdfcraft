@@ -644,10 +644,10 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                 }
                 ui.horizontal_wrapped(|ui| {
                     ui.label("与中心的偏移");
-                    let horizontal_offset_label = ui.label("水平");
+                    let horizontal_offset_label = ui.label("水平偏移");
                     ui.add(egui::DragValue::new(&mut d.wm.offset[0]).range(-MAX_OFFSET..=MAX_OFFSET).suffix(" pt"))
                         .labelled_by(horizontal_offset_label.id);
-                    let vertical_offset_label = ui.label("垂直");
+                    let vertical_offset_label = ui.label("垂直偏移");
                     ui.add(egui::DragValue::new(&mut d.wm.offset[1]).range(-MAX_OFFSET..=MAX_OFFSET).suffix(" pt"))
                         .labelled_by(vertical_offset_label.id);
                 });
