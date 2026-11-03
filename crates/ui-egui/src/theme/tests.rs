@@ -1,7 +1,7 @@
 use super::*;
 
-/// Chinese document-editing faces stay out of generic application/menu stacks on Windows.
-/// Only company-specific copy uses them as a final glyph fallback; normal menus still use OS CJK.
+/// Chinese document-editing faces stay out of the embedded base menu stacks on Windows.
+/// Installed Chinese UI stacks prefer the OS CJK face, then use bundled Hans as a last resort.
 #[test]
 fn windows_chinese_menus_keep_legacy_fallback_stack() {
     let defs = font_definitions_for_platform(true, FontPolicyPlatform::Windows);
@@ -30,6 +30,24 @@ fn windows_chinese_menus_keep_legacy_fallback_stack() {
         installed_fallback_need(CjkPreference::SimplifiedChinese),
         crate::system_fonts::Need::Hans
     ));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn installed_simplified_chinese_ui_uses_system_then_bundled_hans_fallback() {
+    let defs = installed_font_definitions(CjkPreference::SimplifiedChinese);
+    let hans: Vec<String> = pdfcraft_fonts::ui_chinese_fonts().iter().map(|face| face.name()).collect();
+    assert!(!hans.is_empty(), "the release build must contain a licensed Hans fallback");
+    for family in [FontFamily::Proportional, FontFamily::Monospace] {
+        let stack = &defs.families[&family];
+        let own = stack.iter().position(|name| name == "Inter" || name == "JetBrainsMono").expect("the app's own face");
+        let chinese = stack.iter().position(|name| hans.contains(name)).expect("bundled Hans last resort");
+        let japanese = stack.iter().position(|name| name.starts_with("BIZ UDPGothic")).expect("Japanese fallback");
+        assert!(own < chinese && chinese < japanese, "{family:?}: {stack:?}");
+        if let Some(system) = stack.iter().position(|name| name == SYSTEM_FALLBACK) {
+            assert!(own < system && system < chinese, "the installed OS CJK face stays first: {stack:?}");
+        }
+    }
 }
 
 /// Arabic and Kurdish switch stock chrome to mirror from the right; English switches it
