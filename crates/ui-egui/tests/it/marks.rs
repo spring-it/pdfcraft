@@ -560,11 +560,12 @@ fn update_previews_the_page_without_the_marks_it_replaces() {
         d.hf.color = [0.0, 0.0, 1.0];
         d.hf.font_size = 40.0;
     });
-    // The branded watermark dialog uses a schematic preview, with its default text visible.
+    // Watermark settings carry over when the dialog is reopened; the preview must show
+    // the existing value that would be applied, not silently reset it to the default.
     assert!(h.state_mut().execute("edit.watermark"));
     h.run_steps(2);
     h.get_by_label("实时预览");
-    assert!(painted_in_column(&h, "内部资料", "实时预览"));
+    assert!(painted_in_column(&h, "OLD", "实时预览"));
     h.get_by_label("Cancel").click();
     h.run_steps(2);
 
