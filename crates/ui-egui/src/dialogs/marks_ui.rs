@@ -536,8 +536,8 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     ui.label(egui::RichText::new(title).font(theme::brand(18.0)));
     ui.add_space(8.0);
     // Keep the modal content-sized: no expanding ScrollArea and no max height.
-    // The live preview grows on standard windows and scales down on short viewports.
-    let preview_height = watermark_preview_height(ui.ctx().content_rect().height());
+    // Size the live preview from the modal's remaining content area, not the full window viewport.
+    let preview_height = watermark_preview_height(ui.available_height());
     let available_width = ui.available_width();
     let (left_width, right_width) = watermark_column_widths(available_width);
     ui.horizontal_top(|ui| {
