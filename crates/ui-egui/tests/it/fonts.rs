@@ -60,23 +60,25 @@ fn japanese_ui_text_uses_craft_fonts() {
     }
 }
 
-/// Chinese mode orders the CJK fallback with the `Hans` group first, so one line never
-/// mixes faces with different vertical metrics. Without a `Hans` face in the build input the
-/// order part still holds; glyph coverage follows the craft-fonts checkout.
+/// The installed Simplified Chinese UI face comes from Windows first; the bundled Hans
+/// face remains behind it as a last resort for glyphs the OS face does not contain.
 #[test]
 fn chinese_ui_text_prefers_the_chinese_face() {
     if pdfcraft_fonts::ui_chinese_fonts().is_empty() {
         eprintln!("skipping chinese_ui_text_prefers_the_chinese_face: no Hans face bundled (set CRAFT_FONTS_DIR with a Chinese face to run it)");
         return;
     }
-    let defs = theme::font_definitions_for(true);
+    let defs = theme::installed_font_definitions(theme::CjkPreference::SimplifiedChinese);
     let hans: Vec<String> = pdfcraft_fonts::ui_chinese_fonts().iter().map(|f| f.name()).collect();
     for family in [FontFamily::Proportional, FontFamily::Monospace] {
         let stack = &defs.families[&family];
-        let first_zh = stack.iter().position(|n| hans.iter().any(|h| h == n)).expect("a Hans face is a fallback");
+        let first_zh = stack.iter().position(|n| hans.iter().any(|h| h == n)).expect("a bundled Hans last-resort face is registered");
         let first_ja = stack.iter().position(|n| n.starts_with("BIZ UDPGothic")).expect("BIZ UDPGothic is a fallback");
         let own = stack.iter().position(|n| n == "Inter" || n == "JetBrainsMono").expect("the app's own font");
         assert!(own < first_zh && first_zh < first_ja, "{family:?}: {stack:?}");
+        if let Some(system) = stack.iter().position(|n| n == theme::SYSTEM_FALLBACK) {
+            assert!(own < system && system < first_zh, "the OS CJK face remains preferred: {stack:?}");
+        }
     }
     let mut fonts = Fonts::new(TextOptions::default(), defs);
     for id in families() {
