@@ -239,10 +239,11 @@ pub const SYSTEM_HANGUL_FALLBACK: &str = "system-hangul-fallback";
 /// before the Japanese faces even when a Simplified-only face is embedded, or Traditional-only
 /// characters would fall through to a Japanese face first.
 #[cfg(not(target_arch = "wasm32"))]
-fn installed_fallback_need(cjk: CjkPreference, has_embedded_hans: bool) -> crate::system_fonts::Need {
+fn installed_fallback_need(cjk: CjkPreference) -> crate::system_fonts::Need {
     use crate::system_fonts::Need;
     match cjk {
-        CjkPreference::SimplifiedChinese if has_embedded_hans => Need::Other,
+        // The bundled Hans face is intentionally kept out of generic menu stacks. The
+        // system lookup must therefore still request a real Simplified Chinese face.
         CjkPreference::SimplifiedChinese => Need::Hans,
         CjkPreference::TraditionalChinese => Need::Hant,
         CjkPreference::Default => Need::Other,
@@ -289,22 +290,36 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
                 stack.push(name.to_owned());
             }
         }
-        // Chinese document fonts are editor-only (see font_definitions_for_platform):
-        // menus must use the installed OS CJK face, not the bundled WenKai document face.
-        let need = installed_fallback_need(cjk, !pdfcraft_fonts::ui_chinese_fonts().is_empty());
+        // Prefer the operating system's Chinese sans face for ordinary menus. A bundled
+        // licensed Hans face is a last resort after it, so missing OS glyphs never become tofu.
+        let need = installed_fallback_need(cjk);
+        let japanese: Vec<String> = pdfcraft_fonts::ui_japanese_fonts().iter().map(|f| f.name()).collect();
         if let Some(data) = fallback(need) {
             fonts.font_data.insert(SYSTEM_FALLBACK.to_owned(), data);
-            let japanese: Vec<String> = pdfcraft_fonts::ui_japanese_fonts().iter().map(|f| f.name()).collect();
             for stack in fonts.families.values_mut() {
                 let at = match need {
-                    // Prefer an installed OS face before the bundled last-resort brand glyphs.
                     // `Other` is the catch-all and belongs after every script-specific face.
                     Need::Other => None,
-                    // Without an embedded Hans/Hant face, prefer the installed script face
-                    // before the Japanese fallback stack.
                     Need::Hans | Need::Hant => stack.iter().position(|n| japanese.contains(n)),
                 };
                 stack.insert(at.unwrap_or(stack.len()), SYSTEM_FALLBACK.to_owned());
+            }
+        }
+        if matches!(cjk, CjkPreference::SimplifiedChinese | CjkPreference::TraditionalChinese) {
+            for face in pdfcraft_fonts::ui_chinese_fonts() {
+                let name = face.name();
+                if !fonts.font_data.contains_key(&name) {
+                    let data = on_interface_baseline(FontData::from_static(face.bytes));
+                    fonts.font_data.insert(name.clone(), Arc::new(data));
+                }
+                for stack in fonts.families.values_mut() {
+                    if stack.contains(&name) {
+                        continue;
+                    }
+                    // The system CJK face stays first; bundled WenKai supplies glyphs it lacks.
+                    let at = stack.iter().position(|n| japanese.contains(n)).unwrap_or(stack.len());
+                    stack.insert(at, name.clone());
+                }
             }
         }
     }
