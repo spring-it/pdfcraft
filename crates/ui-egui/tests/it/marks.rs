@@ -571,6 +571,7 @@ fn update_previews_the_page_without_the_marks_it_replaces() {
 
     assert!(h.state_mut().execute("edit.background.update"));
     h.run_steps(2);
+    assert!(h.state().marks_draft.replace, "Update opens in replacement mode");
     h.state_mut().marks_draft.bg.color = [0.6, 0.8, 1.0];
     h.step();
     // Update shows the page without the marks from the frame it opens: neither a blank sheet nor
@@ -579,7 +580,14 @@ fn update_previews_the_page_without_the_marks_it_replaces() {
     let (tint, page) = shown(&h);
     assert_eq!(tint, egui::Color32::from_rgb(153, 204, 255), "the new colour tints the page");
     assert_eq!(at(&page, 0.5, 0.75), egui::Color32::WHITE, "the page is previewed without the yellow background");
-    assert!(count(&page, red) > 200 && count(&page, blue) > 40 && count(&page, dark) > 1000, "the watermark, header and page content stay");
+    let red_pixels = count(&page, red);
+    let blue_pixels = count(&page, blue);
+    let dark_pixels = count(&page, dark);
+    assert!(
+        red_pixels > 200 && blue_pixels > 40 && dark_pixels > 1000,
+        "the watermark, header and page content stay (red={red_pixels}, blue={blue_pixels}, dark={dark_pixels}, size={:?})",
+        page.size
+    );
     // So does a step to page 2: the pages are prepared once, and each is drawn as it is shown.
     h.state_mut().marks_draft.preview = Some(1);
     h.step();
@@ -613,14 +621,17 @@ fn page_range_from_one_to_one_selects_only_the_first_page() {
     h.state_mut().execute("edit.background");
     h.run_steps(2);
     assert_eq!(h.state().marks_draft.range.pages(3), [0, 1, 2]);
-    h.get_by_label("Pages from").click();
+    h.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Pages from").click();
     h.run_steps(2);
     let range = h.state().marks_draft.range;
+    assert!(!range.all, "select the Pages from radio, not its labelled page-count field");
     assert_eq!((range.from, range.to), (1, 3), "from the first page to the last");
     h.state_mut().marks_draft.range.to = 1;
     h.run_steps(3);
     let range = h.state().marks_draft.range;
     assert_eq!((range.from, range.to), (1, 1), "the range stays as typed");
+    assert!(!range.all);
+    assert_eq!(range.pages(3), [0], "one-to-one selects only the first page");
     h.get_by_label("Applies to 1 page");
     h.get_by_label("OK").click();
     h.run_steps(3);
