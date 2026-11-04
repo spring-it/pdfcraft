@@ -656,13 +656,13 @@ fn tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight() {
     }
     h.run_steps(6);
     assert_eq!((enabled(&h, "Scroll tabs left"), enabled(&h, "Scroll tabs right")), (Some(true), Some(false)));
-    // The first tab is fully clipped when the active last tab is brought into view. Measure a
-    // middle tab that remains visible on both sides of the scroll instead of asking egui_kittest
-    // for the rect of a clipped node.
-    let visible = h.get_by_role_and_label(egui::accesskit::Role::Tab, &name(3)).rect();
+    // The last tab is visible at the end of the strip, but the earlier middle tab is still
+    // clipped there. Measure the penultimate tab: it remains visible before and after one left
+    // step, so egui_kittest can safely read its bounds in both frames.
+    let visible = h.get_by_role_and_label(egui::accesskit::Role::Tab, &name(5)).rect();
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Scroll tabs left").click();
     h.run_steps(4);
-    assert!(h.get_by_role_and_label(egui::accesskit::Role::Tab, &name(3)).rect().left() > visible.left(), "the left arrow scrolls the visible middle tab back");
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::Tab, &name(5)).rect().left() > visible.left(), "the left arrow scrolls the visible penultimate tab back");
     assert_eq!(enabled(&h, "Scroll tabs right"), Some(true), "and then there is more to the right");
     let open = h.get_by_role_and_label(egui::accesskit::Role::Button, "Open").rect();
     let right = h.get_by_role_and_label(egui::accesskit::Role::Button, "Scroll tabs right").rect();
