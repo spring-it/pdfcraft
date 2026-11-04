@@ -3400,12 +3400,18 @@ fn update_previews_on_the_page_without_the_marks_it_replaces() {
     s.apply(id, Edit::AddBackground { pages: vec![0, 1], settings: yellow, replace: false, file: None }).unwrap();
     let red = Watermark { text: "SECRET".into(), color: [1.0, 0.0, 0.0], opacity: 1.0, ..Watermark::default() };
     s.apply(id, Edit::AddWatermark { pages: vec![0], settings: red, replace: false, file: None }).unwrap();
+    let mut header = HeaderFooter::default();
+    header.text[1] = "HEADER".into();
+    header.font_size = 18.0;
+    header.color = [0.0, 0.0, 1.0];
+    s.apply(id, Edit::AddHeaderFooter { pages: vec![0], settings: header, replace: false }).unwrap();
     let doc = s.get(id).unwrap();
     let (generation, dirty) = (doc.edit_generation(), doc.dirty);
     let px = |p: &pdfcraft_render::RenderedPage, x: u32, y: u32| -> [u8; 3] {
         p.rgba[(((300 - y) * p.width + x) * 4) as usize..][..3].try_into().unwrap()
     };
     let reds = |p: &pdfcraft_render::RenderedPage| p.rgba.as_chunks::<4>().0.iter().filter(|[r, g, b, _]| *r > 200 && *g < 80 && *b < 80).count();
+    let blues = |p: &pdfcraft_render::RenderedPage| p.rgba.as_chunks::<4>().0.iter().filter(|[r, g, b, _]| *b > 150 && *r < 100 && *g < 100).count();
     let dark = |p: &pdfcraft_render::RenderedPage| p.rgba.as_chunks::<4>().0.iter().filter(|[r, g, b, _]| *r < 100 && *g < 100 && *b < 100).count();
     assert_eq!(pixel(&s, id, 0, 5, 5)[..3], [255, 255, 0], "the page has the yellow background");
 
@@ -3413,15 +3419,18 @@ fn update_previews_on_the_page_without_the_marks_it_replaces() {
     let page = unmarked.render_page(0, 1.0).unwrap();
     assert_eq!(px(&page, 5, 5), [255, 255, 255], "without the background the page is white");
     assert!(reds(&page) > 50, "the watermark stays");
+    assert!(blues(&page) > 40, "the header stays when the background is removed");
     assert!(dark(&page) > 10, "the page text stays");
 
     let page = doc.without_marks(MarkKind::Watermark).unwrap().expect("page 1 has a watermark").render_page(0, 1.0).unwrap();
     assert_eq!(reds(&page), 0, "without the watermark");
+    assert!(blues(&page) > 40, "the header remains when the watermark is removed");
     assert_eq!(px(&page, 5, 5), [255, 255, 0], "the background stays");
 
     assert_eq!(px(&unmarked.render_page(1, 1.0).unwrap(), 5, 5), [255, 255, 255], "made once, for every page: page 2 is white too");
     assert_eq!(unmarked.parser_builds(), 1, "parsed once for both pages");
-    assert!(doc.without_marks(MarkKind::HeaderFooter).unwrap().is_none(), "the document has no header");
+    let without_header = doc.without_marks(MarkKind::HeaderFooter).unwrap().expect("page 1 has a header");
+    assert_eq!(blues(&without_header.render_page(0, 1.0).unwrap()), 0, "without the header");
     assert!(unmarked.render_page(9, 1.0).is_err(), "no page 10");
     let doc = s.get(id).unwrap();
     assert_eq!((doc.edit_generation(), doc.dirty, doc.can_undo()), (generation, dirty, Some("Add watermark")), "the document is unchanged");
