@@ -655,10 +655,13 @@ fn tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight() {
     }
     h.run_steps(6);
     assert_eq!((enabled(&h, "Scroll tabs left"), enabled(&h, "Scroll tabs right")), (Some(true), Some(false)));
-    let first = h.get_by_label(&name(0)).rect();
+    // The first tab is fully clipped when the active last tab is brought into view. Measure a
+    // middle tab that remains visible on both sides of the scroll instead of asking egui_kittest
+    // for the rect of a clipped node.
+    let visible = h.get_by_label(&name(3)).rect();
     h.get_by_label("Scroll tabs left").click();
     h.run_steps(4);
-    assert!(h.get_by_label(&name(0)).rect().left() > first.left(), "the left arrow scrolls the tabs back");
+    assert!(h.get_by_label(&name(3)).rect().left() > visible.left(), "the left arrow scrolls the visible middle tab back");
     assert_eq!(enabled(&h, "Scroll tabs right"), Some(true), "and then there is more to the right");
     let open = h.get_by_label("Open").rect();
     let right = h.get_by_label("Scroll tabs right").rect();
