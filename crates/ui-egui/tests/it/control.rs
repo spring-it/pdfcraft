@@ -939,6 +939,7 @@ fn japanese_controls_and_search_keep_command_ids() {
     }
     let (mut h, c) = harness();
     ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ja" }));
+    settle(&mut h);
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], "ja");
     ok(&mut h, &c, "ui.click", json!({ "label": "変換" }));
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "Convert");
@@ -960,6 +961,7 @@ fn japanese_controls_and_search_keep_command_ids() {
     }
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["documents"][0]["name"], "doc.pdf");
     ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "en" }));
+    settle(&mut h);
     ok(&mut h, &c, "ui.click", json!({ "label": "All tools" }));
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "AllTools");
 }
@@ -968,6 +970,7 @@ fn japanese_controls_and_search_keep_command_ids() {
 fn german_preferences_and_search_keep_command_ids() {
     let (mut h, c) = harness();
     ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "de" }));
+    settle(&mut h);
     ok(&mut h, &c, "ui.click", json!({ "label": "Konvertieren" }));
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "Convert");
     ok(&mut h, &c, "ui.command", json!({ "id": "app.preferences" }));
@@ -978,11 +981,13 @@ fn german_preferences_and_search_keep_command_ids() {
     let combo = selector["widgets"].as_array().unwrap().iter().find(|w| w["role"] == "ComboBox").expect("language selector");
     ok(&mut h, &c, "ui.click", json!({ "id": combo["id"] }));
     ok(&mut h, &c, "ui.click", json!({ "label": "English" }));
+    settle(&mut h);
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], "en");
     let selector = ok(&mut h, &c, "ui.inspect", json!({ "query": "English" }));
     let combo = selector["widgets"].as_array().unwrap().iter().find(|w| w["role"] == "ComboBox").expect("language selector");
     ok(&mut h, &c, "ui.click", json!({ "id": combo["id"] }));
     ok(&mut h, &c, "ui.click", json!({ "label": "Deutsch" }));
+    settle(&mut h);
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], "de");
     ok(&mut h, &c, "ui.click", json!({ "label": "OK" }));
     for query in ["Dokument teilen", "Split document", "page.split"] {
@@ -1036,6 +1041,7 @@ fn preferences_menu_and_shortcut_allow_switching_interface_languages() {
     }
     let (mut h, c) = harness();
     ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ja" }));
+    settle(&mut h);
     // The menu bar's Edit menu holds Preferences. Titles and rows carry their mnemonic
     // ("編集(E)", "環境設定(P)…"), so match by the start of the label.
     let menu_row = |text: &'static str| {
@@ -1053,6 +1059,7 @@ fn preferences_menu_and_shortcut_allow_switching_interface_languages() {
         let combo = selector["widgets"].as_array().unwrap().iter().find(|w| w["role"] == "ComboBox").expect("language selector");
         ok(&mut h, &c, "ui.click", json!({ "id": combo["id"] }));
         ok(&mut h, &c, "ui.click", json!({ "label": next }));
+        settle(&mut h);
         assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], code);
     }
     ok(&mut h, &c, "ui.click", json!({ "label": "OK" }));
