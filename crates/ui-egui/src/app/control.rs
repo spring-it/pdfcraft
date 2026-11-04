@@ -21,7 +21,18 @@ impl PdfCraftApp {
                     let codes: Vec<&str> = std::iter::once(i18n::AUTO).chain(i18n::Lang::all().map(i18n::Lang::code)).collect();
                     format!("language must be one of {}", codes.join(", "))
                 })?;
-                self.language = language.to_string();
+                if self.language != language {
+                    self.language = language.to_string();
+                    // The control channel is polled after logic() checks the font stack. Invalidate
+                    // this frame and install the new stack now so ui() cannot paint the new language
+                    // with the previous language's fonts.
+                    self.fonts_ready = false;
+                    let cjk = theme::CjkPreference::for_language(i18n::Lang::from_pref(&self.language).code());
+                    if let Some(ctx) = self.ctx.as_ref() {
+                        theme::install_fonts_for(ctx, cjk);
+                        self.fonts_cjk = cjk;
+                    }
+                }
             }
             ("theme", _) => {
                 let preference = match value {

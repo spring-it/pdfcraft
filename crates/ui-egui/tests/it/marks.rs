@@ -551,6 +551,10 @@ fn update_previews_the_page_without_the_marks_it_replaces() {
     apply(&mut h, "edit.background", &|d| d.bg.color = [1.0, 1.0, 0.6]);
     apply(&mut h, "edit.watermark", &|d| {
         d.wm.text = "OLD".into();
+        // Set an explicit preview size: the company default is deliberately 15 pt and tiled,
+        // while this regression checks that one existing watermark survives an update.
+        d.wm.font_size = 72.0;
+        d.wm.tile = false;
         d.wm.color = [1.0, 0.0, 0.0];
         d.wm.opacity = 1.0;
         d.wm.rotation = 0.0;
