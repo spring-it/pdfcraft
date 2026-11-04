@@ -463,13 +463,14 @@ impl eframe::App for PdfCraftApp {
             self.fonts_cjk = cjk;
             theme::apply(ctx, self.theme);
             self.styled = true;
+        } else if cjk != self.fonts_cjk {
+            // egui applies new font definitions on the next frame. Skip this frame so a
+            // language switch never paints Chinese text with the previous language's fonts.
+            self.fonts_ready = false;
+            theme::install_fonts_for(ctx, cjk);
+            self.fonts_cjk = cjk;
         } else {
             self.fonts_ready = true;
-            if cjk != self.fonts_cjk {
-                // Same family names as before, so named fonts stay valid while the new set loads.
-                theme::install_fonts_for(ctx, cjk);
-                self.fonts_cjk = cjk;
-            }
         }
         self.sync_theme(ctx);
         let native = ctx.native_pixels_per_point().unwrap_or(1.0);
