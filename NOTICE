@@ -13,22 +13,24 @@ This product bundles third-party material under its own licenses, listed below. 
 list (author, source, license) is in ATTRIBUTION.md.
 
 - Lucide icons (assets/icons/*.svg) — ISC and MIT licences (Feather-derived icons). See assets/icons/LICENSE-lucide.txt.
-  The Windows PDF file icon (assets/app-icon/pdfcraft-document.svg and .ico) adapts Lucide's
-  file-text outline and combines it with contributor-original artwork. See
-  assets/app-icon/LICENSE-document.txt (ISC AND (MIT OR Apache-2.0)), packaged as
-  LICENSE-document.txt beside the Windows executables.
+- The Windows PDF document icon (assets/app-icon/pdfcraft-document.svg and .ico) uses the same
+  ChatGPT-generated red PDF artwork as the application icon. It is not derived from Lucide or
+  another third-party icon. The artwork was generated at the requester's direction and supplied
+  by the requester; the requester's licence grant is MIT OR Apache-2.0 to the extent the requester
+  holds rights. See assets/app-icon/LICENSE-document.txt and LICENSE-source.txt, both packaged
+  beside the Windows executables.
 - Inter typeface (assets/fonts/Inter-*.ttf) — SIL Open Font License 1.1. See assets/fonts/OFL-Inter.txt.
 - JetBrains Mono typeface (assets/fonts/JetBrainsMono-*.ttf) — SIL Open Font License 1.1. See assets/fonts/OFL-JetBrainsMono.txt.
 - Dancing Script typeface (assets/fonts/DancingScript.ttf), Copyright 2016 The Dancing Script Project Authors — SIL Open Font License 1.1 (Reserved Font Name "Dancing Script"). See assets/fonts/OFL-DancingScript.txt.
-- Fonts from craft-fonts (https://github.com/storytold/craft-fonts), an optional build input
-  (CRAFT_FONTS_DIR) that is not part of this repository. Builds made with it, which includes every
-  official release, embed the fonts listed in
-  https://github.com/storytold/craft-fonts/blob/main/ATTRIBUTION.md (BIZ UDPGothic, Shippori Mincho,
-  BIZ UDMincho; the web build only BIZ UDPGothic Regular) under the SIL Open Font License 1.1. Those
-  packages carry each font's licence as OFL-<family>.txt. Builds made with the craft-fonts revision
-  pinned in .github/workflows/ also include Noto Sans Thai (in the web build too), Copyright 2022
-  The Noto Project Authors (https://github.com/notofonts/thai), under SIL OFL 1.1; its licence is
-  fonts/noto-sans-thai/OFL.txt in the craft-fonts build input.
+- The company Windows MSI workflow uses the optional, separately versioned build input
+  https://github.com/spring-it/craft-fonts, pinned at
+  fa0303128012276df3de0347a1bcbd588cb3fc8d. Native release builds embed Shippori Mincho Regular,
+  BIZ UDPGothic Regular and Bold, BIZ UDMincho Regular, LXGW WenKai TC Regular, Noto Sans Arabic,
+  Noto Sans Thai and Noto Sans Georgian. Each embedded face is licensed under SIL Open Font License
+  1.1. The MSI carries each included font's OFL text and the pinned font attribution table as
+  OFL-<family>.txt and CRAFT-FONTS-ATTRIBUTION.md. Noto Sans CJK SC is listed in the external
+  checkout but is intentionally skipped by PdfCraft's general CJK size cap; it is not embedded in
+  the Windows release. The font files and the external font repository are not committed here.
 - hayro (rendering, via crates.io) — Apache-2.0 OR MIT. Its `embed-fonts` feature bundles the Foxit
   standard-14 Type 1 fonts under BSD-3-Clause ("Copyright 2014 PDFium Authors"), and hayro-cmap bundles
   Adobe CMap resources under BSD-3-Clause.

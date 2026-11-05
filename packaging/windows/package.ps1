@@ -117,7 +117,8 @@ if ($env:CRAFT_FONTS_DIR) {
     [pscustomobject]@{ Source = 'fonts\biz-ud-mincho\OFL.txt'; Destination = 'OFL-BIZ-UDMincho.txt' },
     [pscustomobject]@{ Source = 'fonts\lxgw-wenkai-tc\OFL.txt'; Destination = 'OFL-LXGW-WenKai-TC.txt' },
     [pscustomobject]@{ Source = 'fonts\noto-sans-arabic\OFL.txt'; Destination = 'OFL-NotoSansArabic.txt' },
-    [pscustomobject]@{ Source = 'fonts\noto-sans-thai\OFL.txt'; Destination = 'OFL-NotoSansThai.txt' }
+    [pscustomobject]@{ Source = 'fonts\noto-sans-thai\OFL.txt'; Destination = 'OFL-NotoSansThai.txt' },
+    [pscustomobject]@{ Source = 'fonts\noto-sans-georgian\OFL.txt'; Destination = 'OFL-NotoSansGeorgian.txt' }
   )
   foreach ($fontLicense in $craftFontLicenses) {
     $licenseSource = Join-Path $craftRoot $fontLicense.Source

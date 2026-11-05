@@ -55,12 +55,14 @@ jobs:
             'fonts\lxgw-wenkai-tc\LXGWWenKaiTC-Regular.ttf',
             'fonts\noto-sans-arabic\NotoSansArabic.ttf',
             'fonts\noto-sans-thai\NotoSansThai.ttf',
+            'fonts\noto-sans-georgian\NotoSansGeorgian.ttf',
             'fonts\shippori-mincho\OFL.txt',
             'fonts\biz-ud-pgothic\OFL.txt',
             'fonts\biz-ud-mincho\OFL.txt',
             'fonts\lxgw-wenkai-tc\OFL.txt',
             'fonts\noto-sans-arabic\OFL.txt',
             'fonts\noto-sans-thai\OFL.txt',
+            'fonts\noto-sans-georgian\OFL.txt',
             'ATTRIBUTION.md'
           )) {
             if (-not (Test-Path (Join-Path $env:CRAFT_FONTS_DIR $fontPath))) { throw "Required craft-fonts asset is missing: $fontPath" }
