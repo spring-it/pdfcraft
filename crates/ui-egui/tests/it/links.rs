@@ -42,17 +42,16 @@ fn company_home_omits_the_upstream_community_card() {
 }
 
 #[test]
-fn about_dialog_shows_the_brand_and_links() {
+fn about_dialog_shows_the_company_brand() {
     let pdf = b"%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF";
-    // With a document open, so the home screen's own links are not on screen.
-    let mut h = harness(move |app| {
+    // With a document open, so the home screen's own brand and links are not on screen.
+    let h = harness(move |app| {
         app.open_bytes("one.pdf", None, pdf.to_vec()).unwrap();
         app.dialog = Some(Dialog::About);
     });
-    assert!(h.query_all_by_label("ArtCraft").count() >= 2, "the mark and the wordmark (alt text)");
-    h.get_by_label("Join our Discord").click();
-    h.run_steps(2);
-    assert_eq!(h.state().last_opened_url.as_deref(), Some(links::DISCORD));
+    assert!(h.query_all_by_label("沃飞翼览 PDF").count() >= 1, "the company wordmark");
+    assert!(h.query_by_label("ArtCraft").is_none(), "the upstream brand is not shown");
+    assert!(h.query_by_label("Join our Discord").is_none(), "the upstream Discord link is not shown");
 }
 
 #[test]
