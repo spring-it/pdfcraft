@@ -3406,7 +3406,7 @@ fn update_previews_on_the_page_without_the_marks_it_replaces() {
     header.color = [0.0, 0.0, 1.0];
     s.apply(id, Edit::AddHeaderFooter { pages: vec![0], settings: header, replace: false }).unwrap();
     let doc = s.get(id).unwrap();
-    let (generation, dirty) = (doc.edit_generation(), doc.dirty);
+    let (generation, dirty, undo) = (doc.edit_generation(), doc.dirty, doc.can_undo());
     let px = |p: &pdfcraft_render::RenderedPage, x: u32, y: u32| -> [u8; 3] {
         p.rgba[(((300 - y) * p.width + x) * 4) as usize..][..3].try_into().unwrap()
     };
@@ -3433,7 +3433,7 @@ fn update_previews_on_the_page_without_the_marks_it_replaces() {
     assert_eq!(blues(&without_header.render_page(0, 1.0).unwrap()), 0, "without the header");
     assert!(unmarked.render_page(9, 1.0).is_err(), "no page 10");
     let doc = s.get(id).unwrap();
-    assert_eq!((doc.edit_generation(), doc.dirty, doc.can_undo()), (generation, dirty, Some("Add watermark")), "the document is unchanged");
+    assert_eq!((doc.edit_generation(), doc.dirty, doc.can_undo()), (generation, dirty, undo), "the document is unchanged");
 }
 
 #[test]
