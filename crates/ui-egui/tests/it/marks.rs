@@ -321,7 +321,7 @@ fn page_pictures(h: &Harness<'static, PdfCraftApp>, _page: usize) -> Vec<(usize,
                 && rect.height() <= 211.0
                 && rect.right() <= label.left() + 2.0
                 && (rect.center().y - label.center().y).abs() < 120.0;
-            let Some(color) = mesh.vertices.first().map(|vertex| vertex.color) else { return None };
+            let color = mesh.vertices.first().map(|vertex| vertex.color)?;
             in_preview.then_some((index, rect, color))
         })
         .collect()
@@ -489,29 +489,6 @@ fn preview_picture(h: &Harness<'static, PdfCraftApp>, uploads: &Uploads) -> Opti
         let image = uploads.0.lock().unwrap().get(&m.texture_id).cloned()?;
         Some((m.vertices.first()?.color, image))
     })
-}
-
-/// [`preview_picture`], waiting until `ready` accepts it (the page renders off the UI thread).
-fn wait_for_preview(
-    h: &mut Harness<'static, PdfCraftApp>,
-    uploads: &Uploads,
-    what: &str,
-    ready: impl Fn(&egui::ColorImage) -> bool,
-) -> (egui::Color32, std::sync::Arc<egui::ColorImage>) {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-    loop {
-        h.step();
-        let shown = preview_picture(h, uploads);
-        if let Some((tint, image)) = shown.clone().filter(|(_, image)| ready(image)) {
-            return (tint, image);
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "the preview never showed {what}; last (tint, size, middle of the lower half): {:?}",
-            shown.map(|(tint, i)| (tint, i.size, at(&i, 0.5, 0.75)))
-        );
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
 }
 
 /// The pixel of `image` at (u, v), from 0 to 1 across and down.
