@@ -130,7 +130,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             wm_body.min + vec2(14.0, 54.0),
                             Align2::LEFT_CENTER,
                             "中文 · 平铺 · 自定义位置",
-                            theme::regular(11.0),
+                            theme::company(11.0),
                             t.text_muted,
                         );
                         ui.painter().text(
