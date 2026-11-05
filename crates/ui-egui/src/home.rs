@@ -113,6 +113,26 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             let Some(g) = catalog::group(id) else { continue };
                             tool_card(app, ui, &t, g, false);
                         }
+                        // Company quick launch: open the enhanced watermark dialog directly.
+                        let (wm_rect, wm_resp) = ui.allocate_exact_size(vec2(190.0, 104.0), Sense::click());
+                        wm_resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "添加水印"));
+                        let wm_press = theme::Press::track(ui, &wm_resp);
+                        card_lift(ui, &t, wm_rect, wm_press);
+                        ui.painter().rect(
+                            wm_rect,
+                            CornerRadius::same(10),
+                            wm_press.fill(t.card, t.hover, t.pressed),
+                            Stroke::new(1.0, t.divider),
+                            egui::StrokeKind::Inside,
+                        );
+                        let wm_body = wm_rect.translate(wm_press.offset());
+                        icons::paint(ui, Rect::from_min_size(wm_body.min + vec2(14.0, 14.0), vec2(22.0, 22.0)), "stamp", 21.0, t.accent_text);
+                        ui.painter().text(wm_body.min + vec2(44.0, 25.0), Align2::LEFT_CENTER, "添加水印", theme::semibold(13.5), t.text);
+                        ui.painter().text(wm_body.min + vec2(14.0, 54.0), Align2::LEFT_CENTER, "中文 · 平铺 · 自定义位置", theme::regular(11.0), t.text_muted);
+                        ui.painter().text(wm_body.left_bottom() + vec2(14.0, -14.0), Align2::LEFT_CENTER, "立即使用", theme::medium(12.0), t.accent_text);
+                        if theme::hand(wm_resp).clicked() {
+                            app.dispatch_command(ui.ctx(), "edit.watermark");
+                        }
                         let (rect, resp) = ui.allocate_exact_size(vec2(170.0, 104.0), Sense::click());
                         resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tl!("Open file")));
                         let press = theme::Press::track(ui, &resp);
