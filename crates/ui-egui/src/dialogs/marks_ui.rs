@@ -1488,11 +1488,7 @@ mod company_watermark_tests {
 
     #[test]
     fn strict_custom_page_range_works_with_chinese_watermark() {
-        let mut d = MarksDraft {
-            custom_enabled: true,
-            custom_pages: "1-3， 5, 8-10".to_owned(),
-            ..MarksDraft::default()
-        };
+        let mut d = MarksDraft { custom_enabled: true, custom_pages: "1-3， 5, 8-10".to_owned(), ..MarksDraft::default() };
         assert_eq!(selected_pages(&d, 10).unwrap(), [0, 1, 2, 4, 7, 8, 9]);
         d.custom_pages = "11".to_owned();
         assert!(selected_pages(&d, 10).is_err());
