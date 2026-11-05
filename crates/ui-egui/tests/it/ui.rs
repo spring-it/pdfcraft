@@ -638,8 +638,8 @@ fn tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight() {
         }
     });
     let open = h.get_by_role_and_label(egui::accesskit::Role::Button, "Open").rect();
-    let window = h.root().rect();
-    assert!(open.right() <= window.right() - 1.0, "Open {open:?} must remain inside the window {window:?}");
+    let keyboard = h.get_by_label("Keyboard shortcuts").rect();
+    assert!(open.right() <= keyboard.left(), "Open {open:?} must remain before Keyboard shortcuts {keyboard:?}");
     let mut previous_right = f32::MIN;
     for i in 0..5 {
         let tab = h.get_by_role_and_label(egui::accesskit::Role::Tab, &name(i)).rect();
