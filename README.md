@@ -388,21 +388,21 @@ The customized release publishes two installers after the x64 and x86 build, wat
 
 | Architecture | Installer |
 |---|---|
-| Windows x64 | [pdfcraft-1.0.1-windows-x64-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v1.0.2-wofei.1/pdfcraft-1.0.1-windows-x64-localappdata.msi) |
-| Windows x86 | [pdfcraft-1.0.1-windows-x86-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v1.0.2-wofei.1/pdfcraft-1.0.1-windows-x86-localappdata.msi) |
+| Windows x64 | [pdfcraft-1.0.2-windows-x64-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v1.0.2/pdfcraft-1.0.2-windows-x64-localappdata.msi) |
+| Windows x86 | [pdfcraft-1.0.2-windows-x86-localappdata.msi](https://github.com/spring-it/pdfcraft/releases/download/v1.0.2/pdfcraft-1.0.2-windows-x86-localappdata.msi) |
 
 The installers are for the current Windows user, require no administrator privileges for a normal installation, and create **沃飞翼览 PDF** desktop and Start menu shortcuts. Application settings, logs and recovery data remain under `%LOCALAPPDATA%\pdfcraft\PdfCraftData`.
 
 Silent install:
 
 ```powershell
-msiexec /i "pdfcraft-1.0.1-windows-x64-localappdata.msi" /qn /norestart
+msiexec /i "pdfcraft-1.0.2-windows-x64-localappdata.msi" /qn /norestart
 ```
 
 Silent uninstall:
 
 ```powershell
-msiexec /x "pdfcraft-1.0.1-windows-x64-localappdata.msi" /qn /norestart
+msiexec /x "pdfcraft-1.0.2-windows-x64-localappdata.msi" /qn /norestart
 ```
 
 These custom MSI files are **unsigned unless signing is separately configured**. See [the MSI packaging and test notes](docs/localappdata-msi.md). This release is not the upstream PdfCraft release; it is built from this customized branch.
