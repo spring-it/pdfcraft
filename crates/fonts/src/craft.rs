@@ -361,6 +361,23 @@ mod tests {
         assert_eq!(ui.len(), CRAFT_FONTS.iter().filter(|f| f.covers("Jpan")).count());
         let ui_zh = ui_chinese_fonts();
         assert_eq!(ui_zh.len(), CRAFT_FONTS.iter().filter(|f| f.covers("Hans")).count());
+        if std::env::var_os("CRAFT_FONTS_REQUIRED").is_some() {
+            assert!(!CRAFT_FONTS.is_empty(), "release build requires embedded craft-fonts");
+            assert!(document_japanese_font().is_some(), "release build must embed a Japanese document fallback font");
+            assert!(ui.iter().any(|f| f.family == "BIZ UDPGothic"), "release build must embed the Japanese UI fallback font");
+            assert!(ui_chinese_fonts().iter().any(|f| f.family == "LXGW WenKai TC"), "release build must embed a licensed Chinese text-edit fallback font");
+            for (family, style) in [
+                ("Shippori Mincho", "Regular"),
+                ("BIZ UDPGothic", "Regular"),
+                ("BIZ UDPGothic", "Bold"),
+                ("BIZ UDMincho", "Regular"),
+                ("LXGW WenKai TC", "Regular"),
+                ("Noto Sans Arabic", "Regular"),
+                ("Noto Sans Thai", "Regular"),
+            ] {
+                assert!(CRAFT_FONTS.iter().any(|f| f.family == family && f.style == style), "release build must embed {family} {style}");
+            }
+        }
         if CRAFT_FONTS.is_empty() {
             eprintln!("built without craft-fonts (CRAFT_FONTS_DIR unset): no Japanese faces, as expected");
             assert!(SHIPPORI_MINCHO.is_none() && ui.is_empty() && ui_zh.is_empty());
