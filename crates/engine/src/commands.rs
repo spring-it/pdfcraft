@@ -397,7 +397,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("page.properties", "Page properties…", PAGES, None, Modification, "info"),
     c("help.shortcuts", "Keyboard shortcuts", HELP, None, Nothing, "circle-help"),
     c("help.github", "沃飞翼览 PDF 源代码", HELP, None, Nothing, "code-xml"),
-    c("help.check_updates", "Check for updates…", HELP, None, Nothing, "cloud"),
+    c("help.check_updates", "Check for updates…", None, None, Nothing, "cloud"),
     c("help.about", "About PdfCraft", HELP, None, Nothing, "info"),
 ];
 
