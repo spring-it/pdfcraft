@@ -71,6 +71,27 @@ jobs:
           toolchain: 1.95.0
           targets: ${{ matrix.target }}
 
+      - name: Format upstream integration sources
+        if: matrix.arch == 'x64' && github.ref == 'refs/heads/upstream-v0.17.0-sync'
+        shell: pwsh
+        run: |
+          cargo fmt --all
+          if ($LASTEXITCODE -ne 0) { throw 'cargo fmt --all failed' }
+          cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) { throw 'cargo fmt verification failed' }
+          git add -u
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "style: format upstream v0.17.0 integration"
+            if ($LASTEXITCODE -ne 0) { throw 'rustfmt commit failed' }
+            git push origin "HEAD:$env:GITHUB_REF_NAME"
+            if ($LASTEXITCODE -ne 0) { throw 'rustfmt push failed' }
+          } else {
+            Write-Host 'Rust sources already match rustfmt.'
+          }
+
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
           key: local-msi-${{ matrix.arch }}
