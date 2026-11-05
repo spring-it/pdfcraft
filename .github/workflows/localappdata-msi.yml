@@ -146,12 +146,15 @@ jobs:
         if: matrix.arch == 'x64'
         shell: pwsh
         run: |
+          $env:RUST_BACKTRACE = '1'
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-fonts --all-targets
           if ($LASTEXITCODE -ne 0) { throw 'PDF font asset and metadata regression suite failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-edit --all-targets
           if ($LASTEXITCODE -ne 0) { throw 'PDF text editing and Chinese fallback regression suite failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-render --all-targets
           if ($LASTEXITCODE -ne 0) { throw 'PDF rendering and CID font regression suite failed' }
+          cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui --test it ui::tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight -- --exact --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Focused tab-strip scroll regression test failed' }
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-ui-egui --all-targets
           if ($LASTEXITCODE -ne 0) { throw 'UI, watermark dialog, branding and integration regression suite failed' }
 
