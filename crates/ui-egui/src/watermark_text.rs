@@ -92,10 +92,10 @@ fn choose_face(text: &str, family: usize) -> Result<(Vec<u8>, u32), String> {
             }
         }
     }
-    if let Ok(f) = FontRef::new(latin) {
-        if supports(&f, text) {
-            return Ok((latin.to_vec(), 0));
-        }
+    if let Ok(f) = FontRef::new(latin)
+        && supports(&f, text)
+    {
+        return Ok((latin.to_vec(), 0));
     }
     Err("无法生成中文水印：此电脑没有覆盖所输入汉字的可用字体（建议安装微软雅黑或黑体）。".into())
 }
@@ -147,7 +147,7 @@ pub fn png(text: &str, size: f64, color: [f64; 3], family: usize) -> Result<Vec<
     let tree = resvg::usvg::Tree::from_str(&svg, &resvg::usvg::Options::default()).map_err(|e| format!("水印图形解析失败：{e}"))?;
     let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height).ok_or("无法分配水印图像内存。")?;
     resvg::render(&tree, resvg::tiny_skia::Transform::default(), &mut pixmap.as_mut());
-    if !pixmap.data().chunks_exact(4).any(|p| p[3] > 0) {
+    if !pixmap.data().as_chunks::<4>().0.iter().any(|p| p[3] > 0) {
         return Err("水印文字没有绘制出可见像素。".into());
     }
     pixmap.encode_png().map_err(|e| format!("无法编码水印 PNG：{e}"))
