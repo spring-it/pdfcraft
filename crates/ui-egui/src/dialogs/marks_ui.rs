@@ -592,7 +592,7 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             });
             ui.horizontal_wrapped(|ui| {
                 let font_label = ui.label("字体");
-                egui::ComboBox::from_id_salt("wofei-watermark-font")
+                craft_ui::ComboBox::from_id_salt("wofei-watermark-font")
                     .selected_text(["微软雅黑", "黑体", "Arial", "Georgia", "等宽字体"][d.font_family.min(4)])
                     .show_ui(ui, |ui| {
                         for (i, label) in ["微软雅黑", "黑体", "Arial", "Georgia", "等宽字体"].iter().enumerate() {
@@ -657,7 +657,7 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             ui.add_space(8.0);
             ui.label(egui::RichText::new("页面范围选项").font(theme::brand(12.5)));
             d.range.ui(ui, count);
-            ui.checkbox(&mut d.custom_enabled, "自定义页码");
+            ui.add(widgets::checkbox(&mut d.custom_enabled, "自定义页码"));
             if d.custom_enabled {
                 ui.add(egui::TextEdit::singleline(&mut d.custom_pages).desired_width((left_width - 40.0).max(180.0)).hint_text("例如 1-3, 5, 8-10"));
                 if selected_pages(d, count).is_err() {
@@ -678,7 +678,18 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             right.label(egui::RichText::new("实时预览").font(theme::brand(15.0)));
             right.add_space(6.0);
             let file_name = d.file.as_ref().filter(|_| d.use_file).map(|f| f.0.as_str());
-            watermark_preview(right, t, page, &d.wm, file_name, d.use_file, right_width, preview_height);
+            watermark_preview(
+                right,
+                t,
+                WatermarkPreviewArgs {
+                    size: page,
+                    watermark: &d.wm,
+                    file_name,
+                    use_file: d.use_file,
+                    canvas_width: right_width,
+                    canvas_height: preview_height,
+                },
+            );
             right.add_space(6.0);
             right.horizontal(|right| {
                 let previous = step_preview_pages(&preview_pages, preview_page, false);
@@ -730,17 +741,19 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     (apply, cancel)
 }
 
-/// Large page preview used by the two-column watermark dialog.
-fn watermark_preview(
-    ui: &mut egui::Ui,
-    t: &Tokens,
+/// Arguments for the live watermark page preview.
+struct WatermarkPreviewArgs<'a> {
     size: (f64, f64),
-    wm: &Watermark,
-    file_name: Option<&str>,
+    watermark: &'a Watermark,
+    file_name: Option<&'a str>,
     use_file: bool,
     canvas_width: f32,
     canvas_height: f32,
-) {
+}
+
+/// Large page preview used by the two-column watermark dialog.
+fn watermark_preview(ui: &mut egui::Ui, t: &Tokens, args: WatermarkPreviewArgs<'_>) {
+    let WatermarkPreviewArgs { size, watermark: wm, file_name, use_file, canvas_width, canvas_height } = args;
     let (w, h) = (size.0.max(1.0), size.1.max(1.0));
     let canvas_size = vec2(canvas_width.max(1.0), canvas_height.max(0.0));
     let (canvas, _) = ui.allocate_exact_size(canvas_size, egui::Sense::hover());
