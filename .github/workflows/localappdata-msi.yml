@@ -199,7 +199,7 @@ jobs:
           retention-days: 30
 
   publish:
-    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[publish v1.0.2]') && !startsWith(github.event.head_commit.message, 'test(watermark):')
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/v1.0.2-develop' && contains(github.event.head_commit.message, '[publish v1.0.2]') && !startsWith(github.event.head_commit.message, 'test(watermark):') }}
     name: Publish two MSI assets to Releases
     needs: build-msi
     runs-on: ubuntu-latest
