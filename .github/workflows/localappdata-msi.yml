@@ -198,6 +198,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # Sync-branch pushes run the Windows validation matrix only; publishing is reserved for an explicit release commit on v1.0.2-develop.
   publish:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/v1.0.2-develop' && contains(github.event.head_commit.message, '[publish v1.0.2]') && !startsWith(github.event.head_commit.message, 'test(watermark):') }}
     name: Publish two MSI assets to Releases
