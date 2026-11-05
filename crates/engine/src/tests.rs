@@ -3429,7 +3429,7 @@ fn update_previews_on_the_page_without_the_marks_it_replaces() {
 
     assert_eq!(px(&unmarked.render_page(1, 1.0).unwrap(), 5, 5), [255, 255, 255], "made once, for every page: page 2 is white too");
     assert_eq!(unmarked.parser_builds(), 1, "parsed once for both pages");
-    let without_header = doc.without_marks(MarkKind::HeaderFooter).unwrap().expect("page 1 has a header");
+    let mut without_header = doc.without_marks(MarkKind::HeaderFooter).unwrap().expect("page 1 has a header");
     assert_eq!(blues(&without_header.render_page(0, 1.0).unwrap()), 0, "without the header");
     assert!(unmarked.render_page(9, 1.0).is_err(), "no page 10");
     let doc = s.get(id).unwrap();
