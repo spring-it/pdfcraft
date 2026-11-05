@@ -180,7 +180,7 @@ pub fn add_watermark(doc: &mut Document, pages: &[usize], wm: &Watermark, replac
                     let mut row = 0usize;
                     let mut y = -dh;
                     while y <= h + dh && draw_count < 1200 {
-                        let shift = if row % 2 == 0 { 0.0 } else { step_x / 2.0 };
+                        let shift = if row.is_multiple_of(2) { 0.0 } else { step_x / 2.0 };
                         let mut x = -dw;
                         while x <= w + dw && draw_count < 1200 {
                             content.push_str(&picture_at(src, (dw, dh), wm.rotation, (x + shift + wm.offset[0], y + wm.offset[1])));
