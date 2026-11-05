@@ -659,12 +659,14 @@ fn tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight() {
     // The active newest tab is the one the strip must keep in sight after opening more tabs.
     // Earlier tabs can be fully clipped, in which case egui_kittest has an AccessKit node but no
     // bounding box. Check the active tab explicitly before asking for its logical rect.
-    let active = h.get_by_role_and_label(egui::accesskit::Role::Tab, &name(6));
+    let active_name = name(6);
+    let active = h.get_by_role_and_label(egui::accesskit::Role::Tab, &active_name);
     assert!(active.accesskit_node().bounding_box().is_some(), "the newest active tab must remain visible after opening seven tabs");
     let visible = active.rect();
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Scroll tabs left").click();
     h.run_steps(4);
-    let active_after = h.get_by_role_and_label(egui::accesskit::Role::Tab, &name(6));
+    let active_after_name = name(6);
+    let active_after = h.get_by_role_and_label(egui::accesskit::Role::Tab, &active_after_name);
     assert!(active_after.accesskit_node().bounding_box().is_some(), "the newest active tab must remain visible after one left scroll step");
     assert!(active_after.rect().left() > visible.left(), "the left arrow scrolls the active tab back into the strip");
     assert_eq!(enabled(&h, "Scroll tabs right"), Some(true), "and then there is more to the right");
