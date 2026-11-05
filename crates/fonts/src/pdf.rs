@@ -533,17 +533,18 @@ fn be(b: &[u8]) -> u32 {
 fn style_from_name(name: &str) -> (Option<bool>, bool) {
     let name = name.to_ascii_lowercase();
     let name = name.split_once('+').map_or(name.as_str(), |(_, n)| n);
-    let named_bold = ["bold", "black", "heavy", "semibold", "demi", "extrabold", "ultrabold"]
-        .iter()
-        .any(|s| name.contains(s));
+    let named_bold = ["bold", "black", "heavy", "semibold", "demi", "extrabold", "ultrabold"].iter().any(|s| name.contains(s));
     let tokens: Vec<_> = name.split(|c: char| !c.is_ascii_alphanumeric()).collect();
-    let named_regular = ["regular", "normal", "book", "light", "thin", "extralight", "ultralight", "roman", "medium", "plain"]
-        .iter()
-        .any(|s| tokens.contains(s))
-        || ["regular", "normal", "light", "thin", "extralight", "ultralight", "roman", "medium", "plain"]
-            .iter()
-            .any(|s| name.ends_with(s));
-    let bold = if named_bold { Some(true) } else if named_regular { Some(false) } else { None };
+    let named_regular =
+        ["regular", "normal", "book", "light", "thin", "extralight", "ultralight", "roman", "medium", "plain"].iter().any(|s| tokens.contains(s))
+            || ["regular", "normal", "light", "thin", "extralight", "ultralight", "roman", "medium", "plain"].iter().any(|s| name.ends_with(s));
+    let bold = if named_bold {
+        Some(true)
+    } else if named_regular {
+        Some(false)
+    } else {
+        None
+    };
     (bold, ["italic", "oblique", "slanted"].iter().any(|s| name.contains(s)))
 }
 

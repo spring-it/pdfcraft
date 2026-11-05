@@ -1893,7 +1893,9 @@ fn finish_edits(app: &mut PdfCraftApp, dialog: Dialog, req: &mut Pending) {
     {
         let count = app.session.get(id).map(|d| d.info.pages.len()).unwrap_or(0);
         match crate::marks_ui::edit(&app.marks_draft, kind, count) {
-            Ok(edit) => { app.apply_edit(edit); }
+            Ok(edit) => {
+                app.apply_edit(edit);
+            }
             Err(error) => app.notify(error),
         }
     }
@@ -2005,7 +2007,6 @@ fn draft_changes(app: &PdfCraftApp) -> Option<Vec<Edit>> {
 fn yes(b: bool) -> String {
     tl!(if b { "Yes" } else { "No" }).to_string()
 }
-
 
 #[cfg(test)]
 mod watermark_dialog_layout_tests {

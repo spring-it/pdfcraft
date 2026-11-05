@@ -1,5 +1,6 @@
 use super::marks::{
-    Background, Context, HeaderFooter, MarkKind, Watermark, add_picture_resource, bates_start, expand, matrix_number, n, picture, picture_at, rgb, shrink_matrix,
+    Background, Context, HeaderFooter, MarkKind, Watermark, add_picture_resource, bates_start, expand, matrix_number, n, picture, picture_at, rgb,
+    shrink_matrix,
 };
 use super::place::{
     END, Isolation, add_page_resources, add_resources, begin, check, check_on_top, contents, free_font_name, isolation, page_fonts, page_list, place,
@@ -182,8 +183,7 @@ pub fn add_watermark(doc: &mut Document, pages: &[usize], wm: &Watermark, replac
                         let shift = if row % 2 == 0 { 0.0 } else { step_x / 2.0 };
                         let mut x = -dw;
                         while x <= w + dw && draw_count < 1200 {
-                            content.push_str(&picture_at(src, (dw, dh), wm.rotation,
-                                (x + shift + wm.offset[0], y + wm.offset[1])));
+                            content.push_str(&picture_at(src, (dw, dh), wm.rotation, (x + shift + wm.offset[0], y + wm.offset[1])));
                             x += step_x;
                             draw_count += 1;
                         }
@@ -195,8 +195,7 @@ pub fn add_watermark(doc: &mut Document, pages: &[usize], wm: &Watermark, replac
                     let row = usize::from(wm.position.min(8)) / 3;
                     let xs = [34.0 + dw / 2.0, w / 2.0, w - 34.0 - dw / 2.0];
                     let ys = [h - 34.0 - dh / 2.0, h / 2.0, 34.0 + dh / 2.0];
-                    content.push_str(&picture_at(src, (dw, dh), wm.rotation,
-                        (xs[col] + wm.offset[0], ys[row] + wm.offset[1])));
+                    content.push_str(&picture_at(src, (dw, dh), wm.rotation, (xs[col] + wm.offset[0], ys[row] + wm.offset[1])));
                 }
             } else {
                 content.push_str(&picture(src, (w, h), wm.scale, wm.rotation, wm.offset));

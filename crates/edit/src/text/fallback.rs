@@ -342,15 +342,39 @@ fn no_hebrew_font() -> EditError {
 /// Recognise common Chinese source-font names so Han text keeps a Chinese document face.
 pub(super) fn chinese_font_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    ["simsun", "simhei", "stsong", "fangsong", "kaiti", "yahei", "dengxian", "mingliu", "jhenghei", "wenkai", "lxgw", "fzsong", "fangzheng", "songti", "heiti", "adobegb", "gb1"]
-        .iter().any(|part| lower.contains(part))
+    [
+        "simsun",
+        "simhei",
+        "stsong",
+        "fangsong",
+        "kaiti",
+        "yahei",
+        "dengxian",
+        "mingliu",
+        "jhenghei",
+        "wenkai",
+        "lxgw",
+        "fzsong",
+        "fangzheng",
+        "songti",
+        "heiti",
+        "adobegb",
+        "gb1",
+    ]
+    .iter()
+    .any(|part| lower.contains(part))
 }
 
 pub(crate) fn is_han_character(ch: char) -> bool {
     matches!(ch, '\u{3400}'..='\u{4DBF}' | '\u{4E00}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '\u{20000}'..='\u{2FA1F}')
 }
 
-pub(crate) fn type3_faces(text: &str, family: crate::added::Family, bold: bool, prefer_chinese: bool) -> Result<(Vec<&'static CraftFont>, bool), EditError> {
+pub(crate) fn type3_faces(
+    text: &str,
+    family: crate::added::Family,
+    bold: bool,
+    prefer_chinese: bool,
+) -> Result<(Vec<&'static CraftFont>, bool), EditError> {
     let japanese = pdfcraft_fonts::document_japanese_fonts_for_style(family == crate::added::Family::Times, bold);
     let mut chinese = pdfcraft_fonts::ui_chinese_fonts();
     let latin = pdfcraft_fonts::document_latin_fonts(bold);
@@ -424,14 +448,11 @@ pub(super) fn type3_font(
     let face = if hebrew {
         faces.first().copied()
     } else {
-        fallback_face(&preferred_faces, &chars, |face, ch| japanese_glyph_from(face, ch).is_ok())
-            .or_else(|| faces.first().copied())
+        fallback_face(&preferred_faces, &chars, |face, ch| japanese_glyph_from(face, ch).is_ok()).or_else(|| faces.first().copied())
     }
     .ok_or_else(|| no_fallback_font(text))?;
     let per_font = max_glyphs.clamp(1, MAX_TYPE3_GLYPHS);
-    let ordered_faces: Vec<_> = std::iter::once(face)
-        .chain(faces.iter().copied().filter(|candidate| !std::ptr::eq(*candidate, face)))
-        .collect();
+    let ordered_faces: Vec<_> = std::iter::once(face).chain(faces.iter().copied().filter(|candidate| !std::ptr::eq(*candidate, face))).collect();
     let mut glyphs = Vec::with_capacity(chars.len());
     for (i, ch) in chars.into_iter().enumerate() {
         // Japanese faces keep first refusal. Chinese fallback faces may supply a missing Han glyph,

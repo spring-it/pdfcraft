@@ -22,9 +22,7 @@ pub struct Link {
 }
 
 /// The only public link shown by this enterprise build is its source repository.
-pub const LINKS: &[Link] = &[
-    Link { command: "help.github", label: "沃飞翼览 PDF 源代码", url: GITHUB, icon: "code-xml" },
-];
+pub const LINKS: &[Link] = &[Link { command: "help.github", label: "沃飞翼览 PDF 源代码", url: GITHUB, icon: "code-xml" }];
 
 pub fn for_command(id: &str) -> Option<&'static Link> {
     LINKS.iter().find(|l| l.command == id)

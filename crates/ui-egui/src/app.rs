@@ -31,10 +31,7 @@ impl Default for PdfCraftApp {
 }
 
 fn branded_window_title(name: Option<String>, mark: &str) -> String {
-    name.map_or_else(
-        || "沃飞翼览 PDF".to_owned(),
-        |name| format!("{name}{mark} — 沃飞翼览 PDF"),
-    )
+    name.map_or_else(|| "沃飞翼览 PDF".to_owned(), |name| format!("{name}{mark} — 沃飞翼览 PDF"))
 }
 
 impl PdfCraftApp {
@@ -47,12 +44,8 @@ impl PdfCraftApp {
         // what closing would ask about, so a draft not yet applied counts too.
         let dirty = self.active.is_some_and(|i| self.has_unsaved_work(i));
         let mark = if dirty { " •" } else { "" };
-        let titled = |name: Option<String>| {
-            branded_window_title(
-                name.or_else(|| self.combine_showing().then(|| tl!("Combine files").to_owned())),
-                mark,
-            )
-        };
+        let titled =
+            |name: Option<String>| branded_window_title(name.or_else(|| self.combine_showing().then(|| tl!("Combine files").to_owned())), mark);
         let title = titled(self.active.and_then(|i| crate::canvas::tab_label(self, i)));
         // The web page's title is what an embedding host reads to tell which file opened, so it
         // names the file even when the document asks to show its own title.
@@ -714,9 +707,6 @@ mod branded_title_tests {
 
     #[test]
     fn branded_window_title_keeps_document_name_and_dirty_marker() {
-        assert_eq!(
-            branded_window_title(Some("合同.pdf".to_owned()), " •"),
-            "合同.pdf • — 沃飞翼览 PDF",
-        );
+        assert_eq!(branded_window_title(Some("合同.pdf".to_owned()), " •"), "合同.pdf • — 沃飞翼览 PDF",);
     }
 }

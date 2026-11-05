@@ -41,10 +41,7 @@ impl OutlinePen for SvgPen {
 }
 
 fn windows_fonts() -> PathBuf {
-    std::env::var_os("WINDIR")
-        .or_else(|| std::env::var_os("SystemRoot"))
-        .map_or_else(|| PathBuf::from(r"C:\Windows"), PathBuf::from)
-        .join("Fonts")
+    std::env::var_os("WINDIR").or_else(|| std::env::var_os("SystemRoot")).map_or_else(|| PathBuf::from(r"C:\Windows"), PathBuf::from).join("Fonts")
 }
 
 /// Fonts are read from the local OS only, never copied into an installer or embedded in PDFs.
@@ -61,15 +58,17 @@ fn font_paths(family: usize) -> Vec<PathBuf> {
         };
         files.iter().map(|f| base.join(f)).collect()
     } else if cfg!(target_os = "macos") {
-        ["PingFang.ttc", "Hiragino Sans GB.ttc", "STHeiti Light.ttc"]
-            .iter().map(|s| Path::new("/System/Library/Fonts").join(s)).collect()
+        ["PingFang.ttc", "Hiragino Sans GB.ttc", "STHeiti Light.ttc"].iter().map(|s| Path::new("/System/Library/Fonts").join(s)).collect()
     } else {
         [
             "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
             "/usr/share/fonts/truetype/arphic/uming.ttc",
             "/usr/share/fonts/truetype/arphic-gbsn00lp/gbsn00lp.ttf",
             "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        ].iter().map(PathBuf::from).collect()
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect()
     }
 }
 
@@ -122,8 +121,7 @@ pub fn png(text: &str, size: f64, color: [f64; 3], family: usize) -> Result<Vec<
         let id = font.charmap().map(ch).ok_or_else(|| format!("水印字体缺少字符：{ch}"))?;
         if let Some(outline) = font.outline_glyphs().get(id) {
             let mut pen = SvgPen::default();
-            outline.draw(DrawSettings::unhinted(Size::unscaled(), loc), &mut pen)
-                .map_err(|_| format!("无法绘制水印字符：{ch}"))?;
+            outline.draw(DrawSettings::unhinted(Size::unscaled(), loc), &mut pen).map_err(|_| format!("无法绘制水印字符：{ch}"))?;
             if !pen.commands.is_empty() {
                 let _ = write!(paths, "<path transform=\"translate({x:.3} 0)\" d=\"{}\"/>", pen.commands);
             }
@@ -146,8 +144,7 @@ pub fn png(text: &str, size: f64, color: [f64; 3], family: usize) -> Result<Vec<
         <g fill=\"rgb({},{},{})\" transform=\"translate({padding:.3} {baseline:.3}) scale({glyph_scale:.7} -{glyph_scale:.7})\">{paths}</g></svg>",
         rgb[0], rgb[1], rgb[2],
     );
-    let tree = resvg::usvg::Tree::from_str(&svg, &resvg::usvg::Options::default())
-        .map_err(|e| format!("水印图形解析失败：{e}"))?;
+    let tree = resvg::usvg::Tree::from_str(&svg, &resvg::usvg::Options::default()).map_err(|e| format!("水印图形解析失败：{e}"))?;
     let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height).ok_or("无法分配水印图像内存。")?;
     resvg::render(&tree, resvg::tiny_skia::Transform::default(), &mut pixmap.as_mut());
     if !pixmap.data().chunks_exact(4).any(|p| p[3] > 0) {
@@ -189,22 +186,23 @@ mod tests {
         let mut session = pdfcraft_engine::Session::new();
         let original = session.create_from_text("Sample", "A PDF to protect").unwrap();
         let id = session.open("sample.pdf", None, original, None).unwrap();
-        session.apply(id, pdfcraft_engine::Edit::AddWatermark {
-            pages: vec![0],
-            settings: pdfcraft_engine::Watermark {
-                text: text.into(),
-                raster_dpi: DPI,
-                tile: true,
-                opacity: 0.18,
-                ..pdfcraft_engine::Watermark::default()
-            },
-            replace: false,
-            file: Some(pdfcraft_engine::MarkFile {
-                name: "chinese-watermark.png".into(),
-                bytes: std::sync::Arc::new(bytes),
-                page: 0,
-            }),
-        }).unwrap();
+        session
+            .apply(
+                id,
+                pdfcraft_engine::Edit::AddWatermark {
+                    pages: vec![0],
+                    settings: pdfcraft_engine::Watermark {
+                        text: text.into(),
+                        raster_dpi: DPI,
+                        tile: true,
+                        opacity: 0.18,
+                        ..pdfcraft_engine::Watermark::default()
+                    },
+                    replace: false,
+                    file: Some(pdfcraft_engine::MarkFile { name: "chinese-watermark.png".into(), bytes: std::sync::Arc::new(bytes), page: 0 }),
+                },
+            )
+            .unwrap();
         let saved = session.save_bytes(id).unwrap();
         assert!(saved.len() > 1024, "watermarked PDF should be nonempty");
         let mut reopened = pdfcraft_engine::Session::new();

@@ -7,12 +7,7 @@ fn windows_chinese_menus_keep_legacy_fallback_stack() {
     let defs = font_definitions_for_platform(true, FontPolicyPlatform::Windows);
     let company = &defs.families[&FontFamily::Name("company".into())];
     let brand = &defs.families[&FontFamily::Name("brand".into())];
-    let general = [
-        FontFamily::Proportional,
-        FontFamily::Monospace,
-        FontFamily::Name("medium".into()),
-        FontFamily::Name("semibold".into()),
-    ];
+    let general = [FontFamily::Proportional, FontFamily::Monospace, FontFamily::Name("medium".into()), FontFamily::Name("semibold".into())];
     assert_eq!(company.first().map(String::as_str), Some("Inter"));
     assert_eq!(brand.first().map(String::as_str), Some("Inter-SemiBold"));
     for face in pdfcraft_fonts::ui_chinese_fonts() {
@@ -26,10 +21,7 @@ fn windows_chinese_menus_keep_legacy_fallback_stack() {
     }
     assert_eq!(defs.families[&FontFamily::Proportional][0], "Inter");
     #[cfg(not(target_arch = "wasm32"))]
-    assert!(matches!(
-        installed_fallback_need(CjkPreference::SimplifiedChinese),
-        crate::system_fonts::Need::Hans
-    ));
+    assert!(matches!(installed_fallback_need(CjkPreference::SimplifiedChinese), crate::system_fonts::Need::Hans));
 }
 
 #[cfg(not(target_arch = "wasm32"))]

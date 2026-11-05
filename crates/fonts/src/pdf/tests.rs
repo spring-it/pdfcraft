@@ -203,10 +203,16 @@ fn metrics_with_flags(flags: Option<Object>) -> Metrics {
 fn metrics_with_descriptor(base_font: Option<&str>, flags: Option<Object>, weight: Option<f64>) -> Metrics {
     let mut doc = Document::new_empty();
     let mut descriptor = Dict::new();
-    if let Some(flags) = flags { descriptor.set(b"Flags".to_vec(), flags); }
-    if let Some(weight) = weight { descriptor.set(b"FontWeight".to_vec(), Object::Real(weight)); }
+    if let Some(flags) = flags {
+        descriptor.set(b"Flags".to_vec(), flags);
+    }
+    if let Some(weight) = weight {
+        descriptor.set(b"FontWeight".to_vec(), Object::Real(weight));
+    }
     let mut entries = vec![("Subtype", Object::name("TrueType")), ("FontDescriptor", Object::Dict(descriptor))];
-    if let Some(name) = base_font { entries.push(("BaseFont", Object::name(name))); }
+    if let Some(name) = base_font {
+        entries.push(("BaseFont", Object::name(name)));
+    }
     let font = font(&mut doc, entries);
     Metrics::from_dict(&doc, &font)
 }

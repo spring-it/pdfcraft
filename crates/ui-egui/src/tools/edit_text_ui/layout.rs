@@ -39,12 +39,7 @@ pub(super) fn changed_draft_range(original: &str, draft: &str) -> Option<std::op
     if original == draft {
         return None;
     }
-    let prefix: usize = original
-        .chars()
-        .zip(draft.chars())
-        .take_while(|(old, new)| old == new)
-        .map(|(ch, _)| ch.len_utf8())
-        .sum();
+    let prefix: usize = original.chars().zip(draft.chars()).take_while(|(old, new)| old == new).map(|(ch, _)| ch.len_utf8()).sum();
     let (mut old_end, mut new_end) = (original.len(), draft.len());
     while old_end > prefix && new_end > prefix {
         let (Some(old), Some(new)) = (original[..old_end].chars().next_back(), draft[..new_end].chars().next_back()) else {
@@ -62,10 +57,12 @@ pub(super) fn changed_draft_range(original: &str, draft: &str) -> Option<std::op
 /// One licensed Chinese face covers the entire newly inserted Han phrase, rather than
 /// mixing partial PDF subsets with unrelated UI or Japanese fallback glyphs.
 pub(super) fn edited_chinese_face(text: &str) -> Option<String> {
-    let has_han = text.chars().any(|ch| matches!(
-        ch,
-        '\u{3400}'..='\u{4DBF}' | '\u{4E00}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '\u{20000}'..='\u{2FA1F}'
-    ));
+    let has_han = text.chars().any(|ch| {
+        matches!(
+            ch,
+            '\u{3400}'..='\u{4DBF}' | '\u{4E00}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '\u{20000}'..='\u{2FA1F}'
+        )
+    });
     if !has_han {
         return None;
     }
@@ -75,7 +72,6 @@ pub(super) fn edited_chinese_face(text: &str) -> Option<String> {
         .find(|(_, face)| pdfcraft_fonts::embedding::covers(face.bytes, text))
         .map(|(index, _)| format!("pdf-editor-han-{index}"))
 }
-
 
 pub(super) fn color32(color: [f64; 3]) -> Color32 {
     Color32::from_rgb(
@@ -116,7 +112,9 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
     // Only the current editor's document fonts live in the atlas. Never accumulate the
     // programs of previously opened files or add them to the interface's default families.
     definitions.font_data.retain(|name, _| !name.starts_with("pdf-source-") && !name.starts_with("pdf-editor-han-"));
-    definitions.families.retain(|family, _| !matches!(family, FontFamily::Name(name) if name.starts_with("pdf-source-") || name.starts_with("pdf-editor-han-")));
+    definitions
+        .families
+        .retain(|family, _| !matches!(family, FontFamily::Name(name) if name.starts_with("pdf-source-") || name.starts_with("pdf-editor-han-")));
     let mut families = BTreeMap::new();
     for (index, program) in programs.iter().enumerate() {
         let name = format!("pdf-source-{index}");
@@ -147,10 +145,7 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
     let mut chinese_faces = false;
     for (index, face) in pdfcraft_fonts::ui_chinese_fonts().iter().enumerate() {
         let name = format!("pdf-editor-han-{index}");
-        definitions.font_data.insert(
-            name.clone(),
-            Arc::new(crate::theme::on_interface_baseline(egui::FontData::from_static(face.bytes))),
-        );
+        definitions.font_data.insert(name.clone(), Arc::new(crate::theme::on_interface_baseline(egui::FontData::from_static(face.bytes))));
         definitions.families.insert(FontFamily::Name(name.clone().into()), vec![name]);
         chinese_faces = true;
     }
@@ -226,11 +221,7 @@ pub(super) fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32,
                 let (Some(&start), Some(&end)) = (pair.first(), pair.get(1)) else { continue };
                 let part = text.get(start..end).unwrap_or_default();
                 let modified = changed.as_ref().is_some_and(|r| r.start <= start && end <= r.end);
-                let chinese = if modified && original_face && ed.font_resource.is_none() {
-                    edited_chinese_face(part)
-                } else {
-                    None
-                };
+                let chinese = if modified && original_face && ed.font_resource.is_none() { edited_chinese_face(part) } else { None };
                 let mut part_font = font.clone();
                 if let Some(name) = &chinese {
                     part_font.family = FontFamily::Name(name.clone().into());

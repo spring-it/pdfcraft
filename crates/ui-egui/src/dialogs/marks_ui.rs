@@ -68,11 +68,15 @@ impl PageRange {
                 Subset::Even => tl!("Even pages only"),
                 Subset::Odd => tl!("Odd pages only"),
             };
-            craft_ui::ComboBox::from_id_salt("mark-subset").selected_text(label).show_ui(ui, |ui| {
-                ui.selectable_value(&mut self.subset, Subset::All, tl!("All pages in range"));
-                ui.selectable_value(&mut self.subset, Subset::Even, tl!("Even pages only"));
-                ui.selectable_value(&mut self.subset, Subset::Odd, tl!("Odd pages only"));
-            }).response.labelled_by(subset_label.id);
+            craft_ui::ComboBox::from_id_salt("mark-subset")
+                .selected_text(label)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.subset, Subset::All, tl!("All pages in range"));
+                    ui.selectable_value(&mut self.subset, Subset::Even, tl!("Even pages only"));
+                    ui.selectable_value(&mut self.subset, Subset::Odd, tl!("Odd pages only"));
+                })
+                .response
+                .labelled_by(subset_label.id);
         });
     }
 }
@@ -503,9 +507,7 @@ fn watermark_preview_page_size(size: (f64, f64), canvas_size: egui::Vec2) -> egu
     let scale = ((max_width as f64 / w).min(max_height as f64 / h)) as f32;
     let page_height = (h as f32 * scale).min(max_height);
     let natural_width = (w as f32 * scale).min(max_width);
-    let page_width = natural_width
-        .max(page_height * WATERMARK_PREVIEW_MIN_PAGE_ASPECT)
-        .min(max_width);
+    let page_width = natural_width.max(page_height * WATERMARK_PREVIEW_MIN_PAGE_ASPECT).min(max_width);
     vec2(page_width, page_height)
 }
 
@@ -517,11 +519,7 @@ fn watermark_column_widths(available_width: f32) -> (f32, f32) {
 }
 
 fn step_preview_pages(pages: &[usize], shown: usize, forward: bool) -> Option<usize> {
-    if forward {
-        pages.iter().copied().find(|page| *page > shown)
-    } else {
-        pages.iter().copied().rev().find(|page| *page < shown)
-    }
+    if forward { pages.iter().copied().find(|page| *page > shown) } else { pages.iter().copied().rev().find(|page| *page < shown) }
 }
 
 /// A responsive two-column watermark dialog: settings on the left, live preview on the right.
@@ -539,7 +537,8 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     let count = doc.info.pages.len();
     let d = &mut app.marks_draft;
     let preview_pages = selected_pages(d, count).unwrap_or_else(|_| d.range.pages(count));
-    let preview_page = d.preview
+    let preview_page = d
+        .preview
         .filter(|page| preview_pages.contains(page))
         .or_else(|| preview_pages.contains(&current).then_some(current))
         .or_else(|| preview_pages.first().copied())
@@ -559,121 +558,120 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
         ui.vertical(|ui| {
             ui.set_min_width(left_width);
             ui.set_max_width(left_width);
-                ui.horizontal(|ui| {
-                    ui.label("来源");
-                    widgets::radio_value(ui, &mut d.use_file, false, "文本");
-                    widgets::radio_value(ui, &mut d.use_file, true, "文件");
+            ui.horizontal(|ui| {
+                ui.label("来源");
+                widgets::radio_value(ui, &mut d.use_file, false, "文本");
+                widgets::radio_value(ui, &mut d.use_file, true, "文件");
+            });
+            if d.use_file {
+                browse |= file_source(ui, d, MarkKind::Watermark);
+            } else {
+                ui.label("文本");
+                ui.add(
+                    crate::widgets::block(&mut d.wm.text)
+                        .desired_rows(2)
+                        .desired_width((left_width - 50.0).max(180.0))
+                        .hint_text("内部资料")
+                        .id_salt("wm-text-wide"),
+                );
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("常用模板");
+                    for (label, value) in
+                        [("内部资料", "内部资料"), ("机密文件", "机密文件"), ("仅供审阅", "仅供审阅"), ("CONFIDENTIAL", "CONFIDENTIAL")]
+                    {
+                        if ui.small_button(label).clicked() {
+                            d.wm.text = value.to_string();
+                        }
+                    }
                 });
-                if d.use_file {
-                    browse |= file_source(ui, d, MarkKind::Watermark);
-                } else {
-                    ui.label("文本");
-                    ui.add(crate::widgets::block(&mut d.wm.text)
-                        .desired_rows(2).desired_width((left_width - 50.0).max(180.0))
-                        .hint_text("内部资料").id_salt("wm-text-wide"));
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label("常用模板");
-                        for (label, value) in [
-                            ("内部资料", "内部资料"),
-                            ("机密文件", "机密文件"),
-                            ("仅供审阅", "仅供审阅"),
-                            ("CONFIDENTIAL", "CONFIDENTIAL"),
-                        ] {
-                            if ui.small_button(label).clicked() { d.wm.text = value.to_string(); }
+            }
+            ui.horizontal(|ui| {
+                ui.label("排列方式");
+                widgets::radio_value(ui, &mut d.wm.tile, true, "平铺水印");
+                widgets::radio_value(ui, &mut d.wm.tile, false, "单个水印");
+            });
+            ui.horizontal_wrapped(|ui| {
+                let font_label = ui.label("字体");
+                egui::ComboBox::from_id_salt("wofei-watermark-font")
+                    .selected_text(["微软雅黑", "黑体", "Arial", "Georgia", "等宽字体"][d.font_family.min(4)])
+                    .show_ui(ui, |ui| {
+                        for (i, label) in ["微软雅黑", "黑体", "Arial", "Georgia", "等宽字体"].iter().enumerate() {
+                            ui.selectable_value(&mut d.font_family, i, *label);
+                        }
+                    })
+                    .response
+                    .labelled_by(font_label.id);
+                let size_label = ui.label("字号");
+                ui.add(egui::Slider::new(&mut d.wm.font_size, 8.0..=100.0).suffix(" pt")).labelled_by(size_label.id);
+                ui.label("颜色");
+                color_button(ui, &mut d.wm.color);
+            });
+            ui.horizontal_wrapped(|ui| {
+                ui.label("旋转");
+                for angle in [-45.0, 0.0, 45.0] {
+                    widgets::radio_value(ui, &mut d.wm.rotation, angle, if angle == 0.0 { "无".to_owned() } else { format!("{angle:.0}°") });
+                }
+                ui.add(egui::DragValue::new(&mut d.wm.rotation).range(-180.0..=180.0).suffix("°")).accessible_name("旋转角度");
+            });
+            ui.horizontal(|ui| {
+                let opacity_label = ui.label("不透明度");
+                let mut pct = d.wm.opacity * 100.0;
+                if ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix("%")).labelled_by(opacity_label.id).changed() {
+                    d.wm.opacity = pct / 100.0;
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                ui.label("位置");
+                widgets::radio_value(ui, &mut d.wm.behind, true, "显示在页面后面");
+                widgets::radio_value(ui, &mut d.wm.behind, false, "显示在页面上层");
+            });
+            if d.wm.tile {
+                ui.horizontal_wrapped(|ui| {
+                    let horizontal_gap_label = ui.label("横向间距");
+                    ui.add(egui::Slider::new(&mut d.wm.tile_gap[0], 20.0..=260.0).suffix(" pt")).labelled_by(horizontal_gap_label.id);
+                    let vertical_gap_label = ui.label("纵向间距");
+                    ui.add(egui::Slider::new(&mut d.wm.tile_gap[1], 20.0..=260.0).suffix(" pt")).labelled_by(vertical_gap_label.id);
+                });
+            } else {
+                ui.horizontal(|ui| {
+                    ui.label("水印位置");
+                    egui::Grid::new("wofei-watermark-grid-wide").num_columns(3).spacing([6.0, 4.0]).show(ui, |ui| {
+                        for (i, label) in ["左上", "顶部", "右上", "左侧", "居中", "右侧", "左下", "底部", "右下"].into_iter().enumerate()
+                        {
+                            ui.selectable_value(&mut d.wm.position, i as u8, label);
+                            if i % 3 == 2 {
+                                ui.end_row();
+                            }
                         }
                     });
+                });
+            }
+            ui.horizontal_wrapped(|ui| {
+                ui.label("与中心的偏移");
+                let horizontal_offset_label = ui.label("水平偏移");
+                ui.add(egui::DragValue::new(&mut d.wm.offset[0]).range(-MAX_OFFSET..=MAX_OFFSET).suffix(" pt"))
+                    .labelled_by(horizontal_offset_label.id);
+                let vertical_offset_label = ui.label("垂直偏移");
+                ui.add(egui::DragValue::new(&mut d.wm.offset[1]).range(-MAX_OFFSET..=MAX_OFFSET).suffix(" pt")).labelled_by(vertical_offset_label.id);
+            });
+            ui.add_space(8.0);
+            ui.label(egui::RichText::new("页面范围选项").font(theme::brand(12.5)));
+            d.range.ui(ui, count);
+            ui.checkbox(&mut d.custom_enabled, "自定义页码");
+            if d.custom_enabled {
+                ui.add(egui::TextEdit::singleline(&mut d.custom_pages).desired_width((left_width - 40.0).max(180.0)).hint_text("例如 1-3, 5, 8-10"));
+                if selected_pages(d, count).is_err() {
+                    ui.colored_label(Color32::RED, "页码范围无效，请检查起止页是否在文档范围内。");
                 }
-                ui.horizontal(|ui| {
-                    ui.label("排列方式");
-                    widgets::radio_value(ui, &mut d.wm.tile, true, "平铺水印");
-                    widgets::radio_value(ui, &mut d.wm.tile, false, "单个水印");
-                });
-                ui.horizontal_wrapped(|ui| {
-                    let font_label = ui.label("字体");
-                    egui::ComboBox::from_id_salt("wofei-watermark-font")
-                        .selected_text(["微软雅黑", "黑体", "Arial", "Georgia", "等宽字体"][d.font_family.min(4)])
-                        .show_ui(ui, |ui| {
-                            for (i, label) in ["微软雅黑", "黑体", "Arial", "Georgia", "等宽字体"].iter().enumerate() {
-                                ui.selectable_value(&mut d.font_family, i, *label);
-                            }
-                        }).response.labelled_by(font_label.id);
-                    let size_label = ui.label("字号");
-                    ui.add(egui::Slider::new(&mut d.wm.font_size, 8.0..=100.0).suffix(" pt")).labelled_by(size_label.id);
-                    ui.label("颜色");
-                    color_button(ui, &mut d.wm.color);
-                });
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("旋转");
-                    for angle in [-45.0, 0.0, 45.0] {
-                        widgets::radio_value(ui, &mut d.wm.rotation, angle, if angle == 0.0 { "无".to_owned() } else { format!("{angle:.0}°") });
-                    }
-                    ui.add(egui::DragValue::new(&mut d.wm.rotation).range(-180.0..=180.0).suffix("°"))
-                        .accessible_name("旋转角度");
-                });
-                ui.horizontal(|ui| {
-                    let opacity_label = ui.label("不透明度");
-                    let mut pct = d.wm.opacity * 100.0;
-                    if ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix("%")).labelled_by(opacity_label.id).changed() {
-                        d.wm.opacity = pct / 100.0;
-                    }
-                });
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("位置");
-                    widgets::radio_value(ui, &mut d.wm.behind, true, "显示在页面后面");
-                    widgets::radio_value(ui, &mut d.wm.behind, false, "显示在页面上层");
-                });
-                if d.wm.tile {
-                    ui.horizontal_wrapped(|ui| {
-                        let horizontal_gap_label = ui.label("横向间距");
-                        ui.add(egui::Slider::new(&mut d.wm.tile_gap[0], 20.0..=260.0).suffix(" pt"))
-                            .labelled_by(horizontal_gap_label.id);
-                        let vertical_gap_label = ui.label("纵向间距");
-                        ui.add(egui::Slider::new(&mut d.wm.tile_gap[1], 20.0..=260.0).suffix(" pt"))
-                            .labelled_by(vertical_gap_label.id);
-                    });
-                } else {
-                    ui.horizontal(|ui| {
-                        ui.label("水印位置");
-                        egui::Grid::new("wofei-watermark-grid-wide").num_columns(3).spacing([6.0, 4.0]).show(ui, |ui| {
-                            for (i, label) in ["左上", "顶部", "右上", "左侧", "居中", "右侧", "左下", "底部", "右下"].into_iter().enumerate() {
-                                ui.selectable_value(&mut d.wm.position, i as u8, label);
-                                if i % 3 == 2 { ui.end_row(); }
-                            }
-                        });
-                    });
-                }
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("与中心的偏移");
-                    let horizontal_offset_label = ui.label("水平偏移");
-                    ui.add(egui::DragValue::new(&mut d.wm.offset[0]).range(-MAX_OFFSET..=MAX_OFFSET).suffix(" pt"))
-                        .labelled_by(horizontal_offset_label.id);
-                    let vertical_offset_label = ui.label("垂直偏移");
-                    ui.add(egui::DragValue::new(&mut d.wm.offset[1]).range(-MAX_OFFSET..=MAX_OFFSET).suffix(" pt"))
-                        .labelled_by(vertical_offset_label.id);
-                });
-                ui.add_space(8.0);
-                ui.label(egui::RichText::new("页面范围选项").font(theme::brand(12.5)));
-                d.range.ui(ui, count);
-                ui.checkbox(&mut d.custom_enabled, "自定义页码");
-                if d.custom_enabled {
-                    ui.add(egui::TextEdit::singleline(&mut d.custom_pages)
-                        .desired_width((left_width - 40.0).max(180.0)).hint_text("例如 1-3, 5, 8-10"));
-                    if selected_pages(d, count).is_err() {
-                        ui.colored_label(Color32::RED, "页码范围无效，请检查起止页是否在文档范围内。");
-                    }
-                }
-                ui.label(egui::RichText::new("支持中文水印：使用本机字体绘制透明 PNG，再写入 PDF；不上传文件或字体。")
-                    .small().color(t.text_muted));
+            }
+            ui.label(egui::RichText::new("支持中文水印：使用本机字体绘制透明 PNG，再写入 PDF；不上传文件或字体。").small().color(t.text_muted));
         });
         // Do not use ui.separator() in this horizontal layout: egui sizes a vertical
         // separator from the parent's available height, which can make Modal treat
         // the whole viewport as content and re-center the controls out of view.
         let divider_height = preview_height.min(ui.available_height());
         let (divider, _) = ui.allocate_exact_size(vec2(1.0, divider_height), egui::Sense::hover());
-        ui.painter().line_segment(
-            [divider.center_top(), divider.center_bottom()],
-            Stroke::new(1.0, t.border),
-        );
+        ui.painter().line_segment([divider.center_top(), divider.center_bottom()], Stroke::new(1.0, t.border));
         ui.vertical(|right| {
             right.set_min_width(right_width);
             right.set_max_width(right_width);
@@ -684,16 +682,12 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             right.add_space(6.0);
             right.horizontal(|right| {
                 let previous = step_preview_pages(&preview_pages, preview_page, false);
-                if right.add_enabled_ui(previous.is_some(), |right| {
-                    icons::button(right, "chevron-left", 22.0, false, "上一页")
-                }).inner.clicked() {
+                if right.add_enabled_ui(previous.is_some(), |right| icons::button(right, "chevron-left", 22.0, false, "上一页")).inner.clicked() {
                     d.preview = previous;
                 }
                 right.label(egui::RichText::new(format!("预览：第 {} 页，共 {} 页", preview_page + 1, count)).small().color(t.text_faint));
                 let next = step_preview_pages(&preview_pages, preview_page, true);
-                if right.add_enabled_ui(next.is_some(), |right| {
-                    icons::button(right, "chevron-right", 22.0, false, "下一页")
-                }).inner.clicked() {
+                if right.add_enabled_ui(next.is_some(), |right| icons::button(right, "chevron-right", 22.0, false, "下一页")).inner.clicked() {
                     d.preview = next;
                 }
             });
@@ -702,8 +696,7 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             if d.replace {
                 right.label(egui::RichText::new("将替换这些页面上现有的水印。").small().color(t.text_faint));
             }
-            right.label(egui::RichText::new("预览随设置实时更新；最终效果以保存后的 PDF 为准。")
-                .small().color(t.text_muted));
+            right.label(egui::RichText::new("预览随设置实时更新；最终效果以保存后的 PDF 为准。").small().color(t.text_muted));
         });
     });
     ui.add_space(8.0);
@@ -725,11 +718,11 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             .add_filter(tl!("PDF or image"), &["pdf", "png", "jpg", "jpeg", "tif", "tiff", "gif", "bmp", "jp2", "j2k", "jpx"]);
         let epoch = app.dialog_epoch();
         app.ask_one(crate::pickers::Ask::File(dialog), None, move |app, p| {
-            if app.dialog_epoch() != epoch { return; }
-            app.marks_draft.file = std::fs::read(&p).ok().map(|b| (
-                p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
-                std::sync::Arc::new(b),
-            ));
+            if app.dialog_epoch() != epoch {
+                return;
+            }
+            app.marks_draft.file =
+                std::fs::read(&p).ok().map(|b| (p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), std::sync::Arc::new(b)));
         });
     }
     #[cfg(target_arch = "wasm32")]
@@ -753,20 +746,17 @@ fn watermark_preview(
     let (canvas, _) = ui.allocate_exact_size(canvas_size, egui::Sense::hover());
     let painter = ui.painter_at(canvas);
     painter.rect_filled(canvas, CornerRadius::same(6), t.field);
-    let scale = (((canvas_size.x - 24.0).max(1.0) as f64) / w)
-        .min(((canvas_size.y - 24.0).max(1.0) as f64) / h) as f32;
+    let scale = (((canvas_size.x - 24.0).max(1.0) as f64) / w).min(((canvas_size.y - 24.0).max(1.0) as f64) / h) as f32;
     let page_size = watermark_preview_page_size(size, canvas_size);
     let page = Rect::from_center_size(canvas.center(), page_size);
     painter.rect_filled(page, CornerRadius::same(2), Color32::WHITE);
     painter.rect_stroke(page, CornerRadius::same(2), Stroke::new(1.0, t.border), egui::StrokeKind::Outside);
     let draw_content = || {
-        painter.text(page.min + vec2(16.0, 20.0), egui::Align2::LEFT_CENTER, "PDF 文档预览",
-            theme::company(10.0), Color32::from_gray(190));
+        painter.text(page.min + vec2(16.0, 20.0), egui::Align2::LEFT_CENTER, "PDF 文档预览", theme::company(10.0), Color32::from_gray(190));
         for row in 0..12 {
             let y = page.top() + 42.0 + row as f32 * ((page.height() - 60.0) / 12.0);
             let right = if row % 4 == 3 { page.right() - 60.0 } else { page.right() - 18.0 };
-            painter.line_segment([pos2(page.left() + 18.0, y), pos2(right, y)],
-                Stroke::new(1.0, Color32::from_gray(235)));
+            painter.line_segment([pos2(page.left() + 18.0, y), pos2(right, y)], Stroke::new(1.0, Color32::from_gray(235)));
         }
     };
     let draw_mark = || {
@@ -778,15 +768,13 @@ fn watermark_preview(
                 painter.rect_stroke(rect, CornerRadius::ZERO, Stroke::new(1.0, Color32::GRAY), egui::StrokeKind::Inside);
                 painter.text(centre, egui::Align2::CENTER_CENTER, name, theme::company(10.0), Color32::GRAY);
             } else {
-                painter.text(page.center(), egui::Align2::CENTER_CENTER, "请选择水印文件",
-                    theme::company(12.0), Color32::GRAY);
+                painter.text(page.center(), egui::Align2::CENTER_CENTER, "请选择水印文件", theme::company(12.0), Color32::GRAY);
             }
             return;
         }
         let text = if wm.text.trim().is_empty() { "内部资料" } else { wm.text.trim() };
         let size = (wm.font_size as f32 * scale).max(5.0);
-        let galley = painter.layout_no_wrap(text.to_string(), theme::company(size),
-            rgb32(wm.color).gamma_multiply(wm.opacity as f32));
+        let galley = painter.layout_no_wrap(text.to_string(), theme::company(size), rgb32(wm.color).gamma_multiply(wm.opacity as f32));
         let angle = -(wm.rotation as f32).to_radians();
         let half = galley.size() / 2.0;
         let (sn, cs) = angle.sin_cos();
@@ -819,9 +807,14 @@ fn watermark_preview(
             draw_one(pos2(xs[col] + wm.offset[0] as f32 * scale, ys[row] - wm.offset[1] as f32 * scale));
         }
     };
-    if wm.behind { draw_mark(); draw_content(); } else { draw_content(); draw_mark(); }
+    if wm.behind {
+        draw_mark();
+        draw_content();
+    } else {
+        draw_content();
+        draw_mark();
+    }
 }
-
 
 pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: MarkKind) -> (bool, bool) {
     if kind == MarkKind::Watermark {
@@ -1239,10 +1232,14 @@ fn backdrop_options(ui: &mut egui::Ui, t: &Tokens, d: &mut MarksDraft, doc: &pdf
 
 /// Parse 1-based custom page ranges, rejecting invalid syntax and out-of-range pages.
 fn selected_pages(d: &MarksDraft, count: usize) -> Result<Vec<usize>, String> {
-    if !d.custom_enabled { return Ok(d.range.pages(count)); }
+    if !d.custom_enabled {
+        return Ok(d.range.pages(count));
+    }
     let mut pages = std::collections::BTreeSet::new();
     let text = d.custom_pages.replace('，', ",").replace(' ', "");
-    if text.is_empty() { return Err("请输入页码范围".into()); }
+    if text.is_empty() {
+        return Err("请输入页码范围".into());
+    }
     for part in text.split(',') {
         let (a, b) = if let Some((a, b)) = part.split_once('-') {
             (a.parse::<usize>().map_err(|_| "无效起始页码")?, b.parse::<usize>().map_err(|_| "无效结束页码")?)
@@ -1250,22 +1247,26 @@ fn selected_pages(d: &MarksDraft, count: usize) -> Result<Vec<usize>, String> {
             let p = part.parse::<usize>().map_err(|_| "无效页码")?;
             (p, p)
         };
-        if a < 1 || b < a || b > count { return Err("页码超出文档范围".into()); }
-        for p in a..=b { pages.insert(p - 1); }
+        if a < 1 || b < a || b > count {
+            return Err("页码超出文档范围".into());
+        }
+        for p in a..=b {
+            pages.insert(p - 1);
+        }
     }
-    if pages.is_empty() { return Err("没有选中任何页面".into()); }
+    if pages.is_empty() {
+        return Err("没有选中任何页面".into());
+    }
     Ok(pages.into_iter().collect())
 }
 
 /// Render the text into a transparent PNG, as in the user's HTML watermark example.
 fn watermark_file(d: &MarksDraft) -> Result<Option<pdfcraft_engine::MarkFile>, String> {
-    if d.use_file { return Ok(mark_file(d)); }
+    if d.use_file {
+        return Ok(mark_file(d));
+    }
     let png = crate::watermark_text::png(&d.wm.text, d.wm.font_size, d.wm.color, d.font_family)?;
-    Ok(Some(pdfcraft_engine::MarkFile {
-        name: "wofei-watermark.png".into(),
-        bytes: std::sync::Arc::new(png),
-        page: 0,
-    }))
+    Ok(Some(pdfcraft_engine::MarkFile { name: "wofei-watermark.png".into(), bytes: std::sync::Arc::new(png), page: 0 }))
 }
 
 /// The edit the dialog's OK makes. Fail before mutating any PDF on invalid font/pages.
@@ -1275,13 +1276,14 @@ pub fn edit(d: &MarksDraft, kind: MarkKind, count: usize) -> Result<Edit, String
         MarkKind::HeaderFooter => Ok(Edit::AddHeaderFooter { pages, settings: d.hf.clone(), replace: d.replace }),
         MarkKind::Watermark => {
             let mut wm = d.wm.clone();
-            if !d.use_file { wm.raster_dpi = crate::watermark_text::DPI; }
+            if !d.use_file {
+                wm.raster_dpi = crate::watermark_text::DPI;
+            }
             Ok(Edit::AddWatermark { pages, settings: wm, replace: d.replace, file: watermark_file(d)? })
         }
         MarkKind::Background => Ok(Edit::AddBackground { pages, settings: d.bg.clone(), replace: d.replace, file: mark_file(d) }),
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1408,7 +1410,6 @@ mod tests {
         }
     }
 }
-
 
 #[cfg(test)]
 mod company_watermark_tests {

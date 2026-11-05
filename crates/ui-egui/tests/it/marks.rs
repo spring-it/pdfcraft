@@ -308,18 +308,23 @@ trailer << /Root 1 0 R >>
 /// The pictures of page `page` (its thumbnail) painted last frame: paint order, bounds, tint.
 fn page_pictures(h: &Harness<'static, PdfCraftApp>, _page: usize) -> Vec<(usize, egui::Rect, egui::Color32)> {
     let Some(label) = h.query_by_label_contains("Preview: page").map(|node| node.rect()) else { return Vec::new() };
-    h.output().shapes.iter().enumerate().filter_map(|(index, shape)| {
-        let egui::Shape::Mesh(mesh) = &shape.shape else { return None };
-        let rect = mesh.calc_bounds();
-        let in_preview = rect.width() > 50.0
-            && rect.height() > 50.0
-            && rect.width() <= 211.0
-            && rect.height() <= 211.0
-            && rect.right() <= label.left() + 2.0
-            && (rect.center().y - label.center().y).abs() < 120.0;
-        let Some(color) = mesh.vertices.first().map(|vertex| vertex.color) else { return None };
-        in_preview.then_some((index, rect, color))
-    }).collect()
+    h.output()
+        .shapes
+        .iter()
+        .enumerate()
+        .filter_map(|(index, shape)| {
+            let egui::Shape::Mesh(mesh) = &shape.shape else { return None };
+            let rect = mesh.calc_bounds();
+            let in_preview = rect.width() > 50.0
+                && rect.height() > 50.0
+                && rect.width() <= 211.0
+                && rect.height() <= 211.0
+                && rect.right() <= label.left() + 2.0
+                && (rect.center().y - label.center().y).abs() < 120.0;
+            let Some(color) = mesh.vertices.first().map(|vertex| vertex.color) else { return None };
+            in_preview.then_some((index, rect, color))
+        })
+        .collect()
 }
 
 /// The preview's picture of `page`, once its thumbnail has arrived (it renders off the UI thread).

@@ -139,20 +139,14 @@ fn watermark_dialog_stays_content_sized_across_frames() {
         h.run_steps(1);
         let modal = card(&h, "dialog");
         assert!(modal.height() < 880.0, "frame {frame}: watermark modal unexpectedly tall: {modal:?}");
-        assert!(
-            modal.top() >= 0.0 && modal.bottom() <= 900.0,
-            "frame {frame}: watermark modal is outside the viewport: {modal:?}"
-        );
+        assert!(modal.top() >= 0.0 && modal.bottom() <= 900.0, "frame {frame}: watermark modal is outside the viewport: {modal:?}");
 
         let cancel = h.get_by_label("Cancel").rect();
         assert!(
             cancel.top() >= modal.top() && cancel.bottom() <= modal.bottom(),
             "frame {frame}: Cancel is outside the modal: {cancel:?} in {modal:?}"
         );
-        assert!(
-            cancel.top() >= 0.0 && cancel.bottom() <= 900.0,
-            "frame {frame}: Cancel moved outside the viewport: {cancel:?}"
-        );
+        assert!(cancel.top() >= 0.0 && cancel.bottom() <= 900.0, "frame {frame}: Cancel moved outside the viewport: {cancel:?}");
         if let Some(top) = previous_top {
             assert!((modal.top() - top).abs() < 2.0, "frame {frame}: modal jumped vertically: {modal:?}, previous top {top}");
         }

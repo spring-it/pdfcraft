@@ -78,9 +78,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         egui::Frame::NONE.inner_margin(egui::Margin { left: 36, right: 36, top: 28, bottom: 28 }).show(ui, |ui| {
             ui.label(egui::RichText::new("沃飞翼览 PDF").font(theme::brand(24.0)));
             ui.label(
-                egui::RichText::new("企业定制 PDF 工作台。文档处理在本地完成，保护公司资料安全。")
-                    .color(t.text_muted)
-                    .font(theme::company(14.0)),
+                egui::RichText::new("企业定制 PDF 工作台。文档处理在本地完成，保护公司资料安全。").color(t.text_muted).font(theme::company(14.0)),
             );
             ui.add_space(14.0);
             egui::Frame::NONE
@@ -128,8 +126,20 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         let wm_body = wm_rect.translate(wm_press.offset());
                         icons::paint(ui, Rect::from_min_size(wm_body.min + vec2(14.0, 14.0), vec2(22.0, 22.0)), "stamp", 21.0, t.accent_text);
                         ui.painter().text(wm_body.min + vec2(44.0, 25.0), Align2::LEFT_CENTER, "添加水印", theme::semibold(13.5), t.text);
-                        ui.painter().text(wm_body.min + vec2(14.0, 54.0), Align2::LEFT_CENTER, "中文 · 平铺 · 自定义位置", theme::regular(11.0), t.text_muted);
-                        ui.painter().text(wm_body.left_bottom() + vec2(14.0, -14.0), Align2::LEFT_CENTER, "立即使用", theme::medium(12.0), t.accent_text);
+                        ui.painter().text(
+                            wm_body.min + vec2(14.0, 54.0),
+                            Align2::LEFT_CENTER,
+                            "中文 · 平铺 · 自定义位置",
+                            theme::regular(11.0),
+                            t.text_muted,
+                        );
+                        ui.painter().text(
+                            wm_body.left_bottom() + vec2(14.0, -14.0),
+                            Align2::LEFT_CENTER,
+                            "立即使用",
+                            theme::medium(12.0),
+                            t.accent_text,
+                        );
                         if theme::hand(wm_resp).clicked() {
                             app.dispatch_command(ui.ctx(), "edit.watermark");
                         }
@@ -205,7 +215,11 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 });
                 ui.add_space(8.0);
                 if app.recent.is_empty() {
-                    ui.label(egui::RichText::new(tl!("Files you open in 沃飞翼览 PDF appear here. Drop a PDF anywhere to open it.")).color(t.text_muted).font(theme::company(14.0)));
+                    ui.label(
+                        egui::RichText::new(tl!("Files you open in 沃飞翼览 PDF appear here. Drop a PDF anywhere to open it."))
+                            .color(t.text_muted)
+                            .font(theme::company(14.0)),
+                    );
                 }
             }
             let mut open = None;

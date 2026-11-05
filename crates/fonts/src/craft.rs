@@ -365,7 +365,10 @@ mod tests {
             assert!(!CRAFT_FONTS.is_empty(), "release build requires embedded craft-fonts");
             assert!(document_japanese_font().is_some(), "release build must embed a Japanese document fallback font");
             assert!(ui.iter().any(|f| f.family == "BIZ UDPGothic"), "release build must embed the Japanese UI fallback font");
-            assert!(ui_chinese_fonts().iter().any(|f| f.family == "LXGW WenKai TC"), "release build must embed a licensed Chinese text-edit fallback font");
+            assert!(
+                ui_chinese_fonts().iter().any(|f| f.family == "LXGW WenKai TC"),
+                "release build must embed a licensed Chinese text-edit fallback font"
+            );
             for (family, style) in [
                 ("Shippori Mincho", "Regular"),
                 ("BIZ UDPGothic", "Regular"),
@@ -389,7 +392,10 @@ mod tests {
         }
         assert_eq!(document_japanese_font().map(|f| f.family), Some("Shippori Mincho"));
         if std::env::var_os("CRAFT_FONTS_REQUIRED").is_some() {
-            assert!(ui_zh.iter().any(|f| f.family == "LXGW WenKai TC"), "the pinned company font manifest must embed its Simplified Chinese fallback");
+            assert!(
+                ui_zh.iter().any(|f| f.family == "LXGW WenKai TC"),
+                "the pinned company font manifest must embed its Simplified Chinese fallback"
+            );
         }
     }
 }

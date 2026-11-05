@@ -1,7 +1,7 @@
 use super::blocks::{BlockStyle, TextBlock, paragraph_separator, wrap};
 use super::fallback::{
-    Encoder, MAX_TYPE3_GLYPHS, Type3Fallback, drop_unused_fallback_fonts, needs_type3, no_japanese_font, source_encodes, source_family,
-    source_program_completes, source_show, source_space, source_width, type3_encode, chinese_font_name, type3_font,
+    Encoder, MAX_TYPE3_GLYPHS, Type3Fallback, chinese_font_name, drop_unused_fallback_fonts, needs_type3, no_japanese_font, source_encodes,
+    source_family, source_program_completes, source_show, source_space, source_width, type3_encode, type3_font,
 };
 use super::interp::{Carry, Origin, TextState, interpret};
 use super::lines::{content_streams, page_dict, rewritten_contents, splice, text_lines};
@@ -90,7 +90,15 @@ pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usi
         None => {
             let fallback_shown = crate::bidi::to_visual(&text);
             if needs_type3(&text) {
-                let fallback = type3_font(doc, &mut fonts_res, &text, source_family(&target.base_font), target.bold, max_glyphs, chinese_font_name(&target.base_font))?;
+                let fallback = type3_font(
+                    doc,
+                    &mut fonts_res,
+                    &text,
+                    source_family(&target.base_font),
+                    target.bold,
+                    max_glyphs,
+                    chinese_font_name(&target.base_font),
+                )?;
                 let runs = type3_encode(&fallback, &fallback_shown)
                     .ok_or_else(|| EditError::Invalid(format!("\"{text}\" can't be shown by the {} fallback", fallback.family)))?;
                 let size = font_size_before(&ops, first).unwrap_or(target.size);
@@ -867,7 +875,11 @@ pub(crate) fn rewrite_block_from(
     let right_edge = if anchored_right { (b.rect[2] - b.rect[0]).max(0.0) } else { width };
     let movement = drawn_movement(emit.ctm, dx, dy)?;
     let tm = emit_text_matrix(o, emit)?;
-    let type3 = if !reuse && needs_type3(&flat) { Some(type3_font(doc, &mut fonts_res, &flat, family, bold, max_glyphs, chinese_font_name(&b.base_font))?) } else { None };
+    let type3 = if !reuse && needs_type3(&flat) {
+        Some(type3_font(doc, &mut fonts_res, &flat, family, bold, max_glyphs, chinese_font_name(&b.base_font))?)
+    } else {
+        None
+    };
     let source_metrics = source.metrics.as_ref().filter(|_| reuse);
     let advance = Advance {
         source: source_metrics,

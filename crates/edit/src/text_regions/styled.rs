@@ -16,19 +16,40 @@ fn is_han_character(ch: char) -> bool {
 
 fn chinese_font_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    ["simsun", "simhei", "stsong", "fangsong", "kaiti", "yahei", "dengxian", "mingliu", "jhenghei", "wenkai", "lxgw", "fzsong", "fangzheng", "songti", "heiti", "adobegb", "gb1"]
-        .iter().any(|part| lower.contains(part))
+    [
+        "simsun",
+        "simhei",
+        "stsong",
+        "fangsong",
+        "kaiti",
+        "yahei",
+        "dengxian",
+        "mingliu",
+        "jhenghei",
+        "wenkai",
+        "lxgw",
+        "fzsong",
+        "fangzheng",
+        "songti",
+        "heiti",
+        "adobegb",
+        "gb1",
+    ]
+    .iter()
+    .any(|part| lower.contains(part))
 }
 
 fn chinese_text_run(text: &str) -> bool {
     let mut has_han = false;
     for ch in text.chars() {
-        if is_han_character(ch) { has_han = true; }
-        else if !matches!(ch, ' ' | '　' | '、' | '。' | '，' | '：' | '；' | '？' | '！' | '（' | '）' | '《' | '》' | '“' | '”') { return false; }
+        if is_han_character(ch) {
+            has_han = true;
+        } else if !matches!(ch, ' ' | '　' | '、' | '。' | '，' | '：' | '；' | '？' | '！' | '（' | '）' | '《' | '》' | '“' | '”') {
+            return false;
+        }
     }
     has_han
 }
-
 
 struct FallbackGroup {
     face: &'static CraftFont,
@@ -163,8 +184,8 @@ impl CharacterPreparation<'_> {
             if uniform_han {
                 let han_chars: Vec<char> = span_text.chars().collect();
                 let faces = pdfcraft_fonts::ui_chinese_fonts();
-                let face = fallback_face(&faces, &han_chars, |face, ch| japanese_glyph_from(face, ch).is_ok())
-                    .ok_or_else(|| no_fallback_font(span_text))?;
+                let face =
+                    fallback_face(&faces, &han_chars, |face, ch| japanese_glyph_from(face, ch).is_ok()).ok_or_else(|| no_fallback_font(span_text))?;
                 for ch in span_text.chars() {
                     fallback.prepare_with_face(source, ch, face, chars.len())?;
                     chars.push((ch, index, String::new()));
