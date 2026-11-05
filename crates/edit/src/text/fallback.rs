@@ -436,9 +436,7 @@ pub(super) fn type3_font(
     // Cyrillic can incorrectly become the face for an entire Japanese or Uzbek edit.
     let preferred_faces = if prefer_chinese && has_han {
         chinese_fallbacks.clone()
-    } else if has_han {
-        japanese
-    } else if japanese.iter().any(|face| chars.iter().all(|ch| japanese_glyph_from(face, *ch).is_ok())) {
+    } else if has_han || japanese.iter().any(|face| chars.iter().all(|ch| japanese_glyph_from(face, *ch).is_ok())) {
         japanese
     } else if latin.iter().any(|face| chars.iter().all(|ch| japanese_glyph_from(face, *ch).is_ok())) {
         latin
