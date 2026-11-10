@@ -89,3 +89,10 @@ The upstream `v0.17.0` integration was previously validated on Windows in workfl
 the x64 regression suites passed. That run intentionally skipped publication because it
 was on the sync branch. The current `v1.0.2-develop` branch is the release source.
 
+## Publication authorization
+
+This commit authorizes the v1.0.2 release workflow to publish the x64 and x86 per-user MSI
+artifacts only after both Windows build jobs, the x64 regression suite, and the noninteractive
+install/uninstall checks complete successfully. If any required job fails, the publish job
+remains blocked and no v1.0.2 release is created.
+
