@@ -73,3 +73,19 @@ The About page also lists the internal customization contact: 数字发展室 �
 ## 0.10.4 responsive watermark dialog fix
 
 The previous fixed 610 pt body exceeded the available logical viewport on Windows with high-DPI display scaling. Because the modal is centered and the preview column was fixed at 500 pt tall, the dialog could open with the title/actions clipped and then appear to scroll into a blank white area. Version 0.10.4 derives the dialog width and body/preview heights from the current viewport, gives the settings pane a dedicated stable-ID scroll area, and leaves room for the title, preview summary, Cancel and OK buttons. Regression tests cover common viewport heights (240–1080 logical pt) and width constraints (900–1600 logical pt). The build runs these tests before generating either MSI.
+
+## Release gate and validation
+
+The release workflow is intentionally split into validation and publication. A push to
+`v1.0.2-develop` runs the Windows x64 and x86 MSI builds and silent install/uninstall
+checks. The x64 runner additionally executes the font, text-editing, rendering, watermark,
+branding and UI regression suites. The x86 runner verifies the x86 package and its
+noninteractive installation lifecycle. Publication runs only for an explicit commit on
+`v1.0.2-develop` whose message contains `[publish v1.0.2]`; pushes to the upstream sync
+branch are validation-only.
+
+The upstream `v0.17.0` integration was previously validated on Windows in workflow run
+`42006117830`: both architecture builds and silent install/uninstall checks passed, and
+the x64 regression suites passed. That run intentionally skipped publication because it
+was on the sync branch. The current `v1.0.2-develop` branch is the release source.
+
