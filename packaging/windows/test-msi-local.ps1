@@ -79,7 +79,7 @@ try {
       if ($filename -match ('(^|\|)' + [regex]::Escape($licenseFile) + '$')) { $foundLicenseFiles[$licenseFile] = $true }
     }
     # FileName may be SHORT|long; inspect the long name and require both shipped ONNX models.
-    $longName = ($filename -split '\\|')[-1]
+    $longName = ($filename -split '\|')[-1]
     if ($directory -eq 'ModelsFolder' -and $longName -in @('text-detection.onnx', 'text-recognition.onnx')) { $modelCount++ }
   }
 } finally { [void] $view.Close() }
