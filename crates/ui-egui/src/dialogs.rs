@@ -17,7 +17,17 @@ fn dialog_width(dialog: Dialog, viewport_width: f32) -> f32 {
         Dialog::Print => 820.0,
         Dialog::FieldProps | Dialog::BulkFieldProps => 600.0,
         Dialog::About => 780.0,
-        Dialog::Marks(pdfcraft_engine::MarkKind::Watermark) => WATERMARK_DIALOG_WIDTH,
+        // Reserve an additional safety margin for the two-column watermark composition.
+        // egui measures the content rect in points, while Windows high-DPI viewport bounds
+        // can be narrower; without this reserve the modal frame padding pushes the card
+        // beyond a 640px scaled viewport even when the child width appears to fit.
+        Dialog::Marks(pdfcraft_engine::MarkKind::Watermark) => {
+            if viewport_width < 900.0 {
+                (WATERMARK_DIALOG_WIDTH.min(widgets::modal_content_max_width(viewport_width) - 80.0)).max(1.0)
+            } else {
+                WATERMARK_DIALOG_WIDTH
+            }
+        },
         Dialog::Marks(_) => MARKS_DIALOG_WIDTH,
         _ => 520.0,
     };
