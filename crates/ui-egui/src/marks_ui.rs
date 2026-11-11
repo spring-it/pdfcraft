@@ -228,6 +228,7 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             .id_salt("watermark-settings")
             .max_width(left_width)
             .max_height(preview_height)
+            .hscroll(compact)
             // Keep the settings viewport at its assigned column width; long controls scroll
             // horizontally inside the pane rather than widening the entire modal.
             .auto_shrink([true, true])
