@@ -78,11 +78,13 @@ try {
     foreach ($licenseFile in $requiredLicenseFiles) {
       if ($filename -match ('(^|\|)' + [regex]::Escape($licenseFile) + '$')) { $foundLicenseFiles[$licenseFile] = $true }
     }
-    if ($directory -eq 'ModelsFolder' -and $filename -match '\.rten$') { $modelCount++ }
+    # FileName may be SHORT|long; inspect the long name and require both shipped ONNX models.
+    $longName = ($filename -split '\\|')[-1]
+    if ($directory -eq 'ModelsFolder' -and $longName -in @('text-detection.onnx', 'text-recognition.onnx')) { $modelCount++ }
   }
 } finally { [void] $view.Close() }
 Require $hasMarker 'portable.txt is required so settings/logs stay in LocalAppData'
-Require ($modelCount -ge 2) "at least 2 OCR models are required, got $modelCount"
+Require ($modelCount -eq 2) "both ONNX OCR models are required exactly once, got $modelCount"
 foreach ($licenseFile in $requiredLicenseFiles) {
   Require ($foundLicenseFiles.ContainsKey($licenseFile)) "MSI must package the required license/provenance file $licenseFile"
 }
