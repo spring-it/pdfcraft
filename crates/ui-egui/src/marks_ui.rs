@@ -222,6 +222,7 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
         // stay visible; on short/high-DPI windows only the settings column scrolls.
         egui::ScrollArea::vertical()
             .id_salt("watermark-settings")
+            .max_width(left_width)
             .max_height(preview_height)
             .auto_shrink([false, true])
             .show(ui, |ui| {
