@@ -1378,6 +1378,7 @@ impl PdfCraftApp {
         if activate {
             let out = self.session.take_js_output(id);
             self.handle_js(id, out);
+            self.start_auto_ocr(id);
         }
         Ok(id)
     }
