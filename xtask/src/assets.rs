@@ -328,9 +328,27 @@ fn fetch_verified(url: &str, path: &Path, sha256: &str) -> Result<()> {
     }
     println!("assets: fetching {url}");
     let tmp = path.with_extension("part");
-    let status = Command::new("curl").args(["-sSfL", "--retry", "3", "-o"]).arg(&tmp).arg(url).status().context("running curl")?;
-    if !status.success() {
-        bail!("download failed: {url}");
+    // Some CI networks reject S3 accelerate endpoints (HTTP 403/504) while the
+    // same public object remains available from the bucket's regional endpoint.
+    let fallback = url.replace(".s3-accelerate.amazonaws.com/", ".s3.amazonaws.com/");
+    let candidates = if fallback != url { vec![url, fallback.as_str()] } else { vec![url] };
+    let mut downloaded = false;
+    for candidate in candidates {
+        let status = Command::new("curl")
+            .args(["-sSfL", "--retry", "3", "-o"])
+            .arg(&tmp)
+            .arg(candidate)
+            .status()
+            .context("running curl")?;
+        if status.success() {
+            downloaded = true;
+            break;
+        }
+        let _ = std::fs::remove_file(&tmp);
+        eprintln!("assets: download failed from {candidate}; trying an alternate endpoint when available");
+    }
+    if !downloaded {
+        bail!("download failed from all configured endpoints: {url}");
     }
     let bytes = std::fs::read(&tmp)?;
     if sha256_hex(&bytes) != sha256 {
