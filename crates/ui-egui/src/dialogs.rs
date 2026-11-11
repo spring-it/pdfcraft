@@ -1786,8 +1786,8 @@ mod watermark_dialog_layout_tests {
         assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::HeaderFooter), 1600.0), 720.0);
         assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1000.0), 928.0);
         assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 900.0), 828.0);
-        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 360.0), 288.0);
-        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 200.0), 128.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 360.0), 208.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 200.0), 48.0);
         assert!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1600.0) >= 640.0 + 600.0 + 40.0);
     }
 }
