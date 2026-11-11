@@ -193,7 +193,9 @@ fn watermark_column_widths(available_width: f32) -> (f32, f32) {
     let desired_right = (available_width - (WATERMARK_SETTINGS_COLUMN_WIDTH + WATERMARK_COLUMN_GAP))
         .clamp(WATERMARK_PREVIEW_COLUMN_MIN_WIDTH, WATERMARK_PREVIEW_COLUMN_MAX_WIDTH);
     // The preview yields space before the settings column when UI scaling narrows the viewport.
-    let right = desired_right.min(usable * 0.45);
+    // Reserve enough width for the preview's wrapped explanatory labels on ordinary
+    // windows, while still yielding to the settings pane on very narrow/high-DPI viewports.
+    let right = desired_right.max(200.0).min(usable * 0.45);
     let left = (usable - right).min(WATERMARK_SETTINGS_COLUMN_WIDTH).max(1.0);
     (left, right)
 }
@@ -331,8 +333,8 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                         ui.colored_label(Color32::RED, "页码范围无效，请检查起止页是否在文档范围内。");
                     }
                 }
-                ui.label(egui::RichText::new("支持中文水印：使用本机字体绘制透明 PNG，再写入 PDF；不上传文件或字体。")
-                    .small().color(t.text_muted));
+                ui.add(egui::Label::new(egui::RichText::new("支持中文水印：使用本机字体绘制透明 PNG，再写入 PDF；不上传文件或字体。")
+                    .small().color(t.text_muted)).wrap());
         });
             });
 
@@ -354,14 +356,14 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             let file_name = d.file.as_ref().filter(|_| d.use_file).map(|f| f.0.as_str());
             watermark_preview(right, t, page, &d.wm, file_name, d.use_file, right_width, preview_height);
             right.add_space(6.0);
-            right.label(egui::RichText::new(format!("预览：第 {} 页，共 {} 页", current + 1, count)).small().color(t.text_faint));
+            right.add(egui::Label::new(egui::RichText::new(format!("预览：第 {} 页，共 {} 页", current + 1, count)).small().color(t.text_faint)).wrap());
             let selected = selected_pages(d, count).map(|p| p.len()).unwrap_or(0);
-            right.label(egui::RichText::new(format!("应用于 {selected} 页")).small().color(t.text_faint));
+            right.add(egui::Label::new(egui::RichText::new(format!("应用于 {selected} 页")).small().color(t.text_faint)).wrap());
             if d.replace {
-                right.label(egui::RichText::new("将替换这些页面上现有的水印。").small().color(t.text_faint));
+                right.add(egui::Label::new(egui::RichText::new("将替换这些页面上现有的水印。").small().color(t.text_faint)).wrap());
             }
-            right.label(egui::RichText::new("预览随设置实时更新；最终效果以保存后的 PDF 为准。")
-                .small().color(t.text_muted));
+            right.add(egui::Label::new(egui::RichText::new("预览随设置实时更新；最终效果以保存后的 PDF 为准。")
+                .small().color(t.text_muted)).wrap());
         });
     });
 
