@@ -217,7 +217,9 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     // The live preview grows on standard windows and scales down on short viewports.
     let preview_height = watermark_preview_height(ui.ctx().content_rect().height());
     let available_width = ui.available_width();
-    let (left_width, right_width) = watermark_column_widths(available_width);
+    // Narrow viewports use a stacked layout so the preview cannot push the dialog off-screen.
+    let compact = available_width < 900.0;
+    let (left_width, right_width) = if compact { (available_width.max(1.0), 0.0) } else { watermark_column_widths(available_width) };
 
     ui.horizontal_top(|ui| {
         // Keep the long settings form in its own viewport. The preview and action row
@@ -335,20 +337,28 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                 }
                 ui.add(egui::Label::new(egui::RichText::new("支持中文水印：使用本机字体绘制透明 PNG，再写入 PDF；不上传文件或字体。")
                     .small().color(t.text_muted)).wrap());
+                if compact {
+                    ui.separator();
+                    ui.label(egui::RichText::new("实时预览").font(theme::semibold(14.0)));
+                    let file_name = d.file.as_ref().filter(|_| d.use_file).map(|f| f.0.as_str());
+                    watermark_preview(ui, t, page, &d.wm, file_name, d.use_file, left_width.min(280.0), preview_height.min(180.0));
+                    ui.add(egui::Label::new(egui::RichText::new(format!("预览：第 {} 页，共 {} 页", current + 1, count)).small().color(t.text_faint)).wrap());
+                }
         });
             });
 
-        // Do not use ui.separator() in this horizontal layout: egui sizes a vertical
-        // separator from the parent's available height, which can make Modal treat
-        // the whole viewport as content and re-center the controls out of view.
-        let divider_height = preview_height.min(ui.available_height());
-        let (divider, _) = ui.allocate_exact_size(vec2(1.0, divider_height), egui::Sense::hover());
-        ui.painter().line_segment(
-            [divider.center_top(), divider.center_bottom()],
-            Stroke::new(1.0, t.border),
-        );
+        if !compact {
+            // Do not use ui.separator() in this horizontal layout: egui sizes a vertical
+            // separator from the parent's available height, which can make Modal treat
+            // the whole viewport as content and re-center the controls out of view.
+            let divider_height = preview_height.min(ui.available_height());
+            let (divider, _) = ui.allocate_exact_size(vec2(1.0, divider_height), egui::Sense::hover());
+            ui.painter().line_segment(
+                [divider.center_top(), divider.center_bottom()],
+                Stroke::new(1.0, t.border),
+            );
 
-        ui.vertical(|right| {
+            ui.vertical(|right| {
             right.set_min_width(right_width);
             right.set_max_width(right_width);
             right.label(egui::RichText::new("实时预览").font(theme::semibold(15.0)));
@@ -364,7 +374,8 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             }
             right.add(egui::Label::new(egui::RichText::new("预览随设置实时更新；最终效果以保存后的 PDF 为准。")
                 .small().color(t.text_muted)).wrap());
-        });
+            });
+        }
     });
 
     ui.add_space(8.0);
