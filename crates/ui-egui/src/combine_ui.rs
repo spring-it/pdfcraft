@@ -921,8 +921,8 @@ fn skip_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
         left_out.push((f.name.as_str(), f.problem.as_deref().unwrap_or_default()));
     }
     let mut choice: Option<bool> = None;
-    let modal = egui::Modal::new(egui::Id::new("combine-skip")).show(ctx, |ui| {
-        ui.set_width(460.0);
+    let modal = widgets::show_modal(ctx, "combine-skip", |ui| {
+        widgets::set_modal_width(ui, 460.0);
         ui.horizontal(|ui| {
             ui.add(icons::image("triangle-alert", 22.0, ERROR));
             ui.add(egui::Label::new(egui::RichText::new(tl!("Leave out files that can't be read?")).font(theme::semibold(16.0))).wrap());
@@ -978,9 +978,14 @@ fn unlock_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
     };
     let batch = files.len() > 1;
     let (mut submit, mut cancel) = (false, false);
-    let area = egui::Area::new(egui::Id::new("combine-unlock")).order(egui::Order::Foreground).fixed_pos(prompt.at).show(ctx, |ui| {
-        egui::Frame::popup(ui.style()).inner_margin(egui::Margin::same(14)).show(ui, |ui| {
-            ui.set_width(340.0);
+    let area = egui::Area::new(egui::Id::new("combine-unlock"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(prompt.at)
+        .constrain(true)
+        .show(ctx, |ui| {
+            ui.set_max_width(widgets::modal_content_max_width(ctx.content_rect().width()));
+            egui::Frame::popup(ui.style()).inner_margin(egui::Margin::same(14)).show(ui, |ui| {
+            widgets::set_modal_width(ui, 340.0);
             ui.horizontal(|ui| {
                 ui.add(icons::image("lock", 16.0, t.icon));
                 ui.add(egui::Label::new(egui::RichText::new(&title).font(theme::semibold(14.0))).truncate());
@@ -993,7 +998,8 @@ fn unlock_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 crate::widgets::begin_dialog(ui);
-                let field = ui.add(crate::widgets::line(&mut prompt.input.0).password(!prompt.show).hint_text(tl!("Password")).desired_width(290.0));
+                let field_width = ui.available_width().min(290.0);
+                let field = ui.add(crate::widgets::line(&mut prompt.input.0).password(!prompt.show).hint_text(tl!("Password")).desired_width(field_width));
                 if !prompt.focused {
                     field.request_focus();
                     prompt.focused = true;

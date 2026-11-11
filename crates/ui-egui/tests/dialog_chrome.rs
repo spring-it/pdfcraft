@@ -66,7 +66,7 @@ fn document_properties_fields_are_tall_and_inset() {
 
 #[test]
 fn password_prompt_field_is_tall_and_inset() {
-    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+    let mut h = Harness::builder().with_size(egui::vec2(480.0, 360.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("secret.pdf", None, protected()).unwrap();
@@ -74,6 +74,8 @@ fn password_prompt_field_is_tall_and_inset() {
     });
     h.run_steps(4);
     let card = card(&h, "password");
+    assert!(card.left() >= 0.0 && card.right() <= 480.0, "password card must fit the narrow viewport: {card:?}");
+    assert!(card.top() >= 0.0 && card.bottom() <= 360.0, "password card must fit the short viewport: {card:?}");
     let field = h.get_by_role(Role::PasswordInput).rect();
     assert!(field.height() >= 30.0, "password field {field:?}");
     assert!(field.left() - card.left() >= 16.0, "password field {field:?} in {card:?}");
@@ -135,4 +137,55 @@ fn watermark_dialog_stays_content_sized_across_frames() {
         }
         previous_top = Some(modal.top());
     }
+}
+
+
+#[test]
+fn document_properties_dialog_fits_a_small_scaled_viewport() {
+    let mut h = Harness::builder().with_size(egui::vec2(560.0, 420.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("doc.pdf", None, fixture()).unwrap();
+        app.set_option("dialog", "properties").unwrap();
+        app
+    });
+    h.run_steps(4);
+    let card = card(&h, "dialog");
+    assert!(card.left() >= 0.0 && card.right() <= 560.0, "properties card must fit horizontally: {card:?}");
+    assert!(card.top() >= 0.0 && card.bottom() <= 420.0, "properties card must fit vertically: {card:?}");
+    let heading = h.get_by_label("Document Properties").rect();
+    assert!(heading.left() >= card.left() && heading.right() <= card.right(), "heading must remain in the card: {heading:?} in {card:?}");
+}
+
+#[test]
+fn watermark_dialog_scrolls_to_its_actions_on_a_small_scaled_viewport() {
+    let mut h = Harness::builder().with_size(egui::vec2(640.0, 480.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("watermark.pdf", None, fixture()).unwrap();
+        app.dialog = Some(pdfcraft_ui_egui::Dialog::Marks(pdfcraft_engine::MarkKind::Watermark));
+        app
+    });
+    h.run_steps(4);
+    let card = card(&h, "dialog");
+    assert!(card.left() >= 0.0 && card.right() <= 640.0, "watermark card must fit horizontally: {card:?}");
+    assert!(card.top() >= 0.0 && card.bottom() <= 480.0, "watermark card must fit vertically: {card:?}");
+
+    // The full form scrolls inside the viewport; its footer remains reachable.
+    h.event(egui::Event::PointerMoved(card.center()));
+    for _ in 0..8 {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -420.0),
+            phase: egui::TouchPhase::Move,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(2);
+    }
+    let cancel = h.get_by_label("Cancel").rect();
+    assert!(cancel.left() >= 0.0 && cancel.right() <= 640.0, "Cancel must be reachable horizontally: {cancel:?}");
+    assert!(cancel.top() >= 0.0 && cancel.bottom() <= 480.0, "Cancel must be reachable vertically after scrolling: {cancel:?}");
+    h.get_by_label("Cancel").click();
+    h.run_steps(2);
+    assert!(h.state().dialog.is_none(), "the visible Cancel button must remain clickable");
 }

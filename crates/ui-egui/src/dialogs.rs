@@ -21,8 +21,7 @@ fn dialog_width(dialog: Dialog, viewport_width: f32) -> f32 {
         Dialog::Marks(_) => MARKS_DIALOG_WIDTH,
         _ => 520.0,
     };
-    // The modal frame adds 40 pt horizontal padding; leave extra room for its shadow too.
-    desired.min((viewport_width - 48.0).max(320.0))
+    desired.min(widgets::modal_content_max_width(viewport_width))
 }
 
 pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
@@ -139,7 +138,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                     });
                     ui.end_row();
                 };
-                egui::ScrollArea::vertical().max_height(460.0).auto_shrink([false, true]).show(ui, |ui| {
+                egui::ScrollArea::vertical().max_height(widgets::modal_content_max_height(ui.ctx().content_rect().height()).min(460.0)).auto_shrink([false, true]).show(ui, |ui| {
                     egui::Grid::new("props").num_columns(2).spacing([18.0, 8.0]).min_col_width(140.0).show(ui, |ui| match tab {
                         PropsTab::Description => {
                             row(ui, "File", crate::bidi::visual(&doc.name).into_owned());
@@ -740,7 +739,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 return;
             }
             Dialog::CertificateViewer => {
-                ui.set_width(700.0);
+                widgets::set_modal_width(ui, 700.0);
                 let trusted = app.session.trusted_certificates().to_vec();
                 let Some(v) = app.cert_viewer.as_mut() else {
                     close = true;
@@ -952,7 +951,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 return;
             }
             Dialog::ActionWizard => {
-                ui.set_width(620.0);
+                widgets::set_modal_width(ui, 620.0);
                 close = crate::actions_ui::body(ui, app, &t);
                 return;
             }
@@ -963,18 +962,18 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 return;
             }
             Dialog::JsConsole => {
-                ui.set_width(640.0);
+                widgets::set_modal_width(ui, 640.0);
                 close = crate::js_ui::console_body(ui, app, &t);
                 return;
             }
             Dialog::DocumentJs => {
-                ui.set_width(640.0);
+                widgets::set_modal_width(ui, 640.0);
                 close = crate::js_ui::document_js_body(ui, app, &t);
                 return;
             }
             Dialog::Preferences => {
                 // The settings outgrow a short window: scroll them rather than run off the screen.
-                let max = (ui.ctx().content_rect().height() - 120.0).max(200.0);
+                let max = widgets::modal_content_max_height(ui.ctx().content_rect().height());
                 close = egui::ScrollArea::vertical().max_height(max).show(ui, |ui| crate::js_ui::preferences_body(ui, app, &t)).inner;
                 return;
             }
@@ -1137,7 +1136,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 ] {
                     rows.push((k, v));
                 }
-                egui::ScrollArea::vertical().max_height(460.0).show(ui, |ui| {
+                egui::ScrollArea::vertical().max_height(widgets::modal_content_max_height(ui.ctx().content_rect().height()).min(460.0)).show(ui, |ui| {
                     egui::Grid::new("keys").num_columns(2).spacing([24.0, 6.0]).show(ui, |ui| {
                         for (k, v) in &rows {
                             ui.label(egui::RichText::new(k).font(egui::FontId::monospace(12.5)));
@@ -1486,7 +1485,7 @@ fn save_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let shown = shorten_middle(&name, 80);
     let mut choice: Option<Option<bool>> = None;
     let modal = widgets::show_modal(ctx, "save_prompt", |ui| {
-        ui.set_width(420.0);
+        widgets::set_modal_width(ui, 420.0);
         ui.horizontal(|ui| {
             ui.add(crate::icons::image("save", 22.0, t.accent));
             let title = ui.add(
@@ -1547,7 +1546,7 @@ fn link_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let (title, open) = if email { (tl!("Write this email?"), tl!("Open email app")) } else { (tl!("Open this web page?"), tl!("Open link")) };
     let mut choice: Option<bool> = None;
     let modal = widgets::show_modal(ctx, "link_prompt", |ui| {
-        ui.set_width(460.0);
+        widgets::set_modal_width(ui, 460.0);
         ui.horizontal(|ui| {
             ui.add(crate::icons::image("external-link", 22.0, t.accent));
             ui.label(egui::RichText::new(title).font(theme::semibold(16.0)));
@@ -1614,7 +1613,7 @@ fn full_screen_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let t = Tokens::get(ctx);
     let mut choice = None;
     let modal = widgets::show_modal(ctx, "full_screen_prompt", |ui| {
-        ui.set_width(460.0);
+        widgets::set_modal_width(ui, 460.0);
         ui.horizontal(|ui| {
             ui.add(crate::icons::image("maximize", 22.0, t.accent));
             ui.label(egui::RichText::new(tl!("Open in Full Screen mode?")).font(theme::semibold(16.0)));
@@ -1649,7 +1648,7 @@ fn remote_link_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let Some(pending) = app.pending_remote_link.clone() else { return };
     let mut choice = None;
     let modal = widgets::show_modal(ctx, "remote_link_prompt", |ui| {
-        ui.set_width(460.0);
+        widgets::set_modal_width(ui, 460.0);
         ui.label(egui::RichText::new(tl!("Open this local PDF?")).font(theme::semibold(16.0)));
         ui.add_space(6.0);
         ui.label(tl!("This document is trying to open a local file:"));
@@ -1699,7 +1698,7 @@ fn password_modal(
     let t = Tokens::get(ctx);
     let mut answer = None;
     let modal = widgets::show_modal(ctx, id, |ui| {
-        ui.set_width(400.0);
+        widgets::set_modal_width(ui, 400.0);
         ui.horizontal(|ui| {
             ui.add(crate::icons::image("lock", 22.0, t.accent));
             ui.label(egui::RichText::new(title).font(theme::semibold(17.0)));
@@ -1771,8 +1770,10 @@ mod watermark_dialog_layout_tests {
         assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1600.0), 1320.0);
         assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Background), 1600.0), 720.0);
         assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::HeaderFooter), 1600.0), 720.0);
-        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1000.0), 952.0);
-        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 900.0), 852.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1000.0), 928.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 900.0), 828.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 360.0), 288.0);
+        assert_eq!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 200.0), 128.0);
         assert!(dialog_width(Dialog::Marks(pdfcraft_engine::MarkKind::Watermark), 1600.0) >= 640.0 + 600.0 + 40.0);
     }
 }

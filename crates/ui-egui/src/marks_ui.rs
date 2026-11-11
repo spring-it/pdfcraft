@@ -188,9 +188,13 @@ fn watermark_preview_page_size(size: (f64, f64), canvas_size: egui::Vec2) -> egu
 }
 
 fn watermark_column_widths(available_width: f32) -> (f32, f32) {
-    let right = (available_width - (WATERMARK_SETTINGS_COLUMN_WIDTH + WATERMARK_COLUMN_GAP))
+    let gap = WATERMARK_COLUMN_GAP.min(available_width.max(0.0) * 0.05);
+    let usable = (available_width - gap).max(1.0);
+    let desired_right = (available_width - (WATERMARK_SETTINGS_COLUMN_WIDTH + WATERMARK_COLUMN_GAP))
         .clamp(WATERMARK_PREVIEW_COLUMN_MIN_WIDTH, WATERMARK_PREVIEW_COLUMN_MAX_WIDTH);
-    let left = (available_width - right - WATERMARK_COLUMN_GAP).clamp(180.0, WATERMARK_SETTINGS_COLUMN_WIDTH);
+    // The preview yields space before the settings column when UI scaling narrows the viewport.
+    let right = desired_right.min(usable * 0.45);
+    let left = (usable - right).min(WATERMARK_SETTINGS_COLUMN_WIDTH).max(1.0);
     (left, right)
 }
 
@@ -973,6 +977,12 @@ mod tests {
         assert_eq!(watermark_column_widths(1280.0), (640.0, 600.0));
         assert_eq!(watermark_column_widths(1120.0), (640.0, 460.0));
         assert_eq!(watermark_column_widths(900.0), (640.0, 240.0));
+        for width in [528.0_f32, 360.0, 288.0, 120.0] {
+            let (left, right) = watermark_column_widths(width);
+            let gap = WATERMARK_COLUMN_GAP.min(width.max(0.0) * 0.05);
+            assert!(left > 0.0 && right > 0.0, "both columns must remain usable at {width}: {left}, {right}");
+            assert!(left + right + gap <= width + 0.01, "columns must fit the viewport at {width}: {left}, {right}, gap {gap}");
+        }
     }
 
     #[test]

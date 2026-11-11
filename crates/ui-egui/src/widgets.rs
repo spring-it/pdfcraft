@@ -12,6 +12,23 @@ const FIELD_MIN_HEIGHT: f32 = 30.0;
 /// Padding inside every modal.
 const DIALOG_PAD_X: i8 = 20;
 const DIALOG_PAD_Y: i8 = 16;
+const DIALOG_VIEWPORT_MARGIN: f32 = 16.0;
+
+/// Maximum content width after reserving the card padding and a safe margin around the viewport.
+pub(crate) fn modal_content_max_width(viewport_width: f32) -> f32 {
+    (viewport_width - 2.0 * f32::from(DIALOG_PAD_X) - 2.0 * DIALOG_VIEWPORT_MARGIN).max(1.0)
+}
+
+/// Maximum content height after reserving the card padding and a safe margin around the viewport.
+pub(crate) fn modal_content_max_height(viewport_height: f32) -> f32 {
+    (viewport_height - 2.0 * f32::from(DIALOG_PAD_Y) - 2.0 * DIALOG_VIEWPORT_MARGIN).max(1.0)
+}
+
+/// Set a preferred dialog width without allowing it to exceed the current screen.
+pub(crate) fn set_modal_width(ui: &mut egui::Ui, desired: f32) {
+    let max_width = modal_content_max_width(ui.ctx().content_rect().width());
+    ui.set_width(desired.min(max_width).max(1.0));
+}
 
 fn dialog_frame(ctx: &egui::Context) -> egui::Frame {
     let t = Tokens::get(ctx);
@@ -31,9 +48,22 @@ pub fn modal(ctx: &egui::Context, id: impl std::hash::Hash + std::fmt::Debug) ->
 /// Show [`modal`], outline its controls, and remember the card rect for layout checks.
 pub fn show_modal<R>(ctx: &egui::Context, id: &str, content: impl FnOnce(&mut egui::Ui) -> R) -> egui::ModalResponse<R> {
     let stored = egui::Id::new(id);
+    let max_width = modal_content_max_width(ctx.content_rect().width());
+    let max_height = modal_content_max_height(ctx.content_rect().height());
     modal(ctx, id).show(ctx, |ui| {
         begin_dialog(ui);
-        let inner = content(ui);
+        ui.set_max_width(max_width);
+        // All application modals share one viewport limit. Long forms scroll inside the card
+        // instead of growing beyond the screen and hiding their action buttons.
+        let inner = egui::ScrollArea::vertical()
+            .id_salt(("dialog-content", id))
+            .max_height(max_height)
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                ui.set_max_width(max_width);
+                content(ui)
+            })
+            .inner;
         // The frame's stroke sits outside this content rect; the stored card is the fill.
         let card = ui.min_rect().expand2(egui::vec2(f32::from(DIALOG_PAD_X), f32::from(DIALOG_PAD_Y)));
         ui.ctx().data_mut(|d| d.insert_temp(stored.with("card"), card));
