@@ -218,6 +218,13 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     let (left_width, right_width) = watermark_column_widths(available_width);
 
     ui.horizontal_top(|ui| {
+        // Keep the long settings form in its own viewport. The preview and action row
+        // stay visible; on short/high-DPI windows only the settings column scrolls.
+        egui::ScrollArea::vertical()
+            .id_salt("watermark-settings")
+            .max_height(preview_height)
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
         ui.vertical(|ui| {
             ui.set_min_width(left_width);
             ui.set_max_width(left_width);
@@ -324,6 +331,7 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                 ui.label(egui::RichText::new("支持中文水印：使用本机字体绘制透明 PNG，再写入 PDF；不上传文件或字体。")
                     .small().color(t.text_muted));
         });
+            });
 
         // Do not use ui.separator() in this horizontal layout: egui sizes a vertical
         // separator from the parent's available height, which can make Modal treat
