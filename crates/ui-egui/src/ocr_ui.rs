@@ -150,22 +150,46 @@ impl PdfCraftApp {
     /// Recognize text on the pages chosen in the dialog, in the background.
     pub fn start_ocr(&mut self) {
         let Some((vi, id)) = self.active_ids() else { return };
-        if self.ocr_run.is_some() {
-            self.notify_tr("Text recognition is already running");
-            return;
-        }
-        if let Some(why) = self.session.get(id).and_then(|d| d.read_only_reason.clone()) {
-            self.notify(why);
-            return;
-        }
         let d = &self.ocr_draft;
         let pages: Vec<usize> = match d.pages {
             OcrPages::All => Vec::new(),
             OcrPages::Current => vec![self.views[vi].current],
             OcrPages::Range => (d.from.saturating_sub(1)..d.to).collect(),
         };
-        let settings = d.settings();
-        let Some(job) = self.session.ocr_job(id, &pages, settings) else { return };
+        self.start_ocr_for(id, &pages, d.settings(), true);
+    }
+
+    /// Automatically recognize image-backed pages on open. Pages with existing text are
+    /// skipped by OcrJob; the manual Recognize Text command remains available unchanged.
+    pub(crate) fn start_auto_ocr(&mut self, id: DocId) {
+        if self.ocr_run.is_some() || !pdfcraft_engine::ocr::available() {
+            return;
+        }
+        let Some(doc) = self.session.get(id) else { return };
+        if doc.read_only_reason.is_some() {
+            return;
+        }
+        let pages: Vec<usize> = (0..doc.info.pages.len()).filter(|page| !doc.page_images(*page).is_empty()).collect();
+        if pages.is_empty() {
+            return;
+        }
+        self.start_ocr_for(id, &pages, OcrSettings::default(), false);
+    }
+
+    fn start_ocr_for(&mut self, id: DocId, pages: &[usize], settings: OcrSettings, notify_if_busy: bool) {
+        if self.ocr_run.is_some() {
+            if notify_if_busy {
+                self.notify_tr("Text recognition is already running");
+            }
+            return;
+        }
+        if let Some(why) = self.session.get(id).and_then(|d| d.read_only_reason.clone()) {
+            if notify_if_busy {
+                self.notify(why);
+            }
+            return;
+        }
+        let Some(job) = self.session.ocr_job(id, pages, settings) else { return };
         let progress = Arc::new(Mutex::new(OcrProgress { total: job.pages.len(), ..Default::default() }));
         let p = progress.clone();
         let work = move || {
