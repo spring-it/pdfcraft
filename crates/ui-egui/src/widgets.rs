@@ -67,8 +67,11 @@ pub fn show_modal_with_scroll<R>(
         let inner = if scroll_content {
             egui::ScrollArea::vertical()
                 .id_salt(("dialog-content", id))
+                .max_width(max_width)
                 .max_height(max_height)
-                .auto_shrink([false, true])
+                // Allow the viewport to shrink horizontally when a filename or control has
+                // a large intrinsic width; otherwise egui expands the modal past the screen.
+                .auto_shrink([true, true])
                 .show(ui, |ui| {
                     ui.set_max_width(max_width);
                     content(ui)
