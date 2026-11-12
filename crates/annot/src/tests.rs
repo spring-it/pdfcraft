@@ -81,9 +81,11 @@ fn chinese_free_text_comment_uses_real_glyph_outlines() {
         return;
     }
     let mut doc = fixture();
+    let mut annotation = new(0, Shape::TextBox { rect: [120.0, 600.0, 480.0, 650.0], font_size: 14.0 });
+    annotation.contents = text.to_string();
     let index = add_annotation(
         &mut doc,
-        &new(0, Shape::TextBox { rect: [120.0, 600.0, 480.0, 650.0], font_size: 14.0 }),
+        &annotation,
         &Meta { date: Some("D:20261112120000Z".into()), id: "cjk-free-text".into() },
     ).expect("adds Chinese free-text annotation");
     let doc = reopen(&doc);
