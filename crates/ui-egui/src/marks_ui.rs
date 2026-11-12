@@ -159,7 +159,6 @@ fn rgb32(c: [f64; 3]) -> Color32 {
 /// Target live-preview canvas height on standard-height windows.
 const WATERMARK_PREVIEW_HEIGHT: f32 = 670.0;
 /// Preserve room for the title, controls and action buttons on shorter windows.
-const WATERMARK_PREVIEW_MIN_HEIGHT: f32 = 220.0;
 const WATERMARK_SETTINGS_COLUMN_WIDTH: f32 = 640.0;
 const WATERMARK_PREVIEW_COLUMN_MIN_WIDTH: f32 = 140.0;
 const WATERMARK_PREVIEW_COLUMN_MAX_WIDTH: f32 = 600.0;
