@@ -94,7 +94,7 @@ fn chinese_free_text_comment_uses_real_glyph_outlines() {
     assert_eq!(text_of(annotation, b"Contents"), text);
     let appearance = ap_content(&doc, annotation);
     assert!(!appearance.contains("/Helv"), "Chinese appearance must not use WinAnsi Helvetica: {appearance}");
-    assert!(appearance.contains(" m\\n") && appearance.contains(" l\\n") && appearance.contains("f\\n"), "appearance must contain glyph outline paths");
+    assert!(appearance.contains(" m\n") && appearance.contains(" l\n") && appearance.contains("f\n"), "appearance must contain glyph outline paths");
     assert!(!appearance.contains("(????????"), "Chinese characters must not be replaced with question marks");
 }
 
