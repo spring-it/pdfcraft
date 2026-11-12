@@ -75,6 +75,33 @@ fn rect(d: &Dict) -> Vec<f64> {
 }
 
 #[test]
+fn chinese_free_text_comment_uses_real_glyph_outlines() {
+    let text = "动力电池防水透气阀技术";
+    if pdfcraft_fonts::ui_chinese_fonts().is_empty() {
+        return;
+    }
+    let mut doc = fixture();
+    let index = add_annotation(
+        &mut doc,
+        &new(0, Shape::TextBox { rect: [120.0, 600.0, 480.0, 650.0], font_size: 14.0 }),
+        &Meta { date: Some("D:20261112120000Z".into()), id: "cjk-free-text".into() },
+    ).expect("adds Chinese free-text annotation");
+    let doc = reopen(&doc);
+    let annotations = list(&doc, 0);
+    let annotation = annotations.get(index).expect("annotation exists");
+    assert_eq!(text_of(annotation, b"Contents"), text);
+    let appearance = ap_content(&doc, annotation);
+    assert!(!appearance.contains("/Helv"), "Chinese appearance must not use WinAnsi Helvetica: {appearance}");
+    assert!(appearance.contains(" m\\n") && appearance.contains(" l\\n") && appearance.contains("f\\n"), "appearance must contain glyph outline paths");
+    assert!(!appearance.contains("(????????"), "Chinese characters must not be replaced with question marks");
+    assert!(appearance.contains("U+"), "test sanity");
+}
+
+fn text_of(d: &Dict, key: &[u8]) -> String {
+    d.get(key).and_then(|o| o.as_string()).map(|s| s.to_text()).unwrap_or_default()
+}
+
+#[test]
 fn every_tool_creates_a_drawable_comment() {
     let shapes = [
         Shape::Note { at: [100.0, 700.0], icon: NoteIcon::Comment },
