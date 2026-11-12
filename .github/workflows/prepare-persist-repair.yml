@@ -20,21 +20,33 @@ jobs:
           import re
           import subprocess
 
-          path = Path("crates/ui-egui/tests/fill_sign.rs")
-          expected = "6874db65007b4c5f55cfdf31bc4bd3f8ad54103c"
-          actual = subprocess.check_output(["git", "hash-object", str(path)], text=True).strip()
-          if actual != expected:
-              raise SystemExit(f"Unexpected fill_sign.rs blob: {actual}")
-          source = path.read_text(encoding="utf-8")
-          for y, text in [(200, "Typed"), (160, "More")]:
-              old = f'TypeBox {{ page: 0, at: [40.0, {y}.0], text: "{text}".into(), size: 10.0, focus: false }}'
-              new = old.replace('focus: false', 'color: [0.0; 3], focus: false')
-              if source.count(old) != 1:
-                  raise SystemExit(f"Fixture anchor not unique: {text}")
-              source = source.replace(old, new, 1)
-          path.write_text(source, encoding="utf-8")
+          fixtures = {
+              "crates/ui-egui/tests/fill_sign.rs": (
+                  "6874db65007b4c5f55cfdf31bc4bd3f8ad54103c",
+                  [(200, "Typed"), (160, "More")],
+              ),
+              "crates/ui-egui/tests/control.rs": (
+                  "e6af166d77bc70c21e99f1eb09c141b790166077",
+                  [(200, "Unsaved signature note")],
+              ),
+          }
+          for filename, (expected, cases) in fixtures.items():
+              path = Path(filename)
+              actual = subprocess.check_output(["git", "hash-object", str(path)], text=True).strip()
+              if actual != expected:
+                  raise SystemExit(f"Unexpected {filename} blob: {actual}")
+              source = path.read_text(encoding="utf-8")
+              for y, text in cases:
+                  old = f'TypeBox {{ page: 0, at: [40.0, {y}.0], text: "{text}".into(), size: 10.0, focus: false }}'
+                  new = old.replace('focus: false', 'color: [0.0; 3], focus: false')
+                  if source.count(old) != 1:
+                      raise SystemExit(f"Fixture anchor not unique: {text}")
+                  source = source.replace(old, new, 1)
+              path.write_text(source, encoding="utf-8")
           missing = []
-          for filename in subprocess.check_output(["git", "ls-files", "*.rs"], text=True).splitlines():
+          for filename in subprocess.check_output(["git", "ls-files", "-z", "*.rs"], text=True).split('\0'):
+              if not filename:
+                  continue
               contents = Path(filename).read_text(encoding="utf-8")
               for match in re.finditer(r'\bTypeBox\s*\{[^{}]*\}', contents):
                   snippet = match.group()
@@ -51,10 +63,10 @@ jobs:
           set -euo pipefail
           git diff --check
           git diff --stat
-          git diff -- crates/ui-egui/tests/fill_sign.rs
+          git diff -- crates/ui-egui/tests/fill_sign.rs crates/ui-egui/tests/control.rs
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add crates/ui-egui/tests/fill_sign.rs
-          git commit -m 'test(fill-sign): initialize colour in saved text fixtures'
+          git add crates/ui-egui/tests/fill_sign.rs crates/ui-egui/tests/control.rs
+          git commit -m 'test(fill-sign): initialize colour in saved and unsaved text fixtures'
           git push origin HEAD:refs/heads/fix/v0.10.28-typebox-fixtures
           git rev-parse HEAD >> "$GITHUB_STEP_SUMMARY"
