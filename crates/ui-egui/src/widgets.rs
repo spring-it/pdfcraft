@@ -64,10 +64,14 @@ pub fn show_modal_with_scroll<R>(
     modal(ctx, id).show(ctx, |ui| {
         begin_dialog(ui);
         ui.set_max_width(max_width);
+        // Dialogs taller than the 100pt compact-prompt threshold use a consistent
+        // two-thirds-viewport card. The body scrolls within that reserved height.
+        ui.set_min_height(max_height);
         let inner = if scroll_content {
             egui::ScrollArea::vertical()
                 .id_salt(("dialog-content", id))
                 .max_width(max_width)
+                .min_scrolled_height(max_height)
                 .max_height(max_height)
                 // Allow the viewport to shrink horizontally when a filename or control has
                 // a large intrinsic width; otherwise egui expands the modal past the screen.
