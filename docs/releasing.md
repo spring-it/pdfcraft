@@ -296,3 +296,9 @@ a match of the `CobaltStrikeBeacon` family rule.
 - Long-form dialogs reserve two-thirds of the desktop viewport; compact confirmations (save, password, link) retain natural content height and no longer show large blank regions.
 - The print and watermark dialogs keep their long-form two-thirds sizing and internal scrolling with actions outside the scroll area.
 - Automatic OCR on document open remains disabled due to the supplied workflow's poor recognition accuracy. Manual Scan & OCR remains available.
+
+
+## v0.10.27 Windows LocalAppData MSI
+
+- Added a text-colour selector directly to the new Text Box comment composer. The chosen colour is written into the annotation's default appearance, and uses the same licensed CJK glyph-outline rendering path for Chinese text.
+- The About dialog now sizes to its actual content instead of reserving two-thirds of the viewport; long-form Print, Watermark and document-operation dialogs retain the two-thirds height layout.
