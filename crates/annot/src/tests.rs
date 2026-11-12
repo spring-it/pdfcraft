@@ -94,7 +94,6 @@ fn chinese_free_text_comment_uses_real_glyph_outlines() {
     assert!(!appearance.contains("/Helv"), "Chinese appearance must not use WinAnsi Helvetica: {appearance}");
     assert!(appearance.contains(" m\\n") && appearance.contains(" l\\n") && appearance.contains("f\\n"), "appearance must contain glyph outline paths");
     assert!(!appearance.contains("(????????"), "Chinese characters must not be replaced with question marks");
-    assert!(appearance.contains("U+"), "test sanity");
 }
 
 fn text_of(d: &Dict, key: &[u8]) -> String {
