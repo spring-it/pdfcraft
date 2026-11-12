@@ -159,23 +159,6 @@ impl PdfCraftApp {
         self.start_ocr_for(id, &pages, d.settings(), true);
     }
 
-    /// Automatically recognize image-backed pages on open. Pages with existing text are
-    /// skipped by OcrJob; the manual Recognize Text command remains available unchanged.
-    pub(crate) fn start_auto_ocr(&mut self, id: DocId) {
-        if self.ocr_run.is_some() || !pdfcraft_engine::ocr::available() {
-            return;
-        }
-        let Some(doc) = self.session.get(id) else { return };
-        if doc.read_only_reason.is_some() {
-            return;
-        }
-        let pages: Vec<usize> = (0..doc.info.pages.len()).filter(|page| !doc.page_images(*page).is_empty()).collect();
-        if pages.is_empty() {
-            return;
-        }
-        self.start_ocr_for(id, &pages, OcrSettings::default(), false);
-    }
-
     fn start_ocr_for(&mut self, id: DocId, pages: &[usize], settings: OcrSettings, notify_if_busy: bool) {
         if self.ocr_run.is_some() {
             if notify_if_busy {
