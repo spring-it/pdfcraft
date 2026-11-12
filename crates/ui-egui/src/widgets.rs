@@ -47,15 +47,26 @@ pub fn modal(ctx: &egui::Context, id: impl std::hash::Hash + std::fmt::Debug) ->
 
 /// Show [`modal`], outline its controls, and remember the card rect for layout checks.
 pub fn show_modal<R>(ctx: &egui::Context, id: &str, content: impl FnOnce(&mut egui::Ui) -> R) -> egui::ModalResponse<R> {
-    show_modal_with_scroll(ctx, id, true, content)
+    show_modal_with_height(ctx, id, true, false, content)
 }
 
-/// Show a modal with optional outer scrolling. Dialogs with a preview and a separate
-/// scrollable settings pane must keep their footer outside the scroll area.
+/// Show a modal with optional outer scrolling and optional two-thirds viewport sizing.
+/// Compact prompts (save confirmation, password entry, link confirmation) keep natural height.
 pub fn show_modal_with_scroll<R>(
     ctx: &egui::Context,
     id: &str,
     scroll_content: bool,
+    content: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::ModalResponse<R> {
+    show_modal_with_height(ctx, id, scroll_content, false, content)
+}
+
+/// Long-form dialogs reserve two-thirds of the current desktop viewport; compact prompts do not.
+pub fn show_modal_with_height<R>(
+    ctx: &egui::Context,
+    id: &str,
+    scroll_content: bool,
+    fill_viewport_height: bool,
     content: impl FnOnce(&mut egui::Ui) -> R,
 ) -> egui::ModalResponse<R> {
     let stored = egui::Id::new(id);
@@ -64,23 +75,24 @@ pub fn show_modal_with_scroll<R>(
     modal(ctx, id).show(ctx, |ui| {
         begin_dialog(ui);
         ui.set_max_width(max_width);
-        // Dialogs taller than the 100pt compact-prompt threshold use a consistent
-        // two-thirds-viewport card. The body scrolls within that reserved height.
-        ui.set_min_height(max_height);
+        if fill_viewport_height {
+            ui.set_min_height(max_height);
+        }
         let inner = if scroll_content {
-            egui::ScrollArea::vertical()
+            let mut area = egui::ScrollArea::vertical()
                 .id_salt(("dialog-content", id))
                 .max_width(max_width)
-                .min_scrolled_height(max_height)
                 .max_height(max_height)
                 // Allow the viewport to shrink horizontally when a filename or control has
                 // a large intrinsic width; otherwise egui expands the modal past the screen.
-                .auto_shrink([true, true])
-                .show(ui, |ui| {
-                    ui.set_max_width(max_width);
-                    content(ui)
-                })
-                .inner
+                .auto_shrink([true, true]);
+            if fill_viewport_height {
+                area = area.min_scrolled_height(max_height);
+            }
+            area.show(ui, |ui| {
+                ui.set_max_width(max_width);
+                content(ui)
+            }).inner
         } else {
             // The dialog body owns its inner scrolling and constrains its preview and action row.
             content(ui)
