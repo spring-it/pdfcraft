@@ -2274,7 +2274,6 @@ impl PdfCraftApp {
             "ui_scale": self.ui_scale,
             "flatten_fill_sign": self.flatten_fill_sign_on_save,
             "fill_text_size": self.fill_text_size,
-            "fill_text_color": self.fill_text_color,
             "date_format": self.session.date_format(),
             // Null follows the interface language.
             "date_language": self.session.date_language(),
@@ -2310,6 +2309,9 @@ impl PdfCraftApp {
             "comments_panel_closed": self.comments_panel_closed,
             "right_panel_closed": self.right_panel_closed,
         });
+        // Keep new settings outside the large json! object: another key exceeds
+        // the default macro recursion limit. Preserve the existing RGB-array format.
+        v["fill_text_color"] = serde_json::json!(self.fill_text_color);
         // Set apart: one more key inside the macro above passes serde_json's recursion limit.
         v["redact_prefs"] = self.redact_defaults.to_json();
         // Set outside json! above, which is at serde_json's macro recursion limit.
