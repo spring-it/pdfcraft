@@ -4782,7 +4782,7 @@ fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
                                 ui.close();
                             }
                         });
-                    l_sign::FillTool::Text | crate::fill_sign::FillTool::Date)) {
+                    if matches!(current_fill, Some(crate::fill_sign::FillTool::Text | crate::fill_sign::FillTool::Date)) {
                         ui.label(tl!("Font size:"));
                         ui.add(
                             egui::DragValue::new(&mut app.fill_text_size)
@@ -4791,7 +4791,7 @@ fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
                                 .suffix(" pt"),
                         );
                     }
-                    if let QuickTool::Com                    if current_fill == Some(crate::fill_sign::FillTool::Text) {
+                    if current_fill == Some(crate::fill_sign::FillTool::Text) {
                         let (r, response) = ui.allocate_exact_size(vec2(32.0, 28.0), Sense::click());
                         ui.painter().circle_filled(r.center(), 9.0, comments::color32(app.fill_text_color));
                         ui.painter().circle_stroke(r.center(), 9.0, Stroke::new(1.0, Color32::from_black_alpha(50)));
