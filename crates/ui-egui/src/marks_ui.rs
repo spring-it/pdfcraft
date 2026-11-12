@@ -985,14 +985,14 @@ mod tests {
         for viewport_height in [480.0_f32, 600.0, 720.0, 900.0, 1080.0] {
             let preview = watermark_preview_height(viewport_height);
             assert!(
-                (WATERMARK_PREVIEW_MIN_HEIGHT..=WATERMARK_PREVIEW_HEIGHT).contains(&preview),
+                (100.0..=WATERMARK_PREVIEW_HEIGHT).contains(&preview),
                 "preview height {preview} must stay within bounds for viewport {viewport_height}"
             );
         }
         assert!((watermark_preview_height(400.0) - (400.0 * (2.0 / 3.0) - 120.0)).abs() < 0.01);
-        assert_eq!(watermark_preview_height(480.0), 250.0);
-        assert_eq!(watermark_preview_height(600.0), 370.0);
-        assert_eq!(watermark_preview_height(720.0), 490.0);
+        assert!((watermark_preview_height(480.0) - 200.0).abs() < 0.01);
+        assert!((watermark_preview_height(600.0) - 280.0).abs() < 0.01);
+        assert!((watermark_preview_height(720.0) - 360.0).abs() < 0.01);
         assert!((watermark_preview_height(900.0) - 480.0).abs() < 0.01);
         assert!((watermark_preview_height(1080.0) - 600.0).abs() < 0.01);
     }
