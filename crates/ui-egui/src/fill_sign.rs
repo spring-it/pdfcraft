@@ -631,6 +631,7 @@ pub(crate) fn page_input(
     info: &DocInfo,
     tool: FillTool,
     text_size: f64,
+    text_color: [f64; 3],
     view: &mut DocView,
     signature: Option<&SavedSig>,
     initials: Option<&SavedSig>,
