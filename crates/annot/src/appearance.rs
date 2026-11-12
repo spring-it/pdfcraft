@@ -290,7 +290,66 @@ pub fn undrawable_text(d: &Dict) -> Option<(&'static str, char)> {
         b"Redact" => ("the redaction's overlay text", text(b"OverlayText")?),
         _ => return None,
     };
+    if d.name(b"Subtype") == Some(b"FreeText")
+        && first_undrawable(&text).is_some()
+        && cjk_comment_face(&text).is_some()
+    {
+        return None;
+    }
     Some((what, first_undrawable(&text)?))
+}
+
+/// The approved Simplified Chinese document face that covers every character in this comment.
+fn cjk_comment_face(text: &str) -> Option<&'static pdfcraft_fonts::CraftFont> {
+    pdfcraft_fonts::ui_chinese_fonts()
+        .into_iter()
+        .find(|face| pdfcraft_fonts::embedding::covers(face.bytes, text))
+}
+
+/// Draw a FreeText annotation with real CJK glyph outlines instead of encoding Unicode as
+/// WinAnsi (which silently turns Chinese into permanent question marks in every PDF reader).
+/// The original Unicode remains in /Contents; the outline appearance is portable and needs no
+/// system font on the machine that later opens the PDF.
+fn draw_cjk_comment(
+    out: &mut Vec<u8>,
+    text: &str,
+    rect: [f64; 4],
+    size: f64,
+    pad: f64,
+    width: f64,
+    align: i64,
+    color: [f64; 3],
+) -> Option<()> {
+    let face = cjk_comment_face(text)?;
+    let lines = pdfcraft_fonts::wrap_with(text, size, width, pdfcraft_fonts::cjk_width);
+    let mut y = rect[3] - pad - size * 0.9;
+    out.extend(format!("{}\n", rg(color)).bytes());
+    for line in lines {
+        if y < rect[1] - size {
+            break;
+        }
+        let glyphs: Vec<_> = line.chars().map(|ch| pdfcraft_fonts::japanese_glyph_from(face, ch).ok()).collect::<Option<_>>()?;
+        let line_width: f64 = glyphs.iter().map(|g| g.width * size).sum();
+        let mut x = match align {
+            1 => rect[0] + pad + (width - line_width) / 2.0,
+            2 => rect[2] - pad - line_width,
+            _ => rect[0] + pad,
+        };
+        for glyph in glyphs {
+            for contour in &glyph.contours {
+                let Some(first) = contour.first() else { continue };
+                out.extend(format!("{} {} m\n", n(x + first[0] * size), n(y + first[1] * size)).bytes());
+                for point in contour.iter().skip(1) {
+                    out.extend(format!("{} {} l\n", n(x + point[0] * size), n(y + point[1] * size)).bytes());
+                }
+                out.extend_from_slice(b"h\n");
+            }
+            x += glyph.width * size;
+        }
+        out.extend_from_slice(b"f\n");
+        y -= size * 1.2;
+    }
+    Some(())
 }
 
 /// Draw the normal appearance of an annotation, or `None` if this subtype/variant isn't supported.
@@ -736,40 +795,43 @@ pub fn build(d: &Dict) -> Option<Stream> {
             let width = (rect[2] - rect[0] - 2.0 * pad).max(1.0);
             let q = d.int(b"Q").unwrap_or(0);
             c.push_str(&format!(
-                "{} {} {} {} re W n\nBT\n/Helv {} Tf\n{}",
+                "{} {} {} {} re W n\n",
                 n(rect[0]),
                 n(rect[1]),
                 n(rect[2] - rect[0]),
-                n(rect[3] - rect[1]),
-                n(size),
-                rg(text_color)
+                n(rect[3] - rect[1])
             ));
             let mut out = c.into_bytes();
-            let mut y = rect[3] - pad - size * 0.9;
-            for line in wrap(&text, size, width) {
-                if y < rect[1] - size {
-                    break;
+            let drawn_cjk = first_undrawable(&text).is_some()
+                && draw_cjk_comment(&mut out, &text, rect, size, pad, width, q, text_color).is_some();
+            if !drawn_cjk {
+                out.extend(format!("BT\n/Helv {} Tf\n{} ", n(size), rg(text_color)).bytes());
+                let mut y = rect[3] - pad - size * 0.9;
+                for line in wrap(&text, size, width) {
+                    if y < rect[1] - size {
+                        break;
+                    }
+                    let lw = text_width(&line, size);
+                    let x = match q {
+                        1 => rect[0] + pad + (width - lw) / 2.0,
+                        2 => rect[2] - pad - lw,
+                        _ => rect[0] + pad,
+                    };
+                    out.extend(format!("1 0 0 1 {} {} Tm ", n(x), n(y)).bytes());
+                    out.extend(literal(&win_ansi(&line)));
+                    out.extend_from_slice(b" Tj\n");
+                    y -= size * 1.2;
                 }
-                let lw = text_width(&line, size);
-                let x = match q {
-                    1 => rect[0] + pad + (width - lw) / 2.0,
-                    2 => rect[2] - pad - lw,
-                    _ => rect[0] + pad,
-                };
-                out.extend(format!("1 0 0 1 {} {} Tm ", n(x), n(y)).bytes());
-                out.extend(literal(&win_ansi(&line)));
-                out.extend_from_slice(b" Tj\n");
-                y -= size * 1.2;
+                out.extend_from_slice(b"ET\n");
+                let mut font = Dict::new();
+                font.set(b"Type".to_vec(), Object::name("Font"));
+                font.set(b"Subtype".to_vec(), Object::name("Type1"));
+                font.set(b"BaseFont".to_vec(), Object::name("Helvetica"));
+                font.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
+                let mut fonts = Dict::new();
+                fonts.set(b"Helv".to_vec(), Object::Dict(font));
+                res.set(b"Font".to_vec(), Object::Dict(fonts));
             }
-            out.extend_from_slice(b"ET\n");
-            let mut font = Dict::new();
-            font.set(b"Type".to_vec(), Object::name("Font"));
-            font.set(b"Subtype".to_vec(), Object::name("Type1"));
-            font.set(b"BaseFont".to_vec(), Object::name("Helvetica"));
-            font.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
-            let mut fonts = Dict::new();
-            fonts.set(b"Helv".to_vec(), Object::Dict(font));
-            res.set(b"Font".to_vec(), Object::Dict(fonts));
             let mut stream = form(full, &out, res);
             if let Some(m) = matrix {
                 stream.dict.set(b"Matrix".to_vec(), Object::Array(m.iter().copied().map(Object::Real).collect()));
