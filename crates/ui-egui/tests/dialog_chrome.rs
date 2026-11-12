@@ -153,6 +153,7 @@ fn document_properties_dialog_fits_a_small_scaled_viewport() {
     let card = card(&h, "dialog");
     assert!(card.left() >= 0.0 && card.right() <= 560.0, "properties card must fit horizontally: {card:?}");
     assert!(card.top() >= 0.0 && card.bottom() <= 420.0, "properties card must fit vertically: {card:?}");
+    assert!(card.height() <= 420.0 * (2.0 / 3.0) + 2.0, "properties dialog must respect the 2/3 viewport height cap: {card:?}");
     let heading = h.get_by_label("Document Properties").rect();
     assert!(heading.left() >= card.left() && heading.right() <= card.right(), "heading must remain in the card: {heading:?} in {card:?}");
 }
