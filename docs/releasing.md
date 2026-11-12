@@ -273,3 +273,10 @@ a match of the `CobaltStrikeBeacon` family rule.
 7. **Report.** To the scanner, send the file's SHA-256, the release URL, the rule name and revision,
    and the matched identifiers and offsets. Report PdfCraft problems at
    <https://github.com/storytold/pdfcraft/issues> with the same facts.
+
+
+## v0.10.24 Windows LocalAppData MSI
+
+- Dialog content is capped at two-thirds of the current viewport height after reserving card padding and safe margins; overflowing forms scroll internally so footer actions remain reachable.
+- The watermark settings/preview area uses the same two-thirds viewport height budget and keeps its footer outside the scrollable content.
+- Automatic OCR on document open is disabled because the current recognition model's accuracy is insufficient for this workflow. The manual Scan & OCR / Recognize Text entry remains available on demand.
