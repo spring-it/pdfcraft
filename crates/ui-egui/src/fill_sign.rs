@@ -404,6 +404,7 @@ pub struct TypeBox {
     pub at: [f64; 2],
     pub text: String,
     pub size: f64,
+    pub color: [f64; 3],
     pub focus: bool,
 }
 
@@ -430,8 +431,18 @@ fn new(page: usize, shape: Shape, contents: String, author: &str) -> Edit {
 /// A typewriter annotation sized to its text, its displayed top-left at `at` on a page turned by
 /// `rotation` (its `/Rotate`).
 pub fn typed(page: usize, at: [f64; 2], text: &str, size: f64, rotation: i64, author: &str) -> Edit {
+    typed_with_color(page, at, text, size, rotation, author, [0.0, 0.0, 0.0])
+}
+
+/// Place Fill & Sign text using the chosen foreground colour.
+pub fn typed_with_color(page: usize, at: [f64; 2], text: &str, size: f64, rotation: i64, author: &str, color: [f64; 3]) -> Edit {
     let rect = crate::comments::text_box_rect(at, text, size, rotation);
-    new(page, Shape::Typewriter { rect, font_size: size }, text.to_string(), author)
+    let shape = Shape::Typewriter { rect, font_size: size };
+    let mut edit = new(page, shape, text.to_string(), author);
+    if let Edit::AddAnnotation(annotation) = &mut edit {
+        annotation.style.color = color.map(|c| c.clamp(0.0, 1.0));
+    }
+    edit
 }
 
 /// Place a saved signature (strokes normalised to a 0–1 box, y up) with its left edge at `at`,
@@ -657,9 +668,9 @@ pub(crate) fn page_input(
         FillTool::Text => {
             // Clicking away from an open box commits it: the page sees this click before the box
             // sees its lost focus, so replacing the box first would drop what was typed.
-            let open = view.fill_text.replace(TypeBox { page, at: top, text: String::new(), size: text_size, focus: true });
+            let open = view.fill_text.replace(TypeBox { page, at: top, text: String::new(), size: text_size, color: text_color, focus: true });
             open.filter(|tb| !tb.text.trim().is_empty()).map(|tb| {
-                FillAction::Edit(Box::new(typed(tb.page, tb.at, tb.text.trim(), tb.size, crate::comments::page_rotation(info, tb.page), author)))
+                FillAction::Edit(Box::new(typed_with_color(tb.page, tb.at, tb.text.trim(), tb.size, crate::comments::page_rotation(info, tb.page), author, tb.color)))
             })
         }
         FillTool::Date => Some(match date_text {
@@ -719,7 +730,7 @@ pub(crate) fn type_box(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
                 .font(egui::FontId::proportional((t.size as f32 * zoom).max(8.0)))
                 .desired_width(width)
                 .background_color(Color32::from_rgba_unmultiplied(255, 255, 255, 230))
-                .text_color(Color32::BLACK)
+                .text_color(crate::comments::color32(tb.color))
                 .hint_text(tl!("Type text"))
                 .id_salt("fill-text-edit"),
         );
@@ -740,7 +751,7 @@ pub(crate) fn type_box(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
     if commit {
         let tb = view.fill_text.take()?;
         if !tb.text.trim().is_empty() {
-            return Some(typed(tb.page, tb.at, tb.text.trim(), tb.size, crate::comments::page_rotation(info, tb.page), author));
+            return Some(typed_with_color(tb.page, tb.at, tb.text.trim(), tb.size, crate::comments::page_rotation(info, tb.page), author, tb.color));
         }
     }
     None
