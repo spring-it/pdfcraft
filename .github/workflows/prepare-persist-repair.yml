@@ -1,0 +1,56 @@
+name: Prepare v0.10.28 persistence repair
+on:
+  push:
+    branches: [fix/v0.10.28-persist-repair-runner]
+    paths: [.github/workflows/prepare-persist-repair.yml]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 4fe809770a8752f929e400cd200c771a485fc69d
+      - name: Apply exact source repair and settings regressions
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess
+
+          path = Path("crates/ui-egui/src/lib.rs")
+          expected = "58cdb94ed5ec4be945609bd3e2c90c9971a166c7"
+          actual = subprocess.check_output(["git", "hash-object", str(path)], text=True).strip()
+          if actual != expected:
+              raise SystemExit(f"Unexpected lib.rs blob: {actual}")
+          source = path.read_text(encoding="utf-8")
+          field = '            "fill_text_color": self.fill_text_color,\n'
+          anchor = "        // Set apart: one more key inside the macro above passes serde_json's recursion limit.\n"
+          if source.count(field) != 1 or source.count(anchor) != 1:
+              raise SystemExit("Persistence anchors are not unique")
+          fixed = source.replace(field, "", 1).replace(anchor,
+              '        // Keep new settings outside the large json! object: another key exceeds\n'
+              '        // the default macro recursion limit. Preserve the existing RGB-array format.\n'
+              '        v["fill_text_color"] = serde_json::json!(self.fill_text_color);\n' + anchor, 1)
+          if len(fixed.splitlines()) != len(source.splitlines()) + 2:
+              raise SystemExit("Unexpected source size change")
+          path.write_text(fixed, encoding="utf-8")
+
+          test_path = Path("crates/ui-egui/tests/fill_text_settings.rs")
+          if test_path.exists():
+              raise SystemExit("Regression test path already exists")
+          test_path.write_text('//! Regression coverage for Fill & Sign settings without a window or GPU.\n\nuse pdfcraft_ui_egui::PdfCraftApp;\nuse serde_json::{Value, json};\n\n#[test]\nfn fill_text_colour_settings_preserve_other_preferences() {\n    let mut app = PdfCraftApp::new();\n    app.fill_text_color = [0.25, 0.5, 0.75];\n    app.fill_text_size = 24.0;\n    app.set_option("author", "Settings regression").unwrap();\n    let settings = app.persist();\n    let value: Value = serde_json::from_str(&settings).unwrap();\n    assert_eq!(value["fill_text_color"], json!([0.25, 0.5, 0.75]));\n    assert_eq!(value["fill_text_size"], json!(24.0));\n    assert_eq!(value["author"], json!("Settings regression"));\n    for key in ["docking", "comment_styles", "redact_prefs", "hide_empty_highlight_hover"] {\n        assert!(value.get(key).is_some(), "missing existing setting: {key}");\n    }\n    let mut restored = PdfCraftApp::new();\n    restored.restore(&settings);\n    assert_eq!(restored.fill_text_color, app.fill_text_color);\n    assert_eq!(restored.fill_text_size, app.fill_text_size);\n    let value: Value = serde_json::from_str(&restored.persist()).unwrap();\n    assert_eq!(value["author"], json!("Settings regression"));\n}\n\n#[test]\nfn fill_text_colour_settings_round_trip_rgb_boundaries() {\n    for color in [[0.0, 0.0, 0.0], [1.0, 1.0, 1.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]] {\n        let mut app = PdfCraftApp::new();\n        app.fill_text_color = color;\n        let mut restored = PdfCraftApp::new();\n        restored.restore(&app.persist());\n        assert_eq!(restored.fill_text_color, color);\n    }\n}\n\n#[test]\nfn fill_text_colour_settings_keep_legacy_default() {\n    let mut app = PdfCraftApp::new();\n    let default_color = app.fill_text_color;\n    app.restore(r#"{"fill_text_size":18.0}"#);\n    assert_eq!(app.fill_text_size, 18.0);\n    assert_eq!(app.fill_text_color, default_color);\n}\n\n#[test]\nfn fill_text_colour_settings_ignore_malformed_rgb() {\n    for invalid in [json!(null), json!("blue"), json!([1.0, 0.0]), json!([1.0, 0.0, "blue"])] {\n        let mut app = PdfCraftApp::new();\n        let color = [0.25, 0.5, 0.75];\n        app.fill_text_color = color;\n        app.restore(&json!({ "fill_text_color": invalid }).to_string());\n        assert_eq!(app.fill_text_color, color);\n    }\n}\n', encoding="utf-8")
+      - name: Verify diff and publish candidate branch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff --stat
+          git diff -- crates/ui-egui/src/lib.rs
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/ui-egui/src/lib.rs crates/ui-egui/tests/fill_text_settings.rs
+          git commit -m 'fix(fill-sign): avoid settings JSON macro recursion overflow'
+          git push origin HEAD:refs/heads/fix/v0.10.28-persist-repaired
+          git rev-parse HEAD >> "$GITHUB_STEP_SUMMARY"
