@@ -280,3 +280,11 @@ a match of the `CobaltStrikeBeacon` family rule.
 - Dialog content is capped at two-thirds of the current viewport height after reserving card padding and safe margins; overflowing forms scroll internally so footer actions remain reachable.
 - The watermark settings/preview area uses the same two-thirds viewport height budget and keeps its footer outside the scrollable content.
 - Automatic OCR on document open is disabled because the current recognition model's accuracy is insufficient for this workflow. The manual Scan & OCR / Recognize Text entry remains available on demand.
+
+
+## v0.10.25 Windows LocalAppData MSI
+
+- Long and content-rich dialogs, including Print and Add Watermark, reserve approximately two-thirds of the current desktop viewport height. Their content scrolls within the dialog and footer actions remain outside the scrolling region.
+- Short prompts retain their natural compact size; the two-thirds sizing rule is for long/content-rich dialogs.
+- The watermark settings and preview are wrapped in a shared height-constrained scroll region; the Cancel and OK actions remain reachable below it.
+- Automatic OCR on document open is disabled due to insufficient recognition accuracy for the supplied workflow. Manual Scan & OCR remains available on demand.
