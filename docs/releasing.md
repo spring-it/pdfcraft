@@ -302,3 +302,8 @@ a match of the `CobaltStrikeBeacon` family rule.
 
 - Added a text-colour selector directly to the new Text Box comment composer. The chosen colour is written into the annotation's default appearance, and uses the same licensed CJK glyph-outline rendering path for Chinese text.
 - The About dialog now sizes to its actual content instead of reserving two-thirds of the viewport; long-form Print, Watermark and document-operation dialogs retain the two-thirds height layout.
+
+
+## v0.10.28 Windows LocalAppData MSI
+
+- Added a colour picker to the Fill & Sign quick toolbar's Add Text action. The selected foreground colour is previewed in the inline text editor, saved into the new PDF FreeText annotation appearance, and persisted as the default for future Fill & Sign text.
