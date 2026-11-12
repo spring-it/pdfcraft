@@ -149,6 +149,8 @@ fn fill_text_colour_is_applied_and_survives_settings_restore() {
     let mut h = harness();
     h.state_mut().fill_text_color = [0.0, 0.0, 1.0];
     h.state_mut().execute("sign.fill.text");
+    h.run_steps(2);
+    h.get_by_label("Text colour");
     click(&mut h, 50.0, 250.0);
     h.event(egui::Event::Text("Blue text".into()));
     h.run_steps(1);
