@@ -288,3 +288,11 @@ a match of the `CobaltStrikeBeacon` family rule.
 - Short prompts retain their natural compact size; the two-thirds sizing rule is for long/content-rich dialogs.
 - The watermark settings and preview are wrapped in a shared height-constrained scroll region; the Cancel and OK actions remain reachable below it.
 - Automatic OCR on document open is disabled due to insufficient recognition accuracy for the supplied workflow. Manual Scan & OCR remains available on demand.
+
+
+## v0.10.26 Windows LocalAppData MSI
+
+- Chinese text-box/comment annotations use the approved bundled Simplified Chinese face to draw portable glyph outlines into their appearance streams. Unicode `/Contents` remains intact; new comments no longer become permanent question marks because of WinAnsi Helvetica.
+- Long-form dialogs reserve two-thirds of the desktop viewport; compact confirmations (save, password, link) retain natural content height and no longer show large blank regions.
+- The print and watermark dialogs keep their long-form two-thirds sizing and internal scrolling with actions outside the scroll area.
+- Automatic OCR on document open remains disabled due to the supplied workflow's poor recognition accuracy. Manual Scan & OCR remains available.
