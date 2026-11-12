@@ -145,6 +145,25 @@ fn clicking_elsewhere_with_add_text_keeps_the_typed_text() {
 }
 
 #[test]
+fn fill_text_colour_is_applied_and_survives_settings_restore() {
+    let mut h = harness();
+    h.state_mut().fill_text_color = [0.0, 0.0, 1.0];
+    h.state_mut().execute("sign.fill.text");
+    click(&mut h, 50.0, 250.0);
+    h.event(egui::Event::Text("Blue text".into()));
+    h.run_steps(1);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(4);
+    let annotation = h.state().session.get(h.state().views[0].id).unwrap().info.annotations.iter()
+        .find(|a| a.contents.as_deref() == Some("Blue text")).expect("text annotation");
+    assert_eq!(annotation.color, Some([0.0, 0.0, 1.0]));
+    let settings = h.state().persist();
+    let mut restored = PdfCraftApp::new();
+    restored.restore(&settings);
+    assert_eq!(restored.fill_text_color, [0.0, 0.0, 1.0]);
+}
+
+#[test]
 fn fill_text_size_controls_new_text_and_survives_settings_restore() {
     let mut h = harness();
     h.state_mut().execute("sign.fill.text");
