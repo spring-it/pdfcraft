@@ -104,10 +104,11 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let t = Tokens::get(ctx);
     let mut close = false;
     let mut next = dialog;
-    let modal = widgets::show_modal_with_scroll(
+    let modal = widgets::show_modal_with_height(
         ctx,
         "dialog",
         dialog != Dialog::Marks(pdfcraft_engine::MarkKind::Watermark),
+        true,
         |ui| {
         ui.set_width(dialog_width(dialog, ctx.content_rect().width()));
         match dialog {
