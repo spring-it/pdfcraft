@@ -21,7 +21,7 @@ pub(crate) fn modal_content_max_width(viewport_width: f32) -> f32 {
 
 /// Maximum content height after reserving the card padding and a safe margin around the viewport.
 pub(crate) fn modal_content_max_height(viewport_height: f32) -> f32 {
-    (viewport_height - 2.0 * f32::from(DIALOG_PAD_Y) - 2.0 * DIALOG_VIEWPORT_MARGIN).max(1.0)
+    (viewport_height * (2.0 / 3.0) - 2.0 * f32::from(DIALOG_PAD_Y) - 2.0 * DIALOG_VIEWPORT_MARGIN).max(1.0)
 }
 
 /// Set a preferred dialog width without allowing it to exceed the current screen.
