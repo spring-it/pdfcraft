@@ -178,6 +178,27 @@ fn print_dialog_occupies_two_thirds_of_the_viewport() {
 }
 
 #[test]
+fn watermark_dialog_occupies_two_thirds_of_a_large_viewport() {
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1080.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("watermark.pdf", None, fixture()).unwrap();
+        app.dialog = Some(pdfcraft_ui_egui::Dialog::Marks(pdfcraft_engine::MarkKind::Watermark));
+        app
+    });
+    h.run_steps(5);
+    let card = card(&h, "dialog");
+    assert!(card.left() >= 0.0 && card.right() <= 1600.0, "watermark dialog must fit horizontally: {card:?}");
+    assert!(card.top() >= 0.0 && card.bottom() <= 1080.0, "watermark dialog must fit vertically: {card:?}");
+    assert!(
+        card.height() >= 1080.0 * (2.0 / 3.0) - 40.0 && card.height() <= 1080.0 * (2.0 / 3.0) + 40.0,
+        "watermark dialog should occupy about 2/3 of the viewport, not content-size itself: {card:?}"
+    );
+    let cancel = h.get_by_label("Cancel").rect();
+    assert!(cancel.bottom() <= card.bottom() && cancel.top() >= card.top(), "footer must remain inside the card: {cancel:?} in {card:?}");
+}
+
+#[test]
 fn watermark_dialog_scrolls_to_its_actions_on_a_small_scaled_viewport() {
     let mut h = Harness::builder().with_size(egui::vec2(640.0, 480.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
