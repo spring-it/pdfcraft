@@ -220,6 +220,17 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     let compact = available_width < 900.0;
     let (left_width, right_width) = if compact { (available_width.max(1.0), 0.0) } else { watermark_column_widths(available_width) };
 
+    // The watermark dialog has a fixed footer. Give its entire settings + preview region
+    // a two-thirds-screen budget minus the title, footer, and card padding, and scroll that
+    // region as one unit. This prevents the content-rich dialog from growing to near full-screen.
+    let viewport_height = ui.ctx().content_rect().height();
+    let body_height = (viewport_height * (2.0 / 3.0) - 150.0).max(100.0);
+    egui::ScrollArea::vertical()
+        .id_salt("watermark-dialog-body")
+        .min_scrolled_height(body_height)
+        .max_height(body_height)
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
     ui.horizontal_top(|ui| {
         // Keep the long settings form in its own viewport. The preview and action row
         // stay visible; on short/high-DPI windows only the settings column scrolls.
@@ -377,6 +388,8 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             });
         }
     });
+        });
+
 
     ui.add_space(8.0);
     let has_source = if d.use_file { d.file.is_some() } else { !d.wm.text.trim().is_empty() };
