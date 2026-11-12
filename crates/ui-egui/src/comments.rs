@@ -1374,6 +1374,9 @@ pub(crate) fn composer(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
     let t = Tokens::get(ctx);
     let mut post = false;
     let mut cancel = false;
+    let text_color_id = egui::Id::new(("comment-composer-text-color", view.id.0));
+    let mut text_color = ctx.data(|d| d.get_temp::<Rgb>(text_color_id))
+        .unwrap_or_else(|| prefs.style(CommentTool::TextBox).color);
     let c = view.comments.composer.as_mut()?;
     let title = match c.kind {
         ComposerKind::Note => "Sticky note",
@@ -1400,6 +1403,20 @@ pub(crate) fn composer(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
             };
             let edit =
                 ui.add(egui::TextEdit::multiline(&mut c.text).hint_text(hint).desired_rows(3).desired_width(f32::INFINITY).id_salt("composer-text"));
+            if matches!(c.kind, ComposerKind::TextBox | ComposerKind::Callout { .. }) {
+                ui.horizontal(|ui| {
+                    ui.label(tl!("Text colour"));
+                    let label = format!("#{:02X}{:02X}{:02X}", (text_color[0] * 255.0) as u8, (text_color[1] * 255.0) as u8, (text_color[2] * 255.0) as u8);
+                    let response = swatch(ui, text_color, true, &label);
+                    egui::Popup::menu(&response).align(egui::RectAlign::LEFT_START).show(|ui| {
+                        if let Some(chosen) = swatch_grid(ui, Some(text_color)) {
+                            text_color = chosen;
+                            ui.close();
+                        }
+                    });
+                });
+                ctx.data_mut(|d| d.insert_temp(text_color_id, text_color));
+            }
             if c.focus {
                 edit.request_focus();
                 c.focus = false;
@@ -1446,12 +1463,16 @@ pub(crate) fn composer(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
         }
         ComposerKind::TextBox => {
             view.comments.tool_done = true;
-            Some(new_comment(
+            let mut edit = new_comment(
                 &cx,
                 CommentTool::TextBox,
                 Shape::TextBox { rect: text_box_rect(c.at, &text, 12.0, page_rotation(info, page)), font_size: 12.0 },
                 text,
-            ))
+            );
+            if let Edit::AddAnnotation(annotation) = &mut edit {
+                annotation.style.color = text_color;
+            }
+            Some(edit)
         }
         ComposerKind::Callout { point } => {
             view.comments.tool_done = true;
