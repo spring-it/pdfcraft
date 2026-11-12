@@ -166,7 +166,7 @@ const WATERMARK_PREVIEW_COLUMN_MAX_WIDTH: f32 = 600.0;
 const WATERMARK_COLUMN_GAP: f32 = 20.0;
 
 fn watermark_preview_height(viewport_height: f32) -> f32 {
-    (viewport_height - 230.0).clamp(WATERMARK_PREVIEW_MIN_HEIGHT, WATERMARK_PREVIEW_HEIGHT)
+    (viewport_height * (2.0 / 3.0) - 120.0).clamp(100.0, WATERMARK_PREVIEW_HEIGHT)
 }
 
 /// The live preview is a schematic, not a pixel-exact PDF raster. Widen very narrow/tall
@@ -989,12 +989,12 @@ mod tests {
                 "preview height {preview} must stay within bounds for viewport {viewport_height}"
             );
         }
-        assert_eq!(watermark_preview_height(400.0), WATERMARK_PREVIEW_MIN_HEIGHT);
+        assert!((watermark_preview_height(400.0) - (400.0 * (2.0 / 3.0) - 120.0)).abs() < 0.01);
         assert_eq!(watermark_preview_height(480.0), 250.0);
         assert_eq!(watermark_preview_height(600.0), 370.0);
         assert_eq!(watermark_preview_height(720.0), 490.0);
-        assert_eq!(watermark_preview_height(900.0), WATERMARK_PREVIEW_HEIGHT);
-        assert_eq!(watermark_preview_height(1080.0), WATERMARK_PREVIEW_HEIGHT);
+        assert!((watermark_preview_height(900.0) - 480.0).abs() < 0.01);
+        assert!((watermark_preview_height(1080.0) - 600.0).abs() < 0.01);
     }
 
     #[test]
