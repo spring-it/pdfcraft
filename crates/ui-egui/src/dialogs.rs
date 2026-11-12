@@ -108,7 +108,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
         ctx,
         "dialog",
         dialog != Dialog::Marks(pdfcraft_engine::MarkKind::Watermark),
-        true,
+        dialog != Dialog::About,
         |ui| {
         ui.set_width(dialog_width(dialog, ctx.content_rect().width()));
         match dialog {
