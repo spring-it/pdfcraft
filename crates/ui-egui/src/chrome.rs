@@ -555,7 +555,7 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             ui.menu_button(tl!("Settings"), |ui| {
                 scroll_menu(ui, |ui| {
                     let shortcut = crate::commands::command_shortcut_label(ui.ctx(), "app.preferences");
-                    if ui.button(egui::Button::new(tl!("Preferences…")).shortcut_text(shortcut)).clicked() {
+                    if ui.add(egui::Button::new(tl!("Preferences…")).shortcut_text(shortcut)).clicked() {
                         app.dialog = Some(Dialog::Preferences);
                         ui.close();
                     }
