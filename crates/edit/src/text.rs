@@ -1781,6 +1781,25 @@ fn type3_encode(fallback: &Type3Fallback, text: &str) -> Option<Vec<(String, Vec
     runs.into_iter().map(|(font, bytes)| Some((fallback.names.get(font)?.clone(), bytes))).collect()
 }
 
+/// Build Unicode-safe Type 3 runs for added page text and page marks. The returned width is
+/// measured in em units; the caller applies the requested point size and alignment.
+pub(crate) fn fallback_text_runs(
+    doc: &mut Document,
+    fonts: &mut Dict,
+    text: &str,
+    family: crate::added::Family,
+    bold: bool,
+    prefer_chinese: bool,
+) -> Result<(Vec<(String, Vec<u8>)>, f64), EditError> {
+    let fallback = type3_font(doc, fonts, text, family, bold, MAX_TYPE3_GLYPHS, prefer_chinese)?;
+    let runs = type3_encode(&fallback, text)
+        .ok_or_else(|| no_fallback_font(text))?;
+    let width = text.chars().map(|ch| {
+        fallback.widths.iter().find(|(candidate, _)| *candidate == ch).map_or(0.0, |(_, width)| *width)
+    }).sum();
+    Ok((runs, width))
+}
+
 /// The source font's own TrueType/OpenType program, when the document embeds a complete one whose
 /// licence allows editable embedding. A subset (an `ABCDEF+` name) is left out: a character can keep
 /// its mapping there after the subsetter dropped its outline.
