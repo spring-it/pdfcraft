@@ -552,6 +552,15 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             ui.set_min_width(230.0);
             ui.menu_button(tl!("File"), |ui| scroll_menu(ui, |ui| crate::commands::registry_menu(app, ui, "File")));
             ui.menu_button(tl!("Edit"), |ui| scroll_menu(ui, |ui| crate::commands::registry_menu(app, ui, "Edit")));
+            ui.menu_button(tl!("Settings"), |ui| {
+                scroll_menu(ui, |ui| {
+                    let shortcut = crate::commands::command_shortcut_label(ui.ctx(), "app.preferences");
+                    if ui.button(egui::Button::new(tl!("Preferences…")).shortcut_text(shortcut)).clicked() {
+                        app.dialog = Some(Dialog::Preferences);
+                        ui.close();
+                    }
+                });
+            });
             ui.menu_button(tl!("Pages"), |ui| scroll_menu(ui, |ui| crate::commands::registry_menu(app, ui, "Pages")));
             ui.menu_button(tl!("View"), |ui| {
                 scroll_menu(ui, |ui| {
