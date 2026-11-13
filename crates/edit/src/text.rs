@@ -1790,13 +1790,26 @@ pub(crate) fn fallback_text_runs(
     family: crate::added::Family,
     bold: bool,
     prefer_chinese: bool,
-) -> Result<(Vec<(String, Vec<u8>)>, f64), EditError> {
+) -> Result<(Vec<(String, Vec<u8>, f64)>, f64), EditError> {
     let fallback = type3_font(doc, fonts, text, family, bold, MAX_TYPE3_GLYPHS, prefer_chinese)?;
-    let runs = type3_encode(&fallback, text)
-        .ok_or_else(|| no_fallback_font(text))?;
-    let width = text.chars().map(|ch| {
-        fallback.widths.iter().find(|(candidate, _)| *candidate == ch).map_or(0.0, |(_, width)| *width)
-    }).sum();
+    let mut runs: Vec<(usize, Vec<u8>, f64)> = Vec::new();
+    let mut width = 0.0;
+    for ch in text.chars() {
+        let (font, code) = *fallback.codes.get(&ch).ok_or_else(|| no_fallback_font(text))?;
+        let advance = fallback.widths.iter().find(|(candidate, _)| *candidate == ch).map_or(0.0, |(_, width)| *width);
+        width += advance;
+        match runs.last_mut() {
+            Some((last, bytes, run_width)) if *last == font => {
+                bytes.push(code);
+                *run_width += advance;
+            }
+            _ => runs.push((font, vec![code], advance)),
+        }
+    }
+    let runs = runs.into_iter().map(|(font, bytes, width)| {
+        fallback.names.get(font).cloned().map(|name| (name, bytes, width))
+            .ok_or_else(|| no_fallback_font(text))
+    }).collect::<Result<Vec<_>, _>>()?;
     Ok((runs, width))
 }
 
