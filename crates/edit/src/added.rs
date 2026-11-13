@@ -352,14 +352,11 @@ pub fn first_undrawable(t: &AddedText) -> Option<char> {
         return Some(c);
     }
     if !shaped_by_a_face(t) {
-        // Han/Kana/Hangul use the licensed Type 3 outline fallback. A missing glyph is
-        // reported by the writer before the page is changed.
-        if t.text.chars().any(is_cjk) {
-            return None;
-        }
-        // Drawn line by line in the item's standard font (`\n` splits lines). Without the face
-        // that is also how `draw` redraws an existing item, so it's checked that way.
-        return t.text.split('\n').find_map(pdfcraft_fonts::first_non_win_ansi);
+        // Han/Kana/Hangul use the licensed Type 3 outline fallback. Check every other
+        // character against the standard font so unsupported symbols are still reported.
+        return t.text.split('\n').find_map(|line| {
+            line.chars().find(|c| !is_cjk(*c) && pdfcraft_fonts::first_non_win_ansi(&c.to_string()).is_some())
+        });
     }
     // What `shaped_layout` leaves to the standard font, exactly as `draw_shaped` splits it.
     wrapped(t).into_iter().find_map(|(line, rtl)| {
