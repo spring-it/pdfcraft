@@ -1175,7 +1175,11 @@ pub fn delete_content(doc: &mut Document, page: usize, index: usize) -> Result<(
 fn own_fonts(doc: &Document, obj: ObjRef) -> Vec<Vec<u8>> {
     let Object::Stream(s) = &*doc.get(obj) else { return Vec::new() };
     let Ok(data) = s.decoded() else { return Vec::new() };
-    data.split(u8::is_ascii_whitespace).filter_map(|w| w.strip_prefix(b"/")).filter(|w| w.starts_with(b"PCAr")).map(<[u8]>::to_vec).collect()
+    data.split(u8::is_ascii_whitespace)
+        .filter_map(|w| w.strip_prefix(b"/"))
+        .filter(|w| w.starts_with(b"PCAr") || w.starts_with(b"PCJp") || w.starts_with(b"PCHe"))
+        .map(<[u8]>::to_vec)
+        .collect()
 }
 
 fn drop_fonts(doc: &Document, res: &mut Dict, names: &[Vec<u8>]) {
