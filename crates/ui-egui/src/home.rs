@@ -7,7 +7,7 @@ use pdfcraft_engine::catalog;
 use crate::theme::{self, Tokens};
 use crate::{PdfCraftApp, icons, panels::human_size, widgets};
 
-const RECOMMENDED: [&str; 5] = ["organize", "comment", "form", "edit", "protect"];
+const RECOMMENDED: [&str; 4] = ["organize", "comment", "edit", "protect"];
 
 /// Online companion app, opened through the operating system browser integration.
 pub(crate) const ONLINE_VERSION_URL: &str = "https://wfclaw.aerofugia.com/wfclaw-app/aiapp-app/jfjmp8";
