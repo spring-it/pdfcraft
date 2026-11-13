@@ -718,11 +718,12 @@ pub fn add_header_footer(doc: &mut Document, pages: &[usize], hf: &HeaderFooter,
                 // Headers hang below the top margin; footers sit on the bottom margin.
                 let y = if header { h - top - size * 0.8 - li as f64 * line_h } else { bottom + (lines.len() - 1 - li) as f64 * line_h };
                 if let Some(runs) = runs {
+                    let mut pen = x;
                     for (font, bytes, run_width) in runs {
-                        body.extend(format!("/{font} {} Tf 1 0 0 1 {} {} Tm ", n(size), n(x), n(y)).bytes());
+                        body.extend(format!("/{font} {} Tf 1 0 0 1 {} {} Tm ", n(size), n(pen), n(y)).bytes());
                         body.extend(literal(&bytes));
                         body.extend_from_slice(b" Tj\n");
-                        let _ = run_width;
+                        pen += run_width * size;
                     }
                     body.extend(format!("/PCHelv {} Tf\n", n(size)).bytes());
                 } else {
@@ -742,15 +743,18 @@ pub fn add_header_footer(doc: &mut Document, pages: &[usize], hf: &HeaderFooter,
         content.extend_from_slice(END.as_bytes());
         add_resources(doc, page, None, None)?;
         if !generated_fonts.is_empty() {
-            doc.update_dict(page.obj, |d| {
-                let mut resources = d.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
-                let mut fonts = resources.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
-                for (name, font) in generated_fonts.iter() {
-                    fonts.set(name.clone(), font.clone());
-                }
-                resources.set(b"Font".to_vec(), Object::Dict(fonts));
-                d.set(b"Resources".to_vec(), Object::Dict(resources));
-            })?;
+            let current = doc.get(page.obj);
+            let mut resources = current.as_dict()
+                .and_then(|d| d.get(b"Resources"))
+                .map(|r| doc.resolve(r))
+                .and_then(|r| r.as_dict().cloned())
+                .unwrap_or_default();
+            let mut fonts = resources.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
+            for (name, font) in generated_fonts.iter() {
+                fonts.set(name.clone(), font.clone());
+            }
+            resources.set(b"Font".to_vec(), Object::Dict(fonts));
+            doc.update_dict(page.obj, |d| d.set(b"Resources".to_vec(), Object::Dict(resources)))?;
         }
         let page = &page_list(doc)[i];
         place(doc, page, MarkKind::HeaderFooter, content, false)?;
