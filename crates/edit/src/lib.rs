@@ -49,6 +49,17 @@ impl MarkKind {
 
 pub type Rgb = [f64; 3];
 
+/// Han, Kana and Hangul glyphs use the licensed CJK outline fallback fonts.
+fn is_cjk(c: char) -> bool {
+    matches!(
+        u32::from(c),
+        0x2E80..=0x2FFF | 0x3000..=0x30FF | 0x3100..=0x312F | 0x3130..=0x318F
+            | 0x31A0..=0x31BF | 0x31F0..=0x31FF | 0x3400..=0x4DBF | 0x4E00..=0x9FFF
+            | 0xA960..=0xA97F | 0xAC00..=0xD7FF | 0xF900..=0xFAFF | 0xFE30..=0xFE4F
+            | 0xFF00..=0xFFEF | 0x20000..=0x2FA1F
+    )
+}
+
 /// Header and footer settings (Acrobat's Add Header and Footer dialog).
 #[derive(Clone, Debug, PartialEq)]
 pub struct HeaderFooter {
@@ -81,7 +92,9 @@ impl HeaderFooter {
     /// (and a `\r` that would be drawn is refused too). The dialog asks this too, so its preview
     /// never offers text that applying refuses (#2013).
     pub fn first_undrawable(&self) -> Option<char> {
-        self.text.iter().flat_map(|t| t.lines()).find_map(pdfcraft_fonts::first_non_win_ansi)
+        self.text.iter().flat_map(|t| t.lines()).find_map(|line| {
+            line.chars().find(|c| !is_cjk(*c) && pdfcraft_fonts::first_non_win_ansi(&c.to_string()).is_some())
+        })
     }
 }
 
@@ -678,6 +691,7 @@ pub fn add_header_footer(doc: &mut Document, pages: &[usize], hf: &HeaderFooter,
         let size = hf.font_size;
         let [top, bottom, left, right] = hf.margins;
         let mut body: Vec<u8> = format!("BT\n/PCHelv {} Tf\n{}\n", n(size), rgb(hf.color)).into_bytes();
+        let mut generated_fonts = Dict::new();
         let mut underlines = String::new();
         for (slot, template) in hf.text.iter().enumerate() {
             if template.trim().is_empty() {
@@ -687,7 +701,15 @@ pub fn add_header_footer(doc: &mut Document, pages: &[usize], hf: &HeaderFooter,
             let header = slot < 3;
             let line_h = size * 1.2;
             for (li, line) in lines.iter().enumerate() {
-                let tw = helvetica_width(line, size);
+                let cjk = line.chars().any(is_cjk);
+                let (runs, tw) = if cjk {
+                    let (runs, em_width) = text::fallback_text_runs(
+                        doc, &mut generated_fonts, line, added::Family::Helvetica, false, true
+                    )?;
+                    (Some(runs), em_width * size)
+                } else {
+                    (None, helvetica_width(line, size))
+                };
                 let x = match slot % 3 {
                     0 => left,
                     1 => (w - tw) / 2.0,
@@ -695,7 +717,17 @@ pub fn add_header_footer(doc: &mut Document, pages: &[usize], hf: &HeaderFooter,
                 };
                 // Headers hang below the top margin; footers sit on the bottom margin.
                 let y = if header { h - top - size * 0.8 - li as f64 * line_h } else { bottom + (lines.len() - 1 - li) as f64 * line_h };
-                body.extend(text_op(x, y, line));
+                if let Some(runs) = runs {
+                    for (font, bytes, run_width) in runs {
+                        body.extend(format!("/{font} {} Tf 1 0 0 1 {} {} Tm ", n(size), n(x), n(y)).bytes());
+                        body.extend(literal(&bytes));
+                        body.extend_from_slice(b" Tj\n");
+                        let _ = run_width;
+                    }
+                    body.extend(format!("/PCHelv {} Tf\n", n(size)).bytes());
+                } else {
+                    body.extend(text_op(x, y, line));
+                }
                 if hf.underline {
                     underlines.push_str(&format!("{} {} {} {} re f\n", n(x), n(y - size * 0.15), n(tw), n((size * 0.06).max(0.4))));
                 }
@@ -709,6 +741,17 @@ pub fn add_header_footer(doc: &mut Document, pages: &[usize], hf: &HeaderFooter,
         content.extend(body);
         content.extend_from_slice(END.as_bytes());
         add_resources(doc, page, None, None)?;
+        if !generated_fonts.is_empty() {
+            doc.update_dict(page.obj, |d| {
+                let mut resources = d.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
+                let mut fonts = resources.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
+                for (name, font) in generated_fonts.iter() {
+                    fonts.set(name.clone(), font.clone());
+                }
+                resources.set(b"Font".to_vec(), Object::Dict(fonts));
+                d.set(b"Resources".to_vec(), Object::Dict(resources));
+            })?;
+        }
         let page = &page_list(doc)[i];
         place(doc, page, MarkKind::HeaderFooter, content, false)?;
     }
