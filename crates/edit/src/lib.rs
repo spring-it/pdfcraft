@@ -691,7 +691,14 @@ pub fn add_header_footer(doc: &mut Document, pages: &[usize], hf: &HeaderFooter,
         let size = hf.font_size;
         let [top, bottom, left, right] = hf.margins;
         let mut body: Vec<u8> = format!("BT\n/PCHelv {} Tf\n{}\n", n(size), rgb(hf.color)).into_bytes();
-        let mut generated_fonts = Dict::new();
+        // Reuse every existing page font name when allocating Type 3 resources.
+        let current = doc.get(page.obj);
+        let mut generated_fonts = current.as_dict()
+            .and_then(|d| d.get(b"Resources"))
+            .map(|r| doc.resolve(r))
+            .and_then(|r| r.as_dict().cloned())
+            .and_then(|r| r.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()))
+            .unwrap_or_default();
         let mut underlines = String::new();
         for (slot, template) in hf.text.iter().enumerate() {
             if template.trim().is_empty() {
