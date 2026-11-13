@@ -40,35 +40,124 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             );
             ui.add_space(14.0);
 
-            // Online companion entry in the welcome area (方案二).
+            // Online companion banner, matching the approved design: title, URL, primary action and illustration.
             egui::Frame::NONE
-                .fill(t.card)
-                .stroke(Stroke::new(1.0, t.border))
-                .corner_radius(CornerRadius::same(10))
+                .fill(egui::Color32::from_rgb(235, 244, 255))
+                .stroke(Stroke::new(1.0, egui::Color32::from_rgb(194, 216, 250)))
+                .corner_radius(CornerRadius::same(12))
                 .inner_margin(egui::Margin::symmetric(14, 10))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
+                    let url_width = (ui.available_width() - 760.0).clamp(240.0, 440.0);
                     ui.horizontal(|ui| {
-                        let (icon_rect, _) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::hover());
-                        icons::paint(ui, icon_rect, "globe", 23.0, t.accent_text);
+                        let (globe_rect, _) = ui.allocate_exact_size(vec2(34.0, 38.0), Sense::hover());
+                        icons::paint(ui, globe_rect, "globe", 29.0, egui::Color32::from_rgb(38, 112, 235));
                         ui.add_space(8.0);
-                        ui.vertical(|ui| {
-                            ui.label(egui::RichText::new("在线版沃飞翼览 PDF").font(theme::semibold(14.0)));
-                            ui.label(
-                                egui::RichText::new("无需安装，点击后使用默认浏览器打开")
-                                    .font(theme::regular(12.0))
-                                    .color(t.text_muted),
-                            );
+                        ui.allocate_ui_with_layout(
+                            vec2(220.0, 42.0),
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                ui.vertical(|ui| {
+                                    ui.label(
+                                        egui::RichText::new("在线版沃飞翼览PDF")
+                                            .font(theme::semibold(15.0))
+                                            .color(egui::Color32::from_rgb(24, 58, 112)),
+                                    );
+                                    ui.label(
+                                        egui::RichText::new("点击后使用默认浏览器打开在线版")
+                                            .font(theme::regular(11.5))
+                                            .color(egui::Color32::from_rgb(91, 112, 143)),
+                                    );
+                                });
+                            },
+                        );
+                        ui.add_space(10.0);
+                        ui.painter().vline(
+                            ui.cursor().left(),
+                            ui.max_rect().y_range().shrink(7.0),
+                            Stroke::new(1.0, egui::Color32::from_rgb(190, 211, 241)),
+                        );
+                        ui.add_space(12.0);
+                        ui.allocate_ui_with_layout(
+                            vec2(url_width, 36.0),
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new(ONLINE_VERSION_URL)
+                                            .font(theme::regular(10.5))
+                                            .color(egui::Color32::from_rgb(48, 75, 112)),
+                                    )
+                                    .truncate(),
+                                );
+                            },
+                        );
+                        let open_url = ui
+                            .add(
+                                egui::Button::new(
+                                    egui::RichText::new("打开在线版 ↗")
+                                        .font(theme::semibold(12.5))
+                                        .color(egui::Color32::WHITE),
+                                )
+                                .fill(egui::Color32::from_rgb(42, 116, 239))
+                                .stroke(Stroke::new(1.0, egui::Color32::from_rgb(42, 116, 239)))
+                                .corner_radius(CornerRadius::same(8))
+                                .min_size(vec2(128.0, 36.0)),
+                            )
+                            .on_hover_text("在默认浏览器中打开沃飞翼览 PDF 在线版");
+                        open_url.widget_info(|| {
+                            egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "打开在线版")
                         });
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let button = ui.button(egui::RichText::new("立即访问 ↗").color(t.accent_text));
-                            button.widget_info(|| {
-                                egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "立即访问在线版")
-                            });
-                            if button.clicked() {
-                                ui.ctx().open_url(egui::OpenUrl::new_tab(ONLINE_VERSION_URL));
-                            }
-                        });
+                        if open_url.clicked() {
+                            ui.ctx().open_url(egui::OpenUrl::new_tab(ONLINE_VERSION_URL));
+                        }
+
+                        // Original vector illustration: laptop with a PDF page, drawn with egui.
+                        let (art_rect, _) = ui.allocate_exact_size(vec2(112.0, 66.0), Sense::hover());
+                        let painter = ui.painter();
+                        let screen = Rect::from_min_size(art_rect.min + vec2(25.0, 2.0), vec2(61.0, 47.0));
+                        painter.rect(
+                            screen,
+                            CornerRadius::same(6),
+                            egui::Color32::from_rgb(57, 132, 242),
+                            Stroke::new(1.0, egui::Color32::from_rgb(39, 103, 205)),
+                            egui::StrokeKind::Inside,
+                        );
+                        let page = Rect::from_min_size(screen.min + vec2(12.0, 6.0), vec2(35.0, 35.0));
+                        painter.rect(
+                            page,
+                            CornerRadius::same(3),
+                            egui::Color32::WHITE,
+                            Stroke::new(1.0, egui::Color32::from_rgb(202, 219, 245)),
+                            egui::StrokeKind::Inside,
+                        );
+                        painter.text(
+                            page.center() + vec2(0.0, 1.0),
+                            Align2::CENTER_CENTER,
+                            "PDF",
+                            theme::semibold(10.0),
+                            egui::Color32::from_rgb(220, 65, 65),
+                        );
+                        painter.rect_filled(
+                            Rect::from_min_max(
+                                egui::pos2(screen.left() - 13.0, screen.bottom() + 2.0),
+                                egui::pos2(screen.right() + 13.0, screen.bottom() + 7.0),
+                            ),
+                            CornerRadius::same(3),
+                            egui::Color32::from_rgb(72, 151, 250),
+                        );
+                        painter.circle_filled(
+                            art_rect.right_top() + vec2(-8.0, 14.0),
+                            8.0,
+                            egui::Color32::from_rgb(205, 228, 255),
+                        );
+                        icons::paint(
+                            ui,
+                            Rect::from_center_size(art_rect.right_top() + vec2(-8.0, 14.0), vec2(11.0, 11.0)),
+                            "shield-check",
+                            10.0,
+                            egui::Color32::from_rgb(41, 112, 222),
+                        );
                     });
                 });
             ui.add_space(18.0);
