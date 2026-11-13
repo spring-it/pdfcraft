@@ -25,7 +25,14 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         egui::Frame::NONE.inner_margin(egui::Margin { left: 36, right: 36, top: 28, bottom: 28 }).show(ui, |ui| {
-            ui.label(egui::RichText::new("欢迎使用 沃飞翼览 PDF").font(theme::semibold(24.0)));
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("欢迎使用 沃飞翼览 PDF").font(theme::semibold(24.0)));
+                ui.label(
+                    egui::RichText::new(format!("(v{})", env!("CARGO_PKG_VERSION")))
+                        .font(theme::semibold(17.0))
+                        .color(t.text_muted),
+                );
+            });
             ui.label(
                 egui::RichText::new("沃飞长空内部 PDF 阅读与处理工具 · 本地、安全、高效")
                     .color(t.text_muted)
