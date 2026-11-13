@@ -38,7 +38,41 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     .color(t.text_muted)
                     .font(theme::regular(14.0)),
             );
-            ui.add_space(22.0);
+            ui.add_space(14.0);
+
+            // Online companion entry in the welcome area (方案二).
+            egui::Frame::NONE
+                .fill(t.card)
+                .stroke(Stroke::new(1.0, t.border))
+                .corner_radius(CornerRadius::same(10))
+                .inner_margin(egui::Margin::symmetric(14, 10))
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        let (icon_rect, _) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::hover());
+                        icons::paint(ui, icon_rect, "globe", 23.0, t.accent_text);
+                        ui.add_space(8.0);
+                        ui.vertical(|ui| {
+                            ui.label(egui::RichText::new("在线版沃飞翼览 PDF").font(theme::semibold(14.0)));
+                            ui.label(
+                                egui::RichText::new("无需安装，点击后使用默认浏览器打开")
+                                    .font(theme::regular(12.0))
+                                    .color(t.text_muted),
+                            );
+                        });
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let button = ui
+                                .button(egui::RichText::new("立即访问 ↗").color(t.accent_text));
+                            button.widget_info(|| {
+                                egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "立即访问在线版")
+                            });
+                            if button.clicked() {
+                                ui.ctx().open_url(egui::OpenUrl::new_tab(ONLINE_VERSION_URL));
+                            }
+                        });
+                    });
+                });
+            ui.add_space(18.0);
 
             egui::Frame::NONE
                 .fill(t.card)
@@ -107,53 +141,6 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             Align2::LEFT_CENTER, "立即使用", theme::medium(12.0), t.accent_text);
                         if theme::hand(wm_resp).clicked() {
                             app.run_command("edit.watermark");
-                        }
-                        // Online companion entry, matching the recommended-tool cards.
-                        let (online_rect, online_resp) = ui.allocate_exact_size(vec2(190.0, 104.0), Sense::click());
-                        online_resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "在线版沃飞翼览 PDF"));
-                        let online_press = theme::Press::track(ui, &online_resp);
-                        card_lift(ui, &t, online_rect, online_press);
-                        ui.painter().rect(
-                            online_rect,
-                            CornerRadius::same(10),
-                            online_press.fill(t.card, t.hover, t.pressed),
-                            Stroke::new(1.0, t.divider),
-                            egui::StrokeKind::Inside,
-                        );
-                        let online_body = online_rect.translate(online_press.offset());
-                        icons::paint(
-                            ui,
-                            Rect::from_min_size(online_body.min + vec2(14.0, 14.0), vec2(22.0, 22.0)),
-                            "globe",
-                            21.0,
-                            t.accent_text,
-                        );
-                        ui.painter().text(
-                            online_body.min + vec2(44.0, 25.0),
-                            Align2::LEFT_CENTER,
-                            "在线版沃飞翼览 PDF",
-                            theme::semibold(13.0),
-                            t.text,
-                        );
-                        ui.painter().text(
-                            online_body.min + vec2(14.0, 54.0),
-                            Align2::LEFT_CENTER,
-                            "默认浏览器打开在线版",
-                            theme::regular(11.0),
-                            t.text_muted,
-                        );
-                        ui.painter().text(
-                            online_body.left_bottom() + vec2(14.0, -14.0),
-                            Align2::LEFT_CENTER,
-                            "立即访问  ↗",
-                            theme::medium(12.0),
-                            t.accent_text,
-                        );
-                        if theme::hand(online_resp)
-                            .on_hover_text("在默认浏览器中打开沃飞翼览 PDF 在线版")
-                            .clicked()
-                        {
-                            ui.ctx().open_url(egui::OpenUrl::new_tab(ONLINE_VERSION_URL));
                         }
                         let (rect, resp) = ui.allocate_exact_size(vec2(170.0, 104.0), Sense::click());
                         resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Open file")));
