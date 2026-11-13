@@ -322,6 +322,17 @@ fn is_hebrew(c: char) -> bool {
     matches!(u32::from(c), 0x0591..=0x05F4 | 0xFB1D..=0xFB4F)
 }
 
+/// Han, Kana and Hangul characters drawn from the licensed CJK outline fallback fonts.
+fn is_cjk(c: char) -> bool {
+    matches!(
+        u32::from(c),
+        0x2E80..=0x2FFF | 0x3000..=0x30FF | 0x3100..=0x312F | 0x3130..=0x318F
+            | 0x31A0..=0x31BF | 0x31F0..=0x31FF | 0x3400..=0x4DBF | 0x4E00..=0x9FFF
+            | 0xA960..=0xA97F | 0xAC00..=0xD7FF | 0xF900..=0xFAFF | 0xFE30..=0xFE4F
+            | 0xFF00..=0xFFEF | 0x20000..=0x2FA1F
+    )
+}
+
 /// The first character of `t` that would be drawn as `?`: outside WinAnsiEncoding and not drawn
 /// with the craft-fonts Arabic (#125) or Hebrew (#128) face, or Arabic or Hebrew that the face can't
 /// draw (or that has no face to draw it). Page-content tools refuse such text; the Add-text editor
@@ -341,6 +352,11 @@ pub fn first_undrawable(t: &AddedText) -> Option<char> {
         return Some(c);
     }
     if !shaped_by_a_face(t) {
+        // Han/Kana/Hangul use the licensed Type 3 outline fallback. A missing glyph is
+        // reported by the writer before the page is changed.
+        if t.text.chars().any(is_cjk) {
+            return None;
+        }
         // Drawn line by line in the item's standard font (`\n` splits lines). Without the face
         // that is also how `draw` redraws an existing item, so it's checked that way.
         return t.text.split('\n').find_map(pdfcraft_fonts::first_non_win_ansi);
@@ -772,6 +788,30 @@ fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict, existing:
                 || face_or_new(is_hebrew, pdfcraft_fonts::document_hebrew_font(false).is_some())
             {
                 draw_shaped(doc, t, taken, &mut fonts, &mut out)?;
+                res.set(b"Font".to_vec(), Object::Dict(fonts));
+                out.extend_from_slice(b"Q\n");
+                return Ok((out, res));
+            }
+            if t.text.chars().any(is_cjk) {
+                let r = text_rect(t);
+                let [cr, cg, cb] = t.color.map(|v| v.clamp(0.0, 1.0));
+                out.extend(format!("BT {} {} {} rg\n", n(cr), n(cg), n(cb)).bytes());
+                for (i, line) in lines(t).iter().enumerate() {
+                    let (runs, em_width) = crate::text::fallback_text_runs(doc, &mut fonts, line, t.family, t.bold, true)?;
+                    let width = em_width * t.size;
+                    let x = match t.align {
+                        Align::Left | Align::Justify => r[0],
+                        Align::Center => r[0] + ((r[2] - r[0]) - width) / 2.0,
+                        Align::Right => r[2] - width,
+                    };
+                    let y = r[3] - (i as f64 * 1.2 + 0.95) * t.size;
+                    for (font, bytes) in runs {
+                        out.extend(format!("/{font} {} Tf 1 0 0 1 {} {} Tm ", n(t.size), n(x), n(y)).bytes());
+                        out.extend(literal(&bytes));
+                        out.extend_from_slice(b" Tj\n");
+                    }
+                }
+                out.extend_from_slice(b"ET\n");
                 res.set(b"Font".to_vec(), Object::Dict(fonts));
                 out.extend_from_slice(b"Q\n");
                 return Ok((out, res));
