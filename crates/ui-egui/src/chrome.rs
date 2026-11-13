@@ -518,6 +518,18 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         }
                     });
                     ui.add_space(8.0);
+                    let online = ui
+                        .add(
+                            egui::Button::new(egui::RichText::new("在线版 ↗").color(t.accent_text))
+                                .fill(t.card)
+                                .stroke(Stroke::new(1.0, t.border))
+                                .corner_radius(CornerRadius::same(7)),
+                        )
+                        .on_hover_text("在默认浏览器中打开沃飞翼览 PDF 在线版");
+                    online.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "打开在线版"));
+                    if online.clicked() {
+                        ui.ctx().open_url(egui::OpenUrl::new_tab(crate::home::ONLINE_VERSION_URL));
+                    }
                     if widgets::search_box(ui, tl!("Find tools and commands"), 260.0).clicked() {
                         app.palette_open = true;
                     }
