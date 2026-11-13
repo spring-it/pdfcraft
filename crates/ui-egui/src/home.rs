@@ -168,7 +168,6 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             );
                         });
                     });
-                });
     
                         },
                     );
