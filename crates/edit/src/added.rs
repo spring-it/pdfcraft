@@ -343,6 +343,12 @@ pub fn first_undrawable(t: &AddedText) -> Option<char> {
             return Some(c);
         }
         let rest = AddedText { text: t.text.chars().filter(|c| !is_thai(*c)).collect(), ..t.clone() };
+        // Thai items are rendered through the Thai shaping path, which does not yet
+        // register CJK Type 3 runs. Do not let the general CJK fallback validator
+        // approve a glyph that the Thai renderer would still send to WinAnsi.
+        if let Some(c) = rest.text.chars().find(|c| is_cjk(*c)) {
+            return Some(c);
+        }
         return first_undrawable(&rest);
     }
     // Arabic or Hebrew that nothing can draw: there's no face, or the face lacks it.
