@@ -2877,15 +2877,63 @@ fn header_and_watermark_drawability_matches_what_applying_refuses() {
     }
 }
 
+/// CJK text added as page content and as header/footer uses licensed outline fonts, survives
+/// save/reopen, and retains Unicode mappings for copy/search in external PDF readers.
+#[test]
+fn cjk_added_text_and_header_footer_round_trip() {
+    if pdfcraft_fonts::ui_chinese_fonts().is_empty() {
+        eprintln!("skipping: CJK craft-fonts are optional for local builds");
+        return;
+    }
+    let mut doc = fixture();
+    let text = AddedText {
+        rect: [72.0, 600.0, 360.0, 700.0],
+        text: "测试 PDF 中文混排 123".into(),
+        size: 14.0,
+        ..AddedText::default()
+    };
+    add_content(&mut doc, 0, &Content::Text(text.clone())).unwrap();
+    let hf = HeaderFooter {
+        text: ["页眉 English".into(), String::new(), "第 <<1>> 页".into(), "页脚 中文".into(), String::new(), String::new()],
+        ..HeaderFooter::default()
+    };
+    assert_eq!(hf.first_undrawable(), None);
+    add_header_footer(&mut doc, &[0], &hf, false, &cx()).unwrap();
+    let doc = reopen(&doc);
+    let added = list_added(&doc);
+    let Content::Text(saved) = &added[0].content else { panic!("added text must remain editable") };
+    assert_eq!(saved.text, text.text);
+    let p = &pdfcraft_model::pages(&doc)[0];
+    let resources = doc.resolve(p.dict.get(b"Resources").unwrap());
+    let fonts = doc.resolve(resources.as_dict().unwrap().get(b"Font").unwrap());
+    let fonts = fonts.as_dict().unwrap();
+    let cjk_fonts: Vec<_> = fonts.iter().filter(|(name, _)| name.starts_with(b"PCJp")).collect();
+    assert!(!cjk_fonts.is_empty(), "CJK Type 3 fonts must be installed on the page");
+    let mut maps = String::new();
+    for (_, font) in cjk_fonts {
+        let font = doc.resolve(font).as_dict().unwrap().clone();
+        assert_eq!(font.name(b"Subtype"), Some(&b"Type3"[..]));
+        let cmap = font.get(b"ToUnicode").unwrap();
+        let cmap = doc.resolve(cmap);
+        maps.push_str(&String::from_utf8_lossy(&stream_bytes(&doc, &Object::Ref(cmap.as_ref().unwrap())).unwrap()));
+    }
+    for code in ["6D4B", "8BD5", "4E2D", "6587", "9875", "811A"] {
+        assert!(maps.contains(&format!("<{code}>")), "missing Unicode mapping U+{code}: {maps}");
+    }
+    let marks = streams(&doc, 0).join("\n");
+    assert!(marks.contains("/PCMark /HeaderFooter"));
+    assert!(marks.contains("/PCJp"), "header/footer must use CJK outline fonts: {marks}");
+}
+
 /// #125: page-content tools refuse text the standard fonts can't draw instead of writing `?`,
 /// and leave the document untouched.
 #[test]
 fn page_text_the_standard_fonts_cant_draw_is_refused() {
     let mut doc = fixture();
     let before: Vec<Vec<String>> = (0..3).map(|p| streams(&reopen(&doc), p)).collect();
-    let text = AddedText { rect: [72.0, 600.0, 300.0, 700.0], text: "日本語のテキスト".into(), ..AddedText::default() };
+    let text = AddedText { rect: [72.0, 600.0, 300.0, 700.0], text: "unsupported 😀".into(), ..AddedText::default() };
     let err = add_content(&mut doc, 0, &Content::Text(text)).unwrap_err().to_string();
-    assert!(err.contains("\"日\" (U+65E5)"), "{err}");
+    assert!(err.contains("U+1F600"), "{err}");
     let hf = HeaderFooter {
         text: ["Ελληνικά".into(), String::new(), String::new(), String::new(), String::new(), String::new()],
         ..HeaderFooter::default()
@@ -2900,8 +2948,8 @@ fn page_text_the_standard_fonts_cant_draw_is_refused() {
     add_content(&mut doc, 0, &Content::Text(text.clone())).unwrap();
     // Retyping existing text is refused the same way, and the whole document is left as it was.
     let saved = write_incremental(&doc, &SaveOptions::default()).unwrap();
-    let retyped = AddedText { text: "Café 中".into(), ..text.clone() };
-    assert!(update_content(&mut doc, 0, 0, &Content::Text(retyped)).unwrap_err().to_string().contains("U+4E2D"));
+    let retyped = AddedText { text: "Café Ε".into(), ..text.clone() };
+    assert!(update_content(&mut doc, 0, 0, &Content::Text(retyped)).unwrap_err().to_string().contains("U+0395"));
     assert_eq!(write_incremental(&doc, &SaveOptions::default()).unwrap(), saved, "a refused update changes nothing");
     // A carriage return is checked where it would be drawn: added text splits on LF only, so
     // CRLF would leave a `?`; headers and watermarks split CRLF into lines, but not a lone CR.
