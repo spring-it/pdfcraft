@@ -2913,9 +2913,7 @@ fn cjk_added_text_and_header_footer_round_trip() {
     for (_, font) in cjk_fonts {
         let font = doc.resolve(font).as_dict().unwrap().clone();
         assert_eq!(font.name(b"Subtype"), Some(&b"Type3"[..]));
-        let cmap = font.get(b"ToUnicode").unwrap();
-        let cmap = doc.resolve(cmap);
-        maps.push_str(&String::from_utf8_lossy(&stream_bytes(&doc, &Object::Ref(cmap.as_ref().unwrap())).unwrap()));
+        maps.push_str(&String::from_utf8_lossy(&stream_bytes(&doc, font.get(b"ToUnicode").unwrap()).unwrap()));
     }
     for code in ["6D4B", "8BD5", "4E2D", "6587", "9875", "811A"] {
         assert!(maps.contains(&format!("<{code}>")), "missing Unicode mapping U+{code}: {maps}");
