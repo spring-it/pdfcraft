@@ -25,22 +25,24 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         egui::Frame::NONE.inner_margin(egui::Margin { left: 36, right: 36, top: 28, bottom: 28 }).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("欢迎使用 沃飞翼览 PDF").font(theme::semibold(24.0)));
-                ui.label(
-                    egui::RichText::new(format!("(v{})", env!("CARGO_PKG_VERSION")))
-                        .font(theme::semibold(17.0))
-                        .color(t.text_muted),
-                );
-            });
-            ui.label(
-                egui::RichText::new("沃飞长空内部 PDF 阅读与处理工具 · 本地、安全、高效")
-                    .color(t.text_muted)
-                    .font(theme::regular(14.0)),
-            );
-            ui.add_space(14.0);
-
-            // Online companion banner, matching the approved design: title, URL, primary action and illustration.
+            ui.horizontal_wrapped(|ui| {
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("欢迎使用 沃飞翼览 PDF").font(theme::semibold(24.0)));
+                        ui.label(
+                            egui::RichText::new(format!("(v{})", env!("CARGO_PKG_VERSION")))
+                                .font(theme::semibold(17.0))
+                                .color(t.text_muted),
+                        );
+                    });
+                    ui.label(
+                        egui::RichText::new("沃飞长空内部 PDF 阅读与处理工具 · 本地、安全、高效")
+                            .color(t.text_muted)
+                            .font(theme::regular(14.0)),
+                    );
+                });
+                ui.add_space(18.0);
+            // Online companion banner, moved to the upper-right welcome header area.
             egui::Frame::NONE
                 .fill(egui::Color32::from_rgb(235, 244, 255))
                 .stroke(Stroke::new(1.0, egui::Color32::from_rgb(194, 216, 250)))
@@ -160,6 +162,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         );
                     });
                 });
+            });
             ui.add_space(18.0);
 
             egui::Frame::NONE
