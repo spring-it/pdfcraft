@@ -780,7 +780,9 @@ fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict, existing:
             if t.family != Family::Courier || !t.text.is_ascii() {
                 font.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
             }
-            let mut fonts = Dict::new();
+            // Seed the working font dictionary with the page's existing resources so
+            // generated CJK Type 3 names cannot shadow fonts used by original page content.
+            let mut fonts = taken.clone();
             fonts.set(name.clone().into_bytes(), Object::Dict(font));
             let face_or_new = |has: fn(char) -> bool, face: bool| t.text.chars().any(has) && (face || !existing);
             if t.text.chars().any(is_thai)
