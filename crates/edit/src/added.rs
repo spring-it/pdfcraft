@@ -805,10 +805,12 @@ fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict, existing:
                         Align::Right => r[2] - width,
                     };
                     let y = r[3] - (i as f64 * 1.2 + 0.95) * t.size;
-                    for (font, bytes) in runs {
-                        out.extend(format!("/{font} {} Tf 1 0 0 1 {} {} Tm ", n(t.size), n(x), n(y)).bytes());
+                    let mut pen = x;
+                    for (font, bytes, run_width) in runs {
+                        out.extend(format!("/{font} {} Tf 1 0 0 1 {} {} Tm ", n(t.size), n(pen), n(y)).bytes());
                         out.extend(literal(&bytes));
                         out.extend_from_slice(b" Tj\n");
+                        pen += run_width * t.size;
                     }
                 }
                 out.extend_from_slice(b"ET\n");
