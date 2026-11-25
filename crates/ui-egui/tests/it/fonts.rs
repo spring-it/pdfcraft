@@ -145,8 +145,15 @@ fn telugu_ui_text_uses_craft_fonts() {
     }
 }
 
-/// On a machine with a suitable installed font, the installed definitions end every family
-/// with it and Arabic text has glyphs; the embedded-only definitions never name it.
+/// Only the embedded Hans faces for branded UI strings may follow the general OS fallback.
+fn assert_last_native_fallback(stack: &[String]) {
+    let Some(system) = stack.iter().position(|name| name == theme::SYSTEM_FALLBACK) else { return };
+    let bundled_hans: Vec<String> = pdfcraft_fonts::ui_chinese_fonts().iter().map(|face| face.name()).collect();
+    assert_eq!(&stack[system + 1..], bundled_hans.as_slice(), "{stack:?}");
+}
+
+/// On a machine with a suitable installed font, the installed definitions use it before the
+/// last-resort brand glyphs. Arabic text has glyphs; the embedded-only definitions never name it.
 #[test]
 fn system_fallback_fills_missing_scripts() {
     assert!(!theme::font_definitions().font_data.contains_key(theme::SYSTEM_FALLBACK));
@@ -157,7 +164,7 @@ fn system_fallback_fills_missing_scripts() {
         return;
     }
     for (family, stack) in &defs.families {
-        assert_eq!(stack.last().map(String::as_str), Some(theme::SYSTEM_FALLBACK), "{family:?}: {stack:?}");
+        assert_last_native_fallback(stack);
         assert_eq!(stack.iter().filter(|n| *n == theme::SYSTEM_FALLBACK).count(), 1, "{family:?}");
     }
     let mut fonts = Fonts::new(TextOptions::default(), defs);
@@ -358,12 +365,19 @@ fn traditional_chinese_ui_keeps_an_installed_hant_face_before_japanese() {
     installed_chinese_face_covers(theme::CjkPreference::TraditionalChinese, &catalog("zh-hant"), "Traditional");
 }
 
-/// Other languages keep the installed face last.
+/// Other languages keep the installed face after all general embedded faces, while the
+/// bundled Hans faces can still render Chinese company names.
 #[test]
-fn non_chinese_ui_keeps_the_installed_face_last() {
+fn non_chinese_ui_uses_the_installed_face_before_the_brand_fallback() {
     let defs = theme::installed_font_definitions(theme::CjkPreference::Default);
     for stack in defs.families.values() {
-        assert!(stack.iter().position(|n| n == theme::SYSTEM_FALLBACK).is_none_or(|i| i + 1 == stack.len()), "{stack:?}");
+        assert_last_native_fallback(stack);
+    }
+    if !pdfcraft_fonts::ui_chinese_fonts().is_empty() {
+        let mut fonts = Fonts::new(TextOptions::default(), defs);
+        for id in families() {
+            assert!(fonts.has_glyphs(&id, "沃飞翼览 PDF"), "{id:?}");
+        }
     }
 }
 
