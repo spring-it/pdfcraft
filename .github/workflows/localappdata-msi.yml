@@ -135,6 +135,8 @@ jobs:
         if: matrix.arch == 'x64'
         shell: pwsh
         run: |
+          $env:PDFCRAFT_MODELS = Join-Path $env:RUNNER_TEMP 'pdfcraft-test-models'
+          & .\packaging\windows\prepare-local-ocr-models.ps1 -Models $env:PDFCRAFT_MODELS
           $env:RUST_BACKTRACE = '1'
           cargo test --locked --target ${{ matrix.target }} -p pdfcraft-fonts --all-targets
           if ($LASTEXITCODE -ne 0) { throw 'PDF font asset and metadata regression suite failed' }

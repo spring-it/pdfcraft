@@ -917,7 +917,15 @@ pub(crate) fn show(app: &mut PdfCraftApp, area: Rect, page_left: Option<f32>, ui
                         continue;
                     }
                     let mut selected = bar.tools.iter().any(|id| id == spec.id);
-                    if ui.add(crate::widgets::checkbox(&mut selected, tl!(spec.label))).changed() {
+                    let label = tl!(spec.label);
+                    // Branded translations must remain legible even without an OS CJK font.
+                    // Keep all ordinary tool labels on the normal menu font stack.
+                    let label = if label.contains(crate::menus::APP_NAME) {
+                        egui::RichText::new(label).family(egui::FontFamily::Name("company".into()))
+                    } else {
+                        egui::RichText::new(label)
+                    };
+                    if ui.add(crate::widgets::checkbox(&mut selected, label)).changed() {
                         if selected {
                             bar.tools.push(spec.id.to_owned());
                         } else {
