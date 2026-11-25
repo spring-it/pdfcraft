@@ -1,0 +1,267 @@
+<#
+.SYNOPSIS
+  Build, sign and package PdfCraft for Windows.
+
+.DESCRIPTION
+  Produces, in $env:DIST (default: dist/release):
+    pdfcraft-<version>-windows-<arch>.msi            per-machine installer (WiX v5)
+    pdfcraft-<version>-windows-<arch>-localappdata.msi per-user MSI (with -LocalAppDataMsi)
+    pdfcraft-<version>-windows-<arch>-portable.zip   pdfcraft.exe + pdfcraft-cli.exe + models\ + portable.txt
+
+  The binaries link the C runtime statically (+crt-static), so neither the MSI nor the portable
+  zip needs the Visual C++ redistributable. Signing is delegated to sign.ps1 (skipped with a
+  warning when no signing secrets are set).
+
+  Needs: Rust (MSVC toolchain + the target), curl and the network (the OCR models), the Windows SDK (rc.exe, signtool.exe),
+  and WiX v5: dotnet tool install --global wix --version 5.0.2
+
+.EXAMPLE
+  pwsh packaging/windows/package.ps1 -Arch x64
+  pwsh packaging/windows/package.ps1 -Arch x86 -SkipBuild
+  pwsh packaging/windows/package.ps1 -Arch x64 -LocalAppDataMsi  # per-user, silent-compatible
+  pwsh packaging/windows/package.ps1 -Arch arm64     # cross-compiled; needs the MSVC ARM64 build tools
+#>
+param(
+  [ValidateSet('x64', 'x86', 'arm64')] [string] $Arch = 'x64',
+  [switch] $SkipBuild,
+  [switch] $LocalAppDataMsi
+)
+$ErrorActionPreference = 'Stop'
+$Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+
+function Invoke-Native([string] $What, [scriptblock] $Block) {
+  Write-Output "==> $What"
+  & $Block
+  if ($LASTEXITCODE -ne 0) { throw "$What failed with exit code $LASTEXITCODE" }
+}
+
+# The version lives in one place: [workspace.package] version in the root Cargo.toml.
+$Version = $env:PDFCRAFT_VERSION
+if (-not $Version) {
+  $inPkg = $false
+  foreach ($line in Get-Content (Join-Path $Root 'Cargo.toml')) {
+    if ($line -match '^\s*\[') { $inPkg = ($line.Trim() -eq '[workspace.package]'); continue }
+    if ($inPkg -and $line -match '^\s*version\s*=\s*"([^"]+)"') { $Version = $Matches[1]; break }
+  }
+}
+if (-not $Version) { throw 'could not read [workspace.package] version from Cargo.toml' }
+# MSI ProductVersion is numeric (major.minor.build); pre-release tags are dropped there.
+$MsiVersion = ($Version -split '-')[0]
+
+$Target = switch ($Arch) { 'x64' { 'x86_64-pc-windows-msvc' } 'x86' { 'i686-pc-windows-msvc' } 'arm64' { 'aarch64-pc-windows-msvc' } }
+$Dist = if ($env:DIST) { $env:DIST } else { Join-Path $Root 'dist\release' }
+$TargetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $Root 'target' }
+New-Item -ItemType Directory -Force -Path $Dist | Out-Null
+
+if (-not $env:PDFCRAFT_BUILD_SHA) { $env:PDFCRAFT_BUILD_SHA = (git -C $Root rev-parse HEAD 2>$null) }
+if (-not $env:PDFCRAFT_BUILD_DATE) { $env:PDFCRAFT_BUILD_DATE = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd') }
+
+Write-Output "PdfCraft $Version for Windows $Arch ($Target)"
+
+if (-not $SkipBuild) {
+  # Static CRT: no VC++ redistributable needed. Scoped to the target so host build scripts and
+  # proc-macros are unaffected.
+  $flagVar = 'CARGO_TARGET_' + ($Target.ToUpper() -replace '-', '_') + '_RUSTFLAGS'
+  [Environment]::SetEnvironmentVariable($flagVar, '-C target-feature=+crt-static')
+  # Fail the build (rather than warn) if the icon/VERSIONINFO can't be embedded.
+  $env:PDFCRAFT_REQUIRE_WINRES = '1'
+# Validate the upstream asset attribution manifest before packaging.
+Invoke-Native "Validate bundled asset attribution" { cargo xtask assets --check }
+
+  Invoke-Native "cargo build ($Target)" { cargo build --release --locked -p pdfcraft -p pdfcraft-cli --target $Target }
+}
+
+$Bin = Join-Path $TargetDir "$Target\release"
+
+# Check both binaries' PE headers before packaging. Machine (COFF header) must match -Arch, so an
+# x64 build can never ship labelled arm64 (#61). Subsystem (optional header): 2 = Windows GUI,
+# 3 = console. The app must be GUI (no console window opens with it, #57); the CLI must stay
+# console so its output reaches the terminal.
+function Get-PeHeader([string] $Path) {
+  $bytes = [System.IO.File]::ReadAllBytes($Path)
+  $pe = [BitConverter]::ToInt32($bytes, 0x3C)
+  return @{ Machine = [BitConverter]::ToUInt16($bytes, $pe + 4); Subsystem = [BitConverter]::ToUInt16($bytes, $pe + 0x5C) }
+}
+$Machine = switch ($Arch) { 'x64' { 0x8664 } 'x86' { 0x14C } 'arm64' { 0xAA64 } }
+foreach ($check in @(@('pdfcraft.exe', 2), @('pdfcraft-cli.exe', 3))) {
+  $h = Get-PeHeader (Join-Path $Bin $check[0])
+  if ($h.Machine -ne $Machine) { throw "$($check[0]) is for machine 0x$('{0:X}' -f $h.Machine), expected 0x$('{0:X}' -f $Machine) ($Arch)" }
+  if ($h.Subsystem -ne $check[1]) { throw "$($check[0]) has PE subsystem $($h.Subsystem), expected $($check[1])" }
+  Write-Output "ok $($check[0]): $Arch, PE subsystem $($h.Subsystem)"
+}
+$Stage = Join-Path $TargetDir "windows-package\$Arch"
+Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $Stage | Out-Null
+Copy-Item (Join-Path $Bin 'pdfcraft.exe'), (Join-Path $Bin 'pdfcraft-cli.exe') $Stage
+# Carry the project licences, ChatGPT-generated icon provenance, and separate UI-icon notices
+# beside the binaries in both distributions.
+foreach ($f in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE') {
+  Copy-Item (Join-Path $Root $f) $Stage
+}
+Copy-Item (Join-Path $Root 'assets\app-icon\LICENSE-document.txt') $Stage
+Copy-Item (Join-Path $Root 'assets\app-icon\LICENSE-source.txt') $Stage
+Copy-Item (Join-Path $Root 'assets\icons\LICENSE-lucide.txt') (Join-Path $Stage 'LICENSE-lucide.txt')
+foreach ($f in 'OFL-Inter.txt', 'OFL-JetBrainsMono.txt', 'OFL-DancingScript.txt') {
+  Copy-Item (Join-Path $Root "assets\fonts\$f") $Stage
+}
+if ($env:CRAFT_FONTS_DIR) {
+  $craftRoot = (Resolve-Path $env:CRAFT_FONTS_DIR).Path
+  $craftManifest = Join-Path $craftRoot 'fonts\manifest.txt'
+  if (-not (Test-Path $craftManifest)) { throw "CRAFT_FONTS_DIR is not a craft-fonts checkout: $craftRoot" }
+  $craftAttribution = Join-Path $craftRoot 'ATTRIBUTION.md'
+  if (-not (Test-Path $craftAttribution)) { throw "craft-fonts attribution is missing: $craftAttribution" }
+  Copy-Item $craftAttribution (Join-Path $Stage 'CRAFT-FONTS-ATTRIBUTION.md')
+  $craftFontLicenses = @(
+    [pscustomobject]@{ Source = 'fonts\shippori-mincho\OFL.txt'; Destination = 'OFL-ShipporiMincho.txt' },
+    [pscustomobject]@{ Source = 'fonts\biz-ud-pgothic\OFL.txt'; Destination = 'OFL-BIZ-UDPGothic.txt' },
+    [pscustomobject]@{ Source = 'fonts\biz-ud-mincho\OFL.txt'; Destination = 'OFL-BIZ-UDMincho.txt' },
+    [pscustomobject]@{ Source = 'fonts\lxgw-wenkai-tc\OFL.txt'; Destination = 'OFL-LXGW-WenKai-TC.txt' },
+    [pscustomobject]@{ Source = 'fonts\noto-sans-arabic\OFL.txt'; Destination = 'OFL-NotoSansArabic.txt' },
+    [pscustomobject]@{ Source = 'fonts\noto-sans-thai\OFL.txt'; Destination = 'OFL-NotoSansThai.txt' },
+    [pscustomobject]@{ Source = 'fonts\noto-sans-georgian\OFL.txt'; Destination = 'OFL-NotoSansGeorgian.txt' }
+  )
+  foreach ($fontLicense in $craftFontLicenses) {
+    $licenseSource = Join-Path $craftRoot $fontLicense.Source
+    if (-not (Test-Path $licenseSource)) { throw "craft-fonts license is missing: $licenseSource" }
+    Copy-Item $licenseSource (Join-Path $Stage $fontLicense.Destination)
+  }
+} elseif ($env:CRAFT_FONTS_REQUIRED -eq '1') {
+  throw 'CRAFT_FONTS_REQUIRED=1 but CRAFT_FONTS_DIR is not set; refusing to package a font-incomplete release'
+}
+# Only the per-user MSI ships a portable marker: it keeps settings/logs/recovery under
+# %LOCALAPPDATA%\pdfcraft\PdfCraftData instead of roaming %APPDATA%.
+if ($LocalAppDataMsi) { Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Stage }
+
+& (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'pdfcraft.exe') (Join-Path $Stage 'pdfcraft-cli.exe')
+
+# OCR models (#103): the app looks in models\ beside pdfcraft.exe. `cargo xtask models` fetches every
+# ATTRIBUTION.toml `kind = "model"` file (verified by SHA-256) with its licence and ATTRIBUTION.txt;
+# the MSI and the portable zip take the whole folder, so new models ship without naming them here.
+$Models = Join-Path $Stage 'models'
+New-Item -ItemType Directory -Force -Path $Models | Out-Null
+
+# The S3 model origin can return HTTP 403 in some runner regions. Seed the exact
+# v0.22.0 official model bundle from the public GitHub release, then let xtask
+# verify each manifest SHA-256 and licence before packaging.
+if (-not (Test-Path (Join-Path $Models 'text-detection.onnx'))) {
+  $ModelTemp = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }
+  $ModelArchive = Join-Path $ModelTemp 'pdfcraft-0.22.0-windows-x64-portable.zip'
+  $ModelExtract = Join-Path $ModelTemp 'pdfcraft-0.22.0-model-bundle'
+  if (-not (Test-Path $ModelArchive)) {
+    $ModelUrl = 'https://github.com/storytold/pdfcraft/releases/download/v0.22.0/pdfcraft-0.22.0-windows-x64-portable.zip'
+    Invoke-WebRequest -Uri $ModelUrl -OutFile $ModelArchive -MaximumRedirection 10
+    if (-not (Test-Path $ModelArchive)) { throw 'Could not download the official v0.22.0 model bundle' }
+  }
+  if (-not (Test-Path $ModelExtract)) {
+    Expand-Archive -LiteralPath $ModelArchive -DestinationPath $ModelExtract -Force
+  }
+  $ModelSource = Get-ChildItem -Path $ModelExtract -Directory -Recurse |
+    Where-Object { $_.Name -eq 'models' } | Select-Object -First 1
+  if (-not $ModelSource -or -not (Test-Path (Join-Path $ModelSource.FullName 'text-detection.onnx'))) {
+    throw 'The official v0.22.0 portable archive did not contain its verified models directory'
+  }
+  Copy-Item -Path (Join-Path $ModelSource.FullName '*') -Destination $Models -Recurse -Force
+}
+Push-Location $Root
+try { Invoke-Native 'cargo xtask models' { cargo xtask models $Models } } finally { Pop-Location }
+Remove-Item -Force (Join-Path $Models '*.part') -ErrorAction SilentlyContinue
+if (-not (Test-Path (Join-Path $Models 'ATTRIBUTION.txt')) -or -not (Get-ChildItem (Join-Path $Models '*.LICENCE.txt'))) {
+  throw "no OCR models in $Models after cargo xtask models"
+}
+foreach ($ModelName in @('text-detection.onnx', 'text-recognition.onnx')) {
+  if (-not (Test-Path (Join-Path $Models $ModelName))) {
+    throw "required verified OCR model is missing: $ModelName"
+  }
+}
+
+# ---- MSI ---------------------------------------------------------------------------------------
+$MsiSuffix = if ($LocalAppDataMsi) { '-localappdata' } else { '' }
+$Msi = Join-Path $Dist "pdfcraft-$Version-windows-$Arch$MsiSuffix.msi"
+$WixSources = @()
+if ($LocalAppDataMsi) {
+  # WiX <Files> auto-creates file keypaths, which violate ICE38 for per-user directories.
+  # Harvest all downloaded OCR files into ONE component with an HKCU registry keypath.
+  $LocalModelsWxs = Join-Path $Stage 'local-models.wxs'
+  $ModelFiles = @(Get-ChildItem -LiteralPath $Models -File | Sort-Object Name)
+  if ($ModelFiles.Count -lt 2) { throw "expected at least two OCR model files in $Models" }
+  $ModelLines = @()
+  for ($i = 0; $i -lt $ModelFiles.Count; $i++) {
+    $source = [System.Security.SecurityElement]::Escape($ModelFiles[$i].FullName)
+    $ModelLines += ('        <File Id="LocalModelFile{0}" Source="{1}" />' -f $i, $source)
+  }
+  $ModelsXml = @(
+    '<?xml version="1.0" encoding="utf-8"?>'
+    '<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">'
+    '  <Fragment>'
+    '    <ComponentGroup Id="PdfcraftModels" Directory="ModelsFolder">'
+    '      <Component Id="PdfcraftLocalModels" Guid="C7FC98D9-9BB7-41DA-AC82-9A895E090798">'
+    '        <RegistryValue Root="HKCU" Key="Software\PdfCraft\LocalMsi" Name="Models" Type="integer" Value="1" KeyPath="yes" />'
+    '        <RemoveFolder Id="RemoveLocalModelsFolder" Directory="ModelsFolder" On="uninstall" />'
+  ) + $ModelLines + @(
+    '      </Component>'
+    '    </ComponentGroup>'
+    '  </Fragment>'
+    '</Wix>'
+  )
+  Set-Content -LiteralPath $LocalModelsWxs -Value $ModelsXml -Encoding utf8
+  $WixSources += (Join-Path $PSScriptRoot 'pdfcraft-local.wxs')
+  $WixSources += $LocalModelsWxs
+  $MsiTest = 'test-msi-local.ps1'
+} else {
+  $WixSources += (Join-Path $PSScriptRoot 'pdfcraft.wxs')
+  $WixSources += (Join-Path $PSScriptRoot 'installer-ui.wxs')
+  $MsiTest = 'test-msi.ps1'
+}
+Invoke-Native 'wix build' {
+  wix build @WixSources -arch $Arch `
+    -d "Version=$MsiVersion" -d "BinDir=$Stage" -d "ModelsDir=$Models" -d "IconPath=$(Join-Path $Root 'assets\app-icon\pdfcraft.ico')" `
+    -o $Msi
+}
+# Inspect the built MSI, not just the XML, before signing/publishing it. In a child process, so
+# its Windows Installer database handle is gone before signtool opens the MSI.
+Invoke-Native 'test-msi' { & (Get-Process -Id $PID).Path -NoProfile -File (Join-Path $PSScriptRoot $MsiTest) $Msi }
+# wix writes its debug symbols (.wixpdb) next to the MSI; keep them out of the release assets.
+Remove-Item -Force -ErrorAction SilentlyContinue ([IO.Path]::ChangeExtension($Msi, '.wixpdb'))
+& (Join-Path $PSScriptRoot 'sign.ps1') $Msi
+
+# ---- portable zip ------------------------------------------------------------------------------
+$Portable = Join-Path $TargetDir "windows-package\pdfcraft-$Version-windows-$Arch-portable"
+Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $Portable | Out-Null
+Copy-Item (Join-Path $Stage '*.exe') $Portable
+foreach ($f in 'NOTICE', 'LICENSE-document.txt', 'LICENSE-source.txt', 'LICENSE-lucide.txt', 'OFL-Inter.txt', 'OFL-JetBrainsMono.txt', 'OFL-DancingScript.txt') {
+  Copy-Item (Join-Path $Stage $f) $Portable
+}
+foreach ($f in 'CRAFT-FONTS-ATTRIBUTION.md', 'OFL-ShipporiMincho.txt', 'OFL-BIZ-UDPGothic.txt', 'OFL-BIZ-UDMincho.txt', 'OFL-LXGW-WenKai-TC.txt', 'OFL-NotoSansArabic.txt', 'OFL-NotoSansThai.txt', 'OFL-NotoSansGeorgian.txt') {
+  if (Test-Path (Join-Path $Stage $f)) { Copy-Item (Join-Path $Stage $f) $Portable }
+}
+Copy-Item -Recurse $Models (Join-Path $Portable 'models')
+foreach ($f in 'README.md', 'LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE') {
+  $p = Join-Path $Root $f
+  if (Test-Path $p) { Copy-Item $p $Portable }
+}
+# Builds made with craft-fonts (CRAFT_FONTS_DIR, set for every release) embed its fonts: ship their
+# licences, fonts\<family>\OFL.txt -> OFL-<family>.txt.
+if ($env:CRAFT_FONTS_DIR) {
+  Get-ChildItem -Path (Join-Path $env:CRAFT_FONTS_DIR 'fonts') -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+    $ofl = Join-Path $_.FullName 'OFL.txt'
+    if (Test-Path $ofl) { Copy-Item $ofl (Join-Path $Portable "OFL-$($_.Name).txt") }
+  }
+}
+# portable.txt beside pdfcraft.exe switches on portable mode: settings, logs, recovery files and new
+# digital IDs go to PdfCraftData\ next to the exe instead of %APPDATA% (#157; see
+# crates/ui-egui/src/portable.rs).
+Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Portable
+$Zip = Join-Path $Dist "pdfcraft-$Version-windows-$Arch-portable.zip"
+Remove-Item -Force $Zip -ErrorAction SilentlyContinue
+Compress-Archive -Path $Portable -DestinationPath $Zip
+
+# Smoke-test the CLI when this machine can run it. An ARM64 build made on an x64 runner can't run
+# here; .github/workflows/windows-arm64.yml installs and runs it on ARM64 instead.
+$HostArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+if ($Arch -ne 'arm64' -or $HostArch -eq 'arm64') {
+  Invoke-Native 'pdfcraft-cli --version' { & (Join-Path $Stage 'pdfcraft-cli.exe') --version }
+} else {
+  Write-Output "skipping pdfcraft-cli --version: an $Arch build doesn't run on this $HostArch machine"
+}
+Get-Item $Msi, $Zip | Format-Table Name, Length

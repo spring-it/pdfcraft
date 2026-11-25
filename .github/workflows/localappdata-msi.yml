@@ -1,29 +1,28 @@
-name: Publish v1.0.2 沃飞翼览 PDF (upstream v0.17.0 integration)
+name: Package v1.0.3 沃飞翼览 PDF (upstream v0.22.0 integration)
 
 on:
   push:
     branches:
-      - v1.0.2-develop
-      - upstream-v0.17.0-sync
-    paths-ignore:
-      - Cargo.lock
-      - ATTRIBUTION.md
+      - v1.0.3-develop
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: localappdata-msi-v1.0.2-final
+  group: localappdata-msi-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build-msi:
     name: Windows ${{ matrix.arch }} MSI and silent install
     runs-on: windows-2022
+    timeout-minutes: 120
     env:
       CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
       CRAFT_FONTS_REQUIRED: "1"
+      CRAFT_I18N_DIR: ${{ github.workspace }}/craft-i18n
+      CRAFT_I18N_REQUIRED: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -41,6 +40,21 @@ jobs:
           repository: spring-it/craft-fonts
           ref: fa0303128012276df3de0347a1bcbd588cb3fc8d
           path: craft-fonts
+
+      - name: Read pinned translation catalog revision
+        id: i18n
+        shell: pwsh
+        run: |
+          $rev = (Get-Content -Raw craft-i18n.rev).Trim()
+          if ($rev -notmatch '^[0-9a-f]{40}$') { throw 'Invalid craft-i18n revision' }
+          "ref=$rev" >> $env:GITHUB_OUTPUT
+
+      - name: Checkout pinned translation catalogs
+        uses: actions/checkout@v4
+        with:
+          repository: storytold/craft-i18n
+          ref: ${{ steps.i18n.outputs.ref }}
+          path: craft-i18n
 
       - name: Verify required fallback font assets
         shell: pwsh
@@ -74,27 +88,6 @@ jobs:
           components: rustfmt
           targets: ${{ matrix.target }}
 
-      - name: Format upstream integration sources
-        if: matrix.arch == 'x64' && github.ref == 'refs/heads/upstream-v0.17.0-sync'
-        shell: pwsh
-        run: |
-          cargo fmt --all
-          if ($LASTEXITCODE -ne 0) { throw 'cargo fmt --all failed' }
-          cargo fmt --all -- --check
-          if ($LASTEXITCODE -ne 0) { throw 'cargo fmt verification failed' }
-          git add -u
-          git diff --cached --quiet
-          if ($LASTEXITCODE -ne 0) {
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "style: format upstream v0.17.0 integration"
-            if ($LASTEXITCODE -ne 0) { throw 'rustfmt commit failed' }
-            git push origin "HEAD:$env:GITHUB_REF_NAME"
-            if ($LASTEXITCODE -ne 0) { throw 'rustfmt push failed' }
-          } else {
-            Write-Host 'Rust sources already match rustfmt.'
-          }
-
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
           key: local-msi-${{ matrix.arch }}
@@ -107,42 +100,14 @@ jobs:
           $toolPath = Join-Path $env:USERPROFILE '.dotnet\tools'
           Add-Content -Path $env:GITHUB_PATH -Value $toolPath
 
-      - name: Refresh v1.0.2 workspace lockfile
-        shell: pwsh
-        run: |
-          cargo update --workspace
-          if ($LASTEXITCODE -ne 0) { throw 'Cargo workspace lockfile refresh failed' }
-
-      - name: Regenerate asset attribution from ATTRIBUTION.toml
-        shell: pwsh
-        run: |
-          cargo xtask assets --write
-          if ($LASTEXITCODE -ne 0) { throw 'Asset attribution regeneration failed' }
-
-      - name: Upload resolved v1.0.2 Cargo.lock
-        if: matrix.arch == 'x64'
-        uses: actions/upload-artifact@v4
-        with:
-          name: v1.0.2-cargo-lock
-          path: Cargo.lock
-          if-no-files-found: error
-
-      - name: Commit refreshed v1.0.2 Cargo.lock
+      - name: Verify formatting and asset attribution
         if: matrix.arch == 'x64'
         shell: pwsh
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock ATTRIBUTION.md
-          git diff --cached --quiet
-          if ($LASTEXITCODE -ne 0) {
-            git commit -m "chore: refresh v1.0.2 lockfile and generated asset attribution"
-            if ($LASTEXITCODE -ne 0) { throw 'Cargo.lock commit failed' }
-            git push origin "HEAD:$env:GITHUB_REF_NAME"
-            if ($LASTEXITCODE -ne 0) { throw 'Cargo.lock push failed' }
-          } else {
-            Write-Host 'Cargo.lock already matches the resolved v1.0.2 workspace.'
-          }
+          cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) { throw 'Rust formatting check failed' }
+          cargo xtask assets
+          if ($LASTEXITCODE -ne 0) { throw 'Asset attribution check failed' }
 
       - name: Install NASM for 32-bit native dependencies
         if: matrix.arch == 'x86'
@@ -185,84 +150,17 @@ jobs:
       - name: Build per-user MSI
         shell: pwsh
         run: |
-          & .\packaging\windows\package.ps1 -Arch ${{ matrix.arch }} -LocalAppDataMsi
+          & .\packaging\windows\package-local.ps1 -Arch ${{ matrix.arch }} -LocalAppDataMsi
 
       - name: Verify noninteractive install and uninstall
         shell: pwsh
         run: |
-          $msi = Get-Item "dist/release/pdfcraft-1.0.2-windows-${{ matrix.arch }}-localappdata.msi"
+          $msi = Get-Item "dist/release/pdfcraft-1.0.3-windows-${{ matrix.arch }}-localappdata.msi"
           & .\packaging\windows\test-local-install.ps1 -Path $msi.FullName
 
       - uses: actions/upload-artifact@v4
         with:
           name: local-msi-${{ matrix.arch }}
-          path: dist/release/pdfcraft-1.0.2-windows-${{ matrix.arch }}-localappdata.msi
+          path: dist/release/pdfcraft-1.0.3-windows-${{ matrix.arch }}-localappdata.msi
           if-no-files-found: error
           retention-days: 30
-
-  # Sync-branch pushes run the Windows validation matrix only; publishing is reserved for an explicit release commit on v1.0.2-develop.
-  publish:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/v1.0.2-develop' && contains(github.event.head_commit.message, '[publish v1.0.2]') && !startsWith(github.event.head_commit.message, 'test(watermark):') }}
-    name: Publish two MSI assets to Releases
-    needs: build-msi
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: local-msi-*
-          merge-multiple: true
-          path: dist/msi
-
-      - name: Require x64 and x86 MSI
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s dist/msi/pdfcraft-1.0.2-windows-x64-localappdata.msi
-          test -s dist/msi/pdfcraft-1.0.2-windows-x86-localappdata.msi
-          test "$(find dist/msi -maxdepth 1 -type f -name '*.msi' | wc -l)" -eq 2
-
-      - name: Publish release
-        if: github.ref == 'refs/heads/v1.0.2-develop'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v1.0.2
-        run: |
-          set -euo pipefail
-          cat > release-notes.md <<'EOF'
-          沃飞翼览 PDF 1.0.2 企业定制版，基于上游 PdfCraft v0.17.0（MIT OR Apache-2.0）。
-
-          - Per-user installation path: %LOCALAPPDATA%\pdfcraft
-          - Non-roaming app data: %LOCALAPPDATA%\pdfcraft\PdfCraftData
-          - The MSI includes project, icon, UI icon and font notices: LICENSE-MIT, LICENSE-APACHE, NOTICE, LICENSE-document.txt, LICENSE-source.txt, LICENSE-lucide.txt, OFL-Inter.txt, OFL-JetBrainsMono.txt, OFL-DancingScript.txt, CRAFT-FONTS-ATTRIBUTION.md, OFL-ShipporiMincho.txt, OFL-BIZ-UDPGothic.txt, OFL-BIZ-UDMincho.txt, OFL-LXGW-WenKai-TC.txt, OFL-NotoSansArabic.txt, OFL-NotoSansThai.txt and OFL-NotoSansGeorgian.txt.
-          - Installs a 沃飞翼览 PDF shortcut on the current user's desktop automatically, also with /qn.
-          - Registers the per-user Windows PDF "Open with" entry as 沃飞翼览 PDF, without changing the current default PDF app; the MSI test verifies FriendlyAppName, ProgID, command and executable version information.
-          - Removes that desktop shortcut on silent uninstall (without removing user data).
-          - Enterprise home screen and Windows title renamed to 沃飞翼览 PDF; removed ArtCraft and Discord promotional controls. The About page lists internal customization developer info: 数字发展室, Bing.Zheng1@aerofugia.com.
-          - Improved display of PDFs with non-embedded Simplified Chinese Adobe-GB1 CID fonts (for example STSong-Light): use a matching CJK font already installed on Windows at runtime. System fonts are not bundled or redistributed.
-          - Text editing now tries all bundled, policy-permitted fallback faces per character, including licensed Chinese faces where present, instead of failing on the first Japanese face missing a Han glyph.
-          - Fix false bold styling in PDF text editing: the PDF ForceBold rendering hint no longer selects a bold fallback face, and explicit Regular/Light font names override inconsistent descriptor weights.
-          - Restore Windows Chinese menu glyphs to the pre-0.10.17 sans-serif system font instead of using the embedded WenKai document font.
-          - Use one licensed Chinese Type 3 font at the original point size for edited Han text including Chinese punctuation, without overriding explicitly chosen font resources.
-          - Newly typed Chinese in the inline PDF text editor previews with one licensed face rather than mixing partial source-font subsets with system and document fallbacks.
-          - The supplied proprietary system fonts are not uploaded, shipped or embedded; the release uses the pinned OFL-licensed Chinese WenKai face already available in the fonts repository.
-          - Embed policy-permitted fallback faces from the pinned spring-it/craft-fonts fork in both Windows executables, including LXGW WenKai TC for Simplified/Traditional Chinese text editing, plus Shippori Mincho, BIZ UDPGothic Regular/Bold, BIZ UDMincho, Noto Sans Arabic, Noto Sans Thai and Noto Sans Georgian. Include their attribution and OFL license texts. Noto Sans CJK remains excluded under the repository asset policy.
-          - Enhanced native watermarks: Chinese text via local OS glyph rasterization, transparent PNG, tile/single modes, 9 positions, spacing, color, rotation, opacity, templates, odd/even/custom page ranges. Watermark dialog keeps a viewport-safe 670 pt maximum preview canvas. The 600 pt preview column widens very narrow/tall schematic page mockups to a 0.65 minimum aspect ratio so the page uses more of the available horizontal space; saved PDF page geometry is unchanged. The left 640 pt settings column and defaults remain unchanged. Defaults: 内部资料, 微软雅黑, 15 pt, gray, -45°, 10% opacity, tiled, 80/120 pt gaps, on top, zero offset.
-          - Offline processing: no upload of PDFs or OS fonts.
-          - No installer wizard and no administrator privileges required for a normal current-user install.
-          - Silent install: msiexec /i <downloaded-msi-file> /qn /norestart
-          - Silent uninstall: msiexec /x <downloaded-msi-file> /qn /norestart
-          - Existing per-machine installations are kept separate. No machine-wide registry changes.
-          - These packages are unsigned unless Windows signing is separately configured.
-          EOF
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" --title '沃飞翼览 PDF v1.0.2 - 上游 v0.17.0 功能更新 (x64/x86)' --notes-file release-notes.md
-            gh release upload "$RELEASE_TAG" dist/msi/*.msi --clobber
-          else
-            gh release create "$RELEASE_TAG" dist/msi/*.msi \
-              --target "$GITHUB_SHA" \
-              --title '沃飞翼览 PDF v1.0.2 - 上游 v0.17.0 功能更新 (x64/x86)' \
-              --notes-file release-notes.md
-          fi
