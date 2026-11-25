@@ -1,10 +1,9 @@
 use super::*;
 
-/// Chinese document-editing faces stay out of the embedded base menu stacks on Windows.
-/// Installed Chinese UI stacks prefer the OS CJK face, then use bundled Hans as a last resort.
+/// The embedded UI fallback draws the product name even without a system CJK font.
 #[test]
-fn windows_chinese_menus_keep_legacy_fallback_stack() {
-    let defs = font_definitions_for_platform(true, FontPolicyPlatform::Windows);
+fn windows_embedded_menu_fonts_draw_the_company_name() {
+    let defs = font_definitions_for_platform(false, FontPolicyPlatform::Windows);
     let company = &defs.families[&FontFamily::Name("company".into())];
     let brand = &defs.families[&FontFamily::Name("brand".into())];
     let general = [FontFamily::Proportional, FontFamily::Monospace, FontFamily::Name("medium".into()), FontFamily::Name("semibold".into())];
@@ -16,10 +15,20 @@ fn windows_chinese_menus_keep_legacy_fallback_stack() {
         assert!(company.contains(&name), "company copy must be able to draw {name}");
         assert!(brand.contains(&name), "brand copy must be able to draw {name}");
         for family in &general {
-            assert!(!defs.families[family].contains(&name), "PDF editing face {name} must not enter a generic menu stack");
+            let stack = &defs.families[family];
+            let hans = stack.iter().position(|candidate| candidate == &name).expect("bundled brand fallback");
+            let japanese = stack.iter().position(|candidate| candidate.starts_with("BIZ UDPGothic")).expect("Japanese fallback");
+            assert!(japanese < hans, "ordinary Japanese glyphs keep their original precedence");
         }
     }
     assert_eq!(defs.families[&FontFamily::Proportional][0], "Inter");
+    if !pdfcraft_fonts::ui_chinese_fonts().is_empty() {
+        let mut fonts = Fonts::new(TextOptions::default(), defs);
+        for family in general {
+            let rendered = galley(&mut fonts, family, 14.0, 1.0, crate::menus::APP_NAME);
+            assert!(rendered.size().x > 0.0);
+        }
+    }
     #[cfg(not(target_arch = "wasm32"))]
     assert!(matches!(installed_fallback_need(CjkPreference::SimplifiedChinese), crate::system_fonts::Need::Hans));
 }

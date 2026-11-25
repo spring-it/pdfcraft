@@ -233,9 +233,8 @@ pub const SYSTEM_HANGUL_FALLBACK: &str = "system-hangul-fallback";
 
 /// Which operating-system fallback to request for the interface language.
 ///
-/// The bundled Hans face is not part of the generic base stacks, so Simplified Chinese must still
-/// request a real system Hans face. The bundled face is added after the system face below as a
-/// last resort for glyphs that the OS face does not contain.
+/// Prefer native Simplified or Traditional Chinese faces in Chinese interfaces. The bundled
+/// Hans face remains available for glyphs that the OS face does not contain.
 #[cfg(not(target_arch = "wasm32"))]
 fn installed_fallback_need(cjk: CjkPreference) -> crate::system_fonts::Need {
     use crate::system_fonts::Need;
@@ -252,8 +251,8 @@ fn installed_fallback_need(cjk: CjkPreference) -> crate::system_fonts::Need {
 /// fallbacks on desktop. For Chinese interfaces the OS CJK face is preferred, with the bundled
 /// licensed Hans face retained immediately after it as a last resort for missing glyphs. This
 /// keeps the historical Windows menu appearance while avoiding tofu on machines whose system
-/// font lacks a catalog character. Outside Chinese interfaces the general installed face remains
-/// the last fallback (for example, an Arabic file name in a build without craft-fonts).
+/// font lacks a catalog character. In other locales, the bundled Hans face comes last so that
+/// branded menu labels still work even before a language change has updated the font stack.
 ///
 /// /// Installed Devanagari, Telugu, Sinhala, Tamil, Hebrew and Hangul faces, when there are, end
 /// every family just before that one, so Hindi, Telugu (#1531), Sinhala and Tamil (#1688) and
@@ -282,37 +281,23 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
                 stack.push(name.to_owned());
             }
         }
-        // Prefer the operating system's Chinese sans face for ordinary menus. A bundled
-        // licensed Hans face is a last resort after it, so missing OS glyphs never become tofu.
+        // Place the registered Hans faces after the OS fallback in every locale, including
+        // the handover frame when translated labels can precede the new language's fonts.
         let need = installed_fallback_need(cjk);
         let japanese: Vec<String> = pdfcraft_fonts::ui_japanese_fonts().iter().map(|f| f.name()).collect();
-        if let Some(data) = fallback(need) {
-            fonts.font_data.insert(SYSTEM_FALLBACK.to_owned(), data);
-            for stack in fonts.families.values_mut() {
-                let at = match need {
-                    // `Other` is the catch-all and belongs after every script-specific face.
-                    Need::Other => None,
-                    Need::Hans | Need::Hant => stack.iter().position(|n| japanese.contains(n)),
-                };
-                stack.insert(at.unwrap_or(stack.len()), SYSTEM_FALLBACK.to_owned());
-            }
+        let chinese: Vec<String> = pdfcraft_fonts::ui_chinese_fonts().iter().map(|f| f.name()).collect();
+        let system = fallback(need);
+        if let Some(data) = system.as_ref() {
+            fonts.font_data.insert(SYSTEM_FALLBACK.to_owned(), data.clone());
         }
-        if matches!(cjk, CjkPreference::SimplifiedChinese | CjkPreference::TraditionalChinese) {
-            for face in pdfcraft_fonts::ui_chinese_fonts() {
-                let name = face.name();
-                if !fonts.font_data.contains_key(&name) {
-                    let data = on_interface_baseline(FontData::from_static(face.bytes));
-                    fonts.font_data.insert(name.clone(), Arc::new(data));
-                }
-                for stack in fonts.families.values_mut() {
-                    if stack.contains(&name) {
-                        continue;
-                    }
-                    // The system CJK face stays first; bundled WenKai supplies glyphs it lacks.
-                    let at = stack.iter().position(|n| japanese.contains(n)).unwrap_or(stack.len());
-                    stack.insert(at, name.clone());
-                }
-            }
+        for stack in fonts.families.values_mut() {
+            stack.retain(|name| !chinese.contains(name));
+            let at = match need {
+                Need::Other => stack.len(),
+                Need::Hans | Need::Hant => stack.iter().position(|name| japanese.contains(name)).unwrap_or(stack.len()),
+            };
+            let names = system.is_some().then(|| SYSTEM_FALLBACK.to_owned()).into_iter().chain(chinese.iter().cloned());
+            stack.splice(at..at, names);
         }
     }
     fonts
@@ -327,8 +312,8 @@ pub fn font_definitions() -> FontDefinitions {
 }
 
 /// [`font_definitions`] with the requested CJK preference for embedded CJK faces. Windows
-/// keeps bundled Hans/Hant document faces out of generic menu stacks; [`installed_font_definitions`]
-/// adds the system CJK face first and the bundled Hans face as a last resort for Chinese interfaces.
+/// prefers its system CJK face through [`installed_font_definitions`]; the bundled UI Hans face
+/// stays available in the embedded stacks for branding and translated labels.
 pub fn font_definitions_for(prefer_hans: bool) -> FontDefinitions {
     font_definitions_for_platform(prefer_hans, current_font_policy_platform())
 }
@@ -383,9 +368,8 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
     // Keep missing Latin/Cyrillic letters in the app's own faces (for example Bulgarian ѝ,
     // absent from JetBrains Mono), before egui's defaults or optional system/CJK fallbacks.
     fonts.families.entry(FontFamily::Monospace).or_default().insert(1, "Inter".to_owned());
-    // Generic UI/menu stacks keep the historical installed OS CJK fallback for every UI
-    // locale. Bundled Hans/Hant document-writing faces are registered only in the dedicated
-    // company and brand families below, never as a general menu fallback.
+    // Load the ordinary Japanese fallback order first. Keep the UI Hans faces separate so
+    // they do not take precedence over Japanese or other scripts in the default interface.
     for face in pdfcraft_fonts::ui_cjk_fonts(prefer_hans) {
         if face.covers("Hans") || face.covers("Hant") {
             continue;
@@ -427,25 +411,23 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
         fonts.families.insert(FontFamily::Name(fam.into()), stack);
     }
 
-    // The Chinese company name and its short descriptions are not menu labels. Give only
-    // those strings a dedicated last-resort Han fallback, leaving regular/semibold menus
-    // on the installed OS CJK font exactly as before.
-    let mut company = fallback.clone();
-    let mut brand = fonts.families[&FontFamily::Name("semibold".into())].clone();
+    // Named stacks preserve the original weight of company copy. All stacks need a final
+    // bundled UI Hans fallback: the translated company name can also appear in ordinary
+    // menus and widgets, and the machine may not supply a usable CJK system face.
+    fonts.families.insert(FontFamily::Name("company".into()), fallback);
+    let brand = fonts.families[&FontFamily::Name("semibold".into())].clone();
+    fonts.families.insert(FontFamily::Name("brand".into()), brand);
     for face in pdfcraft_fonts::ui_chinese_fonts() {
         let name = face.name();
         if !fonts.font_data.contains_key(&name) {
             add(&mut fonts, &name, face.bytes);
         }
-        if !company.contains(&name) {
-            company.push(name.clone());
-        }
-        if !brand.contains(&name) {
-            brand.push(name);
+        for stack in fonts.families.values_mut() {
+            if !stack.contains(&name) {
+                stack.push(name.clone());
+            }
         }
     }
-    fonts.families.insert(FontFamily::Name("company".into()), company);
-    fonts.families.insert(FontFamily::Name("brand".into()), brand);
     fonts
 }
 
