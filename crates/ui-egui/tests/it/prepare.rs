@@ -630,11 +630,15 @@ fn appearance_tab_restyles_the_field() {
     let look = h.state().field_props.as_ref().unwrap().look.as_ref().unwrap();
     assert_eq!(look.border, border);
     assert_eq!(look.fill, if before.fill.is_some() { None } else { Some([0.0; 3]) });
+    h.get_by_value(FieldFont::Helvetica.label()).click();
+    h.run_steps(3);
+    h.get_by_label(FieldFont::Courier.label()).click();
+    h.run_steps(3);
+    assert_eq!(h.state().field_props.as_ref().unwrap().standard_font, Some(FieldFont::Courier));
     {
         let d = h.state_mut().field_props.as_mut().unwrap();
         let l = d.look.as_mut().expect("a look");
         l.style = BorderStyle::Dashed;
-        l.font = FieldFont::Courier;
         l.fill = Some([1.0, 1.0, 0.8]);
     }
     h.get_by_label("OK").click();
