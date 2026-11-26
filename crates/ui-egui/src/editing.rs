@@ -176,18 +176,17 @@ impl PdfCraftApp {
         let edit = {
             let mut edit = edit;
             if let Edit::EditTextBlock { page, block, text, style } = &mut edit
-                && crate::i18n::current().code() == "zh-hans"
                 && style.family.is_none()
                 && style.resource.is_none()
                 && style.bold.is_none()
-                && text.chars().any(|ch| matches!(ch, '\u{3400}'..='\u{4dbf}' | '\u{4e00}'..='\u{9fff}'))
+                && text.chars().any(pdfcraft_fonts::cjk_document::is_cjk)
                 && let Some(source) = self.session.get(id).and_then(|doc| doc.text_blocks(*page).get(*block).cloned())
                 && !source.invisible
                 && !source.bold
                 && !source.italic
                 && text.as_str() != source.editor_text
             {
-                style.local_han_font = pdfcraft_engine::text_fonts::preferred_local_han(text, &source.base_font);
+                style.local_han_font = pdfcraft_fonts::cjk_document::local_document_face(text);
             }
             edit
         };
@@ -335,7 +334,7 @@ impl PdfCraftApp {
                     }
                 }
                 let message = if matches!(edit, Edit::MoveObjects { .. }) { crate::object_ui::move_error(&e) } else { e.to_string() };
-                self.notify_fmt("{label} failed: {e}", &[("label", &crate::i18n::edit_label(&label)), ("e", &message)]);
+                self.notify_fmt("{label} failed: {e}", &[("label", &crate::i18n::edit_label(&label)), ("e", crate::i18n::t(&message))]);
                 false
             }
         }

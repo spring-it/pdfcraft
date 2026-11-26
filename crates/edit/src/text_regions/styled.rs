@@ -11,7 +11,7 @@ use super::{
 // A glyph budget worth 64 full batches (15,360 glyphs with the production batch size).
 // Lowering the internal batch size for tests lowers the budget by the same ratio.
 const MAX_STYLED_FALLBACK_BATCHES: usize = 64;
-use super::super::fallback::{allow_chinese_rescue, chinese_font_name, contains_kana, has_simplified_hint, is_han_character};
+use super::super::fallback::{allow_chinese_rescue, chinese_font_name, contains_kana, is_han_character};
 
 fn chinese_text_run(text: &str) -> bool {
     let mut has_han = false;
@@ -193,7 +193,7 @@ impl CharacterPreparation<'_> {
             Some((bytes.as_slice(), family, face))
         });
         let no_kana = !contains_kana(draft);
-        let rescue = no_kana && has_simplified_hint(draft);
+        let rescue = no_kana && pdfcraft_fonts::cjk_document::covers(draft);
         for (range, index) in spans {
             let source = lines.get(index).unwrap_or(first);
             let span = draft.get(range.clone()).unwrap_or_default();
@@ -290,7 +290,11 @@ impl CharacterPreparation<'_> {
                 && !span_text.is_empty()
                 && local.is_none()
                 && (chinese_font_name(&source.base_font)
-                    || rescue && has_simplified_hint(span_text) && allow_chinese_rescue(&source.base_font, span_text))
+                    || rescue
+                        && allow_chinese_rescue(&source.base_font, span_text)
+                        && span_text.chars().any(|ch| {
+                            is_han_character(ch) && !pdfcraft_fonts::ui_japanese_fonts().iter().any(|face| pdfcraft_fonts::face_has(face.bytes, ch))
+                        }))
                 && chinese_text_run(span_text)
                 && span_text.chars().collect::<std::collections::HashSet<_>>().len() <= MAX_TYPE3_GLYPHS
                 && style.resource.is_none()

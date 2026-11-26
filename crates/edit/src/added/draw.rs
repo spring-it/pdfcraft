@@ -69,6 +69,7 @@ pub(super) fn draw_laid_shaped(
             ShapedScript::Arabic => arabic_error(e, &c.text),
             ShapedScript::Hebrew => hebrew_error(e, &c.text),
             ShapedScript::Thai => thai_error(e, &c.text),
+            ShapedScript::Cjk(_) => crate::undrawable(c.text.chars().next().unwrap_or('?')),
             ShapedScript::Latin => EditError::Invalid(pdfcraft_fonts::shaped_text::latin_message(e, &c.text)),
         })?;
     out.extend(format!("BT {}\n", t.fill_op()).bytes());
@@ -134,7 +135,7 @@ pub(super) fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict
             let mut fonts = Dict::new();
             fonts.set(name.clone().into_bytes(), Object::Dict(font));
             let face_or_new = |has: fn(char) -> bool, face: bool| t.text.chars().any(has) && (face || !existing);
-            if t.text.chars().any(is_thai)
+            if t.text.chars().any(|c| is_thai(c) || pdfcraft_fonts::cjk_document::is_cjk(c))
                 || face_or_new(is_arabic, pdfcraft_fonts::document_arabic_font().is_some())
                 || face_or_new(is_hebrew, pdfcraft_fonts::document_hebrew_font(false).is_some())
             {

@@ -28,6 +28,7 @@ pub enum ShapedScript {
     Arabic,
     Hebrew,
     Thai,
+    Cjk(usize),
     /// Latin, Greek and Cyrillic letters in the bundled Inter face
     /// ([`crate::document_latin_fonts`]), which every build has: for the ones WinAnsiEncoding
     /// lacks, beside the standard font that draws the rest.
@@ -40,6 +41,7 @@ impl ShapedScript {
             Self::Arabic => crate::document_arabic_font(),
             Self::Hebrew => crate::document_hebrew_font(false),
             Self::Thai => crate::document_thai_font(),
+            Self::Cjk(_) => None,
             Self::Latin => crate::document_latin_fonts(false).into_iter().next(),
         }
     }
@@ -55,6 +57,7 @@ fn face(script: ShapedScript) -> Option<&'static (FontRef<'static>, ShaperData)>
         ShapedScript::Hebrew => &HEBREW,
         ShapedScript::Thai => &THAI,
         ShapedScript::Latin => &LATIN,
+        ShapedScript::Cjk(_) => return None,
     };
     cache
         .get_or_init(|| {
@@ -132,6 +135,18 @@ fn latin_run(text: &str) -> LatinRun {
 
 fn shape_script(text: &str, rtl: bool, kind: ShapedScript) -> Result<Vec<ShapedCluster>, GlyphError> {
     let (font, data) = face(kind).ok_or(GlyphError::NoFont)?;
+    shape_run(text, rtl, kind, font, data)
+}
+
+/// Choose one installed or bundled face that covers the whole input run. A face index is
+/// part of the shaped glyph key so appearance subsets never mix different local fonts.
+pub fn shape_cjk(text: &str) -> Result<Vec<ShapedCluster>, GlyphError> {
+    let (index, font) = crate::cjk_document::select(text).ok_or(GlyphError::Missing)?;
+    let data = crate::cjk_document::shaper(index, &font).ok_or(GlyphError::NoFont)?;
+    shape_run(text, false, ShapedScript::Cjk(index), &font, data)
+}
+
+fn shape_run(text: &str, rtl: bool, kind: ShapedScript, font: &FontRef<'_>, data: &ShaperData) -> Result<Vec<ShapedCluster>, GlyphError> {
     let shaper = data.shaper(font).build();
     let scale = 1.0 / f64::from(shaper.units_per_em().max(1));
     let mut buffer = UnicodeBuffer::new();
@@ -141,6 +156,7 @@ fn shape_script(text: &str, rtl: bool, kind: ShapedScript) -> Result<Vec<ShapedC
         ShapedScript::Arabic => script::ARABIC,
         ShapedScript::Hebrew => script::HEBREW,
         ShapedScript::Thai => script::THAI,
+        ShapedScript::Cjk(_) => script::HAN,
         ShapedScript::Latin => match latin_run(text) {
             LatinRun::Greek => script::GREEK,
             LatinRun::Cyrillic => script::CYRILLIC,
@@ -150,7 +166,7 @@ fn shape_script(text: &str, rtl: bool, kind: ShapedScript) -> Result<Vec<ShapedC
     // Preserve the historical Arabic per-character mapping; Hebrew, Thai and Latin marks stay with their base.
     buffer.set_cluster_level(match kind {
         ShapedScript::Arabic => BufferClusterLevel::Characters,
-        ShapedScript::Hebrew | ShapedScript::Thai | ShapedScript::Latin => BufferClusterLevel::MonotoneGraphemes,
+        ShapedScript::Hebrew | ShapedScript::Thai | ShapedScript::Latin | ShapedScript::Cjk(_) => BufferClusterLevel::MonotoneGraphemes,
     });
     let shaped = shaper.shape(buffer, ShapeOptions::new());
     // Clusters are byte offsets into `text`; a cluster shows the characters up to the next one.
@@ -190,6 +206,9 @@ pub fn arabic_glyph(id: u32) -> Result<GlyphOutline, GlyphError> {
 
 /// A bounded outline from the same face that produced the shaped glyph id.
 pub fn shaped_glyph(script: ShapedScript, id: u32) -> Result<GlyphOutline, GlyphError> {
+    if let ShapedScript::Cjk(index) = script {
+        return glyph(&crate::cjk_document::face(index).ok_or(GlyphError::NoFont)?, id);
+    }
     let (font, _) = face(script).ok_or(GlyphError::NoFont)?;
     glyph(font, id)
 }

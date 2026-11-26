@@ -159,6 +159,37 @@ fn clicking_elsewhere_with_add_text_keeps_the_typed_text() {
     assert!(h.state().views[0].fill_text.as_ref().is_some_and(|t| t.text.is_empty()), "a new, empty box is open");
 }
 
+#[test]
+fn fill_and_sign_chinese_text_keeps_its_saved_appearance() {
+    if pdfcraft_fonts::ui_chinese_fonts().is_empty() {
+        return;
+    }
+    let text = "萨达：交付數據已更新（第12頁）";
+    let mut h = harness();
+    h.state_mut().execute("sign.fill.text");
+    click(&mut h, 50.0, 250.0);
+    h.event(egui::Event::Text(text.into()));
+    h.run_steps(2);
+    commit_typed_text(&mut h);
+    let id = h.state().views[0].id;
+    let bytes = h.state().session.save_bytes(id).unwrap();
+    let reopened = harness_bytes(&bytes);
+    assert!(items(&reopened).iter().any(|(_, contents)| contents.as_deref() == Some(text)));
+    let doc = pdfcraft_cos::Document::open(bytes).unwrap();
+    let pages = pdfcraft_model::pages(&doc);
+    let annots = doc.resolve(pages[0].dict.get(b"Annots").unwrap());
+    let annotation = doc.dict(&annots.as_array().unwrap()[0]).unwrap();
+    assert!(pdfcraft_fonts::undrawn_mark(&annotation).is_none());
+    let ap = doc.dict(annotation.get(b"AP").unwrap()).unwrap();
+    let normal = doc.resolve(ap.get(b"N").unwrap());
+    let pdfcraft_cos::Object::Stream(stream) = normal.as_ref() else { panic!("missing saved appearance") };
+    let content = stream.decoded().unwrap();
+    assert!(!content.contains(&b'?'));
+    let resources = doc.dict(stream.dict.get(b"Resources").unwrap()).unwrap();
+    let fonts = doc.dict(resources.get(b"Font").unwrap()).unwrap();
+    assert!(fonts.iter().any(|(_, f)| doc.dict(f).is_some_and(|d| d.name(b"Subtype") == Some(b"Type3") && d.contains(b"ToUnicode"))));
+}
+
 /// Escape steps back out of a Fill & Sign tool as out of a comment tool: the first press closes
 /// the open type box, the next one leaves the Text tool for Select, so a click opens no new box.
 #[test]

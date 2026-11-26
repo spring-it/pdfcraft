@@ -39,6 +39,11 @@ pub(super) fn wrapped(t: &AddedText) -> Vec<(String, bool, usize)> {
         // Arabic or Hebrew: laid out with the bidirectional algorithm and shaped.
         let rtl_script = para.chars().any(|c| is_arabic(c) || is_hebrew(c));
         let thai = para.chars().any(is_thai);
+        if let Ok(clusters) = pdfcraft_fonts::shape_cjk(&para.replace('\t', " ")) {
+            let atoms = clusters.into_iter().map(|c| (c.text, c.advance * t.size + t.char_spacing)).collect();
+            out.extend(wrap_words(thai_words(atoms), width).into_iter().map(|line| (line, false, index)));
+            continue;
+        }
         if thai
             && !rtl_script
             && let Ok(lines) = thai_lines(t, para, width)
@@ -207,14 +212,17 @@ pub fn first_undrawable(t: &AddedText) -> Option<char> {
     {
         return Some(c);
     }
-    if !shaped_by_a_face(t) {
+    if !shaped_by_a_face(t) && !t.text.chars().any(pdfcraft_fonts::cjk_document::is_cjk) {
         // Drawn line by line in the item's standard font (`\n` splits lines). Without the face
         // that is also how `draw` redraws an existing item, so it's checked that way.
         return t.text.split('\n').find_map(pdfcraft_fonts::first_non_win_ansi);
     }
     // What `shaped_layout` leaves to the standard font, exactly as `draw_shaped` splits it.
     wrapped(t).into_iter().find_map(|(line, rtl, _)| {
-        let (pieces, _) = shaped_layout(t, &line, rtl).ok()?;
+        let pieces = match shaped_layout(t, &line, rtl) {
+            Ok((pieces, _)) => pieces,
+            Err(_) => return line.chars().find(|c| !pdfcraft_fonts::win_ansi_encodable(*c)),
+        };
         pieces.iter().find_map(|p| match p {
             Piece::Latin(s) => pdfcraft_fonts::first_non_win_ansi(s),
             Piece::Shaped(_) => None,
@@ -262,6 +270,11 @@ pub(super) fn shaped_layout(t: &AddedText, line: &str, rtl: bool) -> Result<(Vec
     if line.is_empty() {
         return Ok((Vec::new(), 0.0));
     }
+    if let Ok(cjk) = pdfcraft_fonts::shape_cjk(&line.replace('\t', " ")) {
+        let pieces = vec![Piece::Shaped(cjk)];
+        let width = pdfcraft_fonts::shaped_text::pieces_width(&pieces, t.size, t.char_spacing, |s, _| latin_width(t, s));
+        return Ok((pieces, width));
+    }
     let base = if rtl { Level::rtl() } else { Level::ltr() };
     let info = ParagraphBidiInfo::new(line, Some(base));
     let (levels, runs) = info.visual_runs(0..line.len());
@@ -276,7 +289,10 @@ pub(super) fn shaped_layout(t: &AddedText, line: &str, rtl: bool) -> Result<(Vec
         let mut segments: Vec<(Option<ShapedScript>, String)> = Vec::new();
         for c in text.chars().filter(|c| !is_bidi_control(*c)) {
             let after_hebrew = segments.last().is_some_and(|(kind, _)| *kind == Some(ShapedScript::Hebrew));
-            let script = if is_thai(c) {
+            let script = if pdfcraft_fonts::cjk_document::is_cjk(c) {
+                // Sentinel for script segmentation only; shape_cjk chooses the actual face.
+                Some(ShapedScript::Cjk(0))
+            } else if is_thai(c) {
                 Some(ShapedScript::Thai)
             } else if is_hebrew(c) || (run_rtl && after_hebrew && !c.is_alphanumeric() && pdfcraft_fonts::hebrew_has(c)) {
                 Some(ShapedScript::Hebrew)
@@ -299,6 +315,9 @@ pub(super) fn shaped_layout(t: &AddedText, line: &str, rtl: bool) -> Result<(Vec
                     ShapedScript::Arabic => shape_arabic(&s, run_rtl).map_err(|e| arabic_error(e, &s))?,
                     ShapedScript::Hebrew => shape_hebrew(&s, run_rtl).map_err(|e| hebrew_error(e, &s))?,
                     ShapedScript::Thai => shape_thai(&s).map_err(|e| thai_error(e, &s))?,
+                    ShapedScript::Cjk(_) => {
+                        pdfcraft_fonts::shape_cjk(&s).map_err(|_| EditError::Invalid("No font covers the entire CJK text".into()))?
+                    }
                     // Not a script this layout splits out; shaped as such all the same.
                     ShapedScript::Latin => {
                         pdfcraft_fonts::shape_latin(&s).map_err(|e| EditError::Invalid(pdfcraft_fonts::shaped_text::latin_message(e, &s)))?

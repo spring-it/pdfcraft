@@ -385,9 +385,9 @@ fn dr_font(doc: &Document, name: &str) -> Option<(Object, FontText)> {
 
 /// A push button's caption, centered in a `width` × `height` box, in the font, size and color its
 /// `/DA` asks for: the font from the form's `/DR`, else Helvetica, and the size `auto` when the
-/// `/DA` leaves it to the viewer (0). Returns the content operators, the font resource (name and
-/// object), and the first character drawn as `?` because the font can't show it.
-pub(crate) fn button_caption(doc: &Document, da: &str, caption: &str, width: f64, height: f64, auto: f64) -> (Vec<u8>, String, Object, Option<char>) {
+/// `/DA` leaves it to the viewer (0). Returns content operators, the used fonts, and any
+/// character the standard-font writer cannot show.
+pub(crate) fn button_caption(doc: &Document, da: &str, caption: &str, width: f64, height: f64, auto: f64) -> (Vec<u8>, Dict, Option<char>) {
     let da = parse_da(da);
     let (name, font, enc) = match dr_font(doc, &da.font).filter(|(_, enc)| enc.can_encode(caption)) {
         Some((o, enc)) => (da.font.clone(), o, enc),
@@ -395,12 +395,35 @@ pub(crate) fn button_caption(doc: &Document, da: &str, caption: &str, width: f64
     };
     let missing = enc.first_unencodable(caption);
     let size = if da.size > 0.0 { da.size } else { auto };
+    let mut fonts = Dict::new();
+    fonts.set(name.as_bytes().to_vec(), font);
+    if missing.is_some() && pdfcraft_fonts::cjk_document::covers(caption) {
+        let (lines, shaped) = shaped_text::appearance_lines(&[caption.to_owned()], &mut fonts);
+        if let Some(pieces) = lines.first().filter(|p| p.iter().any(|p| matches!(p, Piece::Shaped(_)))) {
+            let tw = shaped_text::pieces_width(pieces, size, 0.0, |s, size| enc.width(s, size));
+            let mut out = format!("BT {} ", da.color).into_bytes();
+            let mut current = None;
+            shaped.show_line(
+                &mut out,
+                pieces,
+                (width - tw) / 2.0,
+                (height - size * 0.7) / 2.0,
+                size,
+                &name,
+                |s| enc.encode(s),
+                |s| enc.width(s, size),
+                &mut current,
+            );
+            out.extend_from_slice(b"ET\n");
+            return (out, fonts, None);
+        }
+    }
     let tw = enc.width(caption, size);
     let mut out =
         format!("BT /{name} {size:.2} Tf {} 1 0 0 1 {:.3} {:.3} Tm ", da.color, (width - tw) / 2.0, (height - size * 0.7) / 2.0).into_bytes();
     out.extend(literal(&enc.encode(caption)));
     out.extend_from_slice(b" Tj ET\n");
-    (out, name, font, missing)
+    (out, fonts, missing)
 }
 
 /// A non-embedded Helvetica font dictionary in WinAnsi encoding, the fallback when the form's
@@ -776,6 +799,9 @@ fn draws(doc: &Document, f: &Field, wd: &Dict, text: &str) -> bool {
     if let Some(enc) = dr.as_ref().filter(|enc| enc.can_encode(text)) {
         return enc.first_unencodable(text).is_none();
     }
+    if pdfcraft_fonts::cjk_document::covers(text) {
+        return true;
+    }
     let rest: String = text.chars().filter(|c| !shaped_text::latin_fallback(*c)).collect();
     let enc = dr.filter(|enc| enc.can_encode(&rest)).unwrap_or(FontText::WinAnsi);
     enc.first_unencodable(&rest).is_none()
@@ -785,15 +811,15 @@ fn draws(doc: &Document, f: &Field, wd: &Dict, text: &str) -> bool {
 /// build can't draw (it has no Thai face, or the face lacks a character), which would come out
 /// as `?`. `None` for text it can draw, and for a password field, which shows `*`.
 pub(crate) fn thai_refusal(doc: &Document, f: &Field, text: &str) -> Option<String> {
-    if f.has(flags::PASSWORD) || !text.chars().any(shaped_text::is_thai) {
+    if f.has(flags::PASSWORD) || !text.chars().any(|c| shaped_text::is_thai(c) || pdfcraft_fonts::cjk_document::is_cjk(c)) {
         return None;
     }
     let held = |w: &Widget| {
         let wd = doc.get(w.obj).as_dict().cloned().unwrap_or_default();
         let da = parse_da(wd.get(b"DA").and_then(|o| doc.resolve(o).as_string().map(|s| s.to_text())).as_deref().unwrap_or(&f.da));
-        dr_font(doc, &da.font).is_some_and(|(_, enc)| matches!(enc, FontText::Simple(_)) && text.split(['\n', '\r']).all(|l| enc.can_encode(l)))
+        dr_font(doc, &da.font).is_some_and(|(_, enc)| text.split(['\n', '\r']).all(|l| enc.can_encode(l)))
     };
-    if f.widgets.iter().all(held) { None } else { shaped_text::thai_refusal(text) }
+    if f.widgets.iter().all(held) { None } else { shaped_text::thai_refusal(text).or_else(|| pdfcraft_fonts::cjk_document::refusal(text)) }
 }
 
 /// [`field_appearance_drawn`], and whether the text drawn is cut off by the box.
@@ -1242,9 +1268,9 @@ pub(crate) fn push_button_shown(doc: &Document, f: &Field, w: &Widget) -> Stream
         let da = wd.get(b"DA").and_then(|o| doc.resolve(o).as_string().map(|s| s.to_text()));
         // The automatic size PdfCraft's own buttons use.
         let auto = ((height - 4.0) * 0.6).clamp(4.0, 14.0);
-        let (ops, name, font, _) = button_caption(doc, da.as_deref().unwrap_or(&f.da), &caption, width, height, auto);
+        let (ops, caption_fonts, _) = button_caption(doc, da.as_deref().unwrap_or(&f.da), &caption, width, height, auto);
         content.extend(ops);
-        fonts.set(name.into_bytes(), font);
+        fonts = caption_fonts;
     }
     let mut res = Dict::new();
     res.set(b"Font".to_vec(), Object::Dict(fonts));

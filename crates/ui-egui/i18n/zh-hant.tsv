@@ -4,6 +4,7 @@
 	Accept or reject the OCR review before closing this document	請先接受或拒絕 OCR 審閱結果，再關閉文件
 	Accept or reject the OCR review of the other document before running OCR here	請先接受或拒絕另一份文件的 OCR 審閱結果，再對此文件執行 OCR
 	Add Tools to Hotbar	新增工具到快捷工具列
+	Add {what}	新增{what}
 	Another file dialog is still open. This one will open when it closes.	已有檔案對話方塊開啟，關閉後將顯示此對話方塊。
 	Background removal	去除底色
 	Black and white (binarize)	黑白（二值化）
@@ -68,6 +69,7 @@
 	Navigation rail side	導覽列位置
 	New bookmarks from text styles	按文字樣式生成書籤
 	New bookmarks from text styles…	按文字樣式生成書籤…
+	No available document font covers this Chinese, Japanese or Korean text. Install an embeddable font that supports it.	沒有可用的文件字型能完整顯示這段中日韓文字。請安裝支援這些字元且允許嵌入 PDF 的字型。
 	No printers match.	未找到匹配的印表機。
 	No scanned pages were cleaned up.	未清理任何掃描頁面。
 	Not added: {names}. Combine takes PDFs, images and text files.	未新增：{names}。合併功能支援 PDF、影像和文字檔案。
@@ -85,11 +87,13 @@
 	Paste bookmarks	貼上書籤
 	PdfCraft's checks found no problems for {level}. This is not a validator result.	應用未發現與 {level} 有關的問題。此檢查不能替代正式驗證。
 	PdfCraft's checks now find no problems for {level}. This is not a validator result. Save to keep the changes.	應用現在未發現與 {level} 有關的問題。此檢查不能替代正式驗證，請儲存以保留更改。
+	Place saved {what}	放置已儲存的{what}
 	Re-reading the page…	正在重新辨識頁面…
 	Re-reading the region…	正在重新辨識區域…
 	Reading the drawing for snapping…	正在讀取圖形以啟用自動吸附…
 	Recent files to keep	保留的最近檔案數
 	Remove from hotbar	從快捷工具列移除
+	Remove saved {what}	移除已儲存的{what}
 	Remove scan speckle	去除掃描斑點
 	Remove this leaf tag from reading order and mark its direct content as an artifact	從閱讀順序中移除此末級標籤，並將其直接內容標記為非正文元素
 	Removes isolated dark specks such as dust and scanner noise. The only filter black and white scans take.	去除灰塵或掃描噪聲形成的孤立黑點。這是黑白掃描檔唯一支援的濾鏡。
@@ -133,6 +137,7 @@
 	Use Column Order	按列順序
 	Use Document Structure	按文件結構
 	Use Row Order	按行順序
+	Use {what}	使用{what}
 	Vertical layout	縱向佈局
 	bold	粗體
 	by	×

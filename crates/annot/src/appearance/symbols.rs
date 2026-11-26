@@ -364,6 +364,7 @@ pub(super) fn stamp(label: &str, sign_here: bool, rect: [f64; 4], col: Rgb, by: 
     );
     out.extend(literal(&win_ansi(label)));
     out.extend_from_slice(b" Tj\n");
+    let mut cjk_fonts = Dict::new();
     if let Some(b) = by {
         let mut s = by_h;
         let bw = text_width(b, s);
@@ -371,11 +372,13 @@ pub(super) fn stamp(label: &str, sign_here: bool, rect: [f64; 4], col: Rgb, by: 
             s *= (text_area.1 - text_area.0 - 4.0) / bw;
         }
         let bw = text_width(b, s);
-        out.extend(
-            format!("/Helv {} Tf\n1 0 0 1 {} {} Tm ", n(s), n(text_area.0 + (text_area.1 - text_area.0 - bw) / 2.0), n(y0 + h * 0.18)).bytes(),
-        );
-        out.extend(literal(&win_ansi(b)));
-        out.extend_from_slice(b" Tj\n");
+        let x = text_area.0 + (text_area.1 - text_area.0 - bw) / 2.0;
+        let y = y0 + h * 0.18;
+        if !super::cjk_caption(&mut out, b, s, [x, y], &mut cjk_fonts) {
+            out.extend(format!("/Helv {} Tf\n1 0 0 1 {} {} Tm ", n(s), n(x), n(y)).bytes());
+            out.extend(literal(&win_ansi(b)));
+            out.extend_from_slice(b" Tj\n");
+        }
     }
     out.extend_from_slice(b"ET\n");
     let font = |base: &str| {
@@ -386,7 +389,7 @@ pub(super) fn stamp(label: &str, sign_here: bool, rect: [f64; 4], col: Rgb, by: 
         f.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
         Object::Dict(f)
     };
-    let mut fonts = Dict::new();
+    let mut fonts = cjk_fonts;
     fonts.set(b"HelvB".to_vec(), font("Helvetica-Bold"));
     fonts.set(b"Helv".to_vec(), font("Helvetica"));
     res.set(b"Font".to_vec(), Object::Dict(fonts));

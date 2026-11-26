@@ -426,16 +426,9 @@ pub(crate) fn is_han_character(ch: char) -> bool {
 /// faces or a run containing kana. The Japanese fallback still gets first refusal.
 pub(crate) fn allow_chinese_rescue(name: &str, text: &str) -> bool {
     let name = name.to_ascii_lowercase();
-    !["bizud", "ipag", "shippori", "mincho", "koz", "heisei", "gothic", "japan"].iter().any(|hint| name.contains(hint)) && !contains_kana(text)
-}
-
-/// A conservative set of common Simplified spellings absent from the Japanese document faces.
-/// Arbitrary rare Han is not a language hint: otherwise an unidentified Japanese run that
-/// lacks one glyph would silently get a Chinese outline.
-pub(crate) fn has_simplified_hint(text: &str) -> bool {
-    text.chars().any(|ch| {
-        matches!(ch, '东' | '丝' | '网' | '电' | '这' | '们' | '说' | '欢' | '览' | '药' | '认' | '读' | '语' | '书' | '页' | '门' | '学' | '简')
-    })
+    (name.starts_with("pcjapanese")
+        || !["bizud", "ipag", "shippori", "mincho", "koz", "heisei", "gothic", "japan"].iter().any(|hint| name.contains(hint)))
+        && !contains_kana(text)
 }
 
 pub(crate) fn contains_kana(text: &str) -> bool {
@@ -485,7 +478,7 @@ pub(super) fn type3_font(
     let prefer_chinese = chinese_font_name(source_name);
     let (faces, hebrew) = type3_faces(text, family, bold, prefer_chinese)?;
     let chinese_fallbacks = pdfcraft_fonts::ui_chinese_fonts();
-    let rescued_han = has_simplified_hint(text) && allow_chinese_rescue(source_name, text);
+    let rescued_han = allow_chinese_rescue(source_name, text) && pdfcraft_fonts::cjk_document::covers(text);
     // Each unique character once, in order of first appearance.
     let mut chars = Vec::new();
     let mut seen = std::collections::HashSet::new();

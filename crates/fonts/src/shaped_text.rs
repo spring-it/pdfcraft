@@ -57,6 +57,14 @@ pub fn latin_message(e: GlyphError, text: &str) -> String {
 /// the bundled Inter face; and the text between them, left to the standard font. An error when a
 /// run can't be shaped (no Thai face, a missing character).
 pub fn fallback_pieces(line: &str, thai: bool, latin: bool) -> Result<Vec<Piece>, GlyphError> {
+    // Select one covering face for the whole CJK line, including its Latin letters and
+    // punctuation. This keeps its typography uniform and never emits review-time '?' codes.
+    if line.chars().any(crate::cjk_document::is_cjk) {
+        let line = line.replace('\t', " ");
+        if let Ok(shaped) = crate::shape_cjk(&line) {
+            return Ok(vec![Piece::Shaped(shaped)]);
+        }
+    }
     #[derive(Clone, Copy, PartialEq)]
     enum Run {
         Thai,
@@ -115,7 +123,7 @@ fn is_mark(c: char) -> bool {
 /// measured by `standard`. Text with nothing for the fallback faces, or that they can't shape, is
 /// measured by `standard` as a whole (drawing then reports why).
 pub fn fallback_width(text: &str, size: f64, thai: bool, latin: bool, standard: impl Fn(&str, f64) -> f64) -> f64 {
-    if !text.chars().any(|c| (thai && is_thai(c)) || (latin && latin_fallback(c))) {
+    if !text.chars().any(|c| crate::cjk_document::is_cjk(c) || (thai && is_thai(c)) || (latin && latin_fallback(c))) {
         return standard(text, size);
     }
     match fallback_pieces(text, thai, latin) {
@@ -149,6 +157,9 @@ pub fn thai_pieces(line: &str) -> Result<Vec<Piece>, GlyphError> {
 /// The width of `text` at `size`: its Thai shaped, the rest measured by `latin`. Text the Thai
 /// face can't shape is measured by `latin` as a whole (drawing then reports why).
 pub fn thai_width(text: &str, size: f64, latin: impl Fn(&str, f64) -> f64) -> f64 {
+    if text.chars().any(crate::cjk_document::is_cjk) {
+        return fallback_width(text, size, true, false, latin);
+    }
     if !text.chars().any(is_thai) {
         return latin(text, size);
     }
@@ -340,7 +351,7 @@ pub fn appearance_lines(lines: &[String], fonts: &mut Dict) -> (Vec<Vec<Piece>>,
 /// to the standard font, which writes `?` for what it lacks; the caller reports that.
 pub fn fallback_appearance_lines(lines: &[String], thai: bool, latin: bool, fonts: &mut Dict) -> (Vec<Vec<Piece>>, ShapedFonts) {
     let plain = |l: &String| vec![Piece::Latin(l.clone())];
-    let needs = |c: char| (thai && is_thai(c)) || (latin && latin_fallback(c));
+    let needs = |c: char| crate::cjk_document::is_cjk(c) || (thai && is_thai(c)) || (latin && latin_fallback(c));
     let pieces: Vec<Vec<Piece>> =
         lines.iter().map(|l| if l.chars().any(needs) { fallback_pieces(l, thai, latin).unwrap_or_else(|_| plain(l)) } else { plain(l) }).collect();
     let prefix = if thai { "PCTh" } else { "PCLa" };
@@ -379,6 +390,9 @@ pub fn first_undrawable(s: &str) -> Option<char> {
 
 /// [`first_undrawable`] for one line drawn as it is: a line break in it counts.
 pub fn first_undrawable_in_line(line: &str) -> Option<char> {
+    if crate::cjk_document::covers(line) {
+        return None;
+    }
     let thai_fails = line.chars().any(is_thai) && thai_pieces(line).is_err();
     line.chars().find(|c| if is_thai(*c) { thai_fails } else { !crate::win_ansi_encodable(*c) })
 }
@@ -460,6 +474,7 @@ fn type3_font(clusters: &[&ShapedCluster], outlines: &HashMap<(ShapedScript, u32
                 ShapedScript::Hebrew => "Hebrew",
                 ShapedScript::Thai => "Thai",
                 ShapedScript::Latin => "Inter",
+                ShapedScript::Cjk(_) => "CJK Document Font",
             },
             |f| f.family,
         ),
@@ -591,7 +606,7 @@ mod tests {
     #[test]
     fn letters_the_standard_fonts_lack_are_shaped_with_the_bundled_face() {
         assert!(latin_fallback('Γ') && latin_fallback('ř') && latin_fallback('ж'));
-        assert!(!latin_fallback('é') && !latin_fallback('a') && !latin_fallback('\n') && !latin_fallback('北') && !latin_fallback('ก'));
+        assert!(!latin_fallback('é') && !latin_fallback('a') && !latin_fallback('\n') && !latin_fallback('🦄') && !latin_fallback('ก'));
         // Text WinAnsi holds is one piece for the standard font, measured by it.
         assert_eq!(fallback_pieces("Café (±)", false, true).unwrap(), [Piece::Latin("Café (±)".into())]);
         assert_eq!(fallback_width("Café", 10.0, false, true, |s, size| s.chars().count() as f64 * size), 40.0);
@@ -618,10 +633,10 @@ mod tests {
         assert_eq!(fallback_pieces("Γειά", false, false).unwrap(), [Piece::Latin("Γειά".into())]);
         // The fonts are built under PCLa names, and a character no face here has stays `?`.
         let mut fonts = Dict::new();
-        let (lines, shaped) = fallback_appearance_lines(&["Γειά 北".to_string()], false, true, &mut fonts);
+        let (lines, shaped) = fallback_appearance_lines(&["Γειά 🦄".to_string()], false, true, &mut fonts);
         assert!(fonts.iter().any(|(k, _)| k.starts_with(b"PCLa")));
-        assert!(matches!(&lines[0][..], [Piece::Shaped(c), Piece::Latin(rest)] if shaped.code(&c[0]).is_some() && rest == " 北"), "{lines:?}");
-        assert_eq!(first_undrawable_in_line(" 北"), Some('北'));
+        assert!(matches!(&lines[0][..], [Piece::Shaped(c), Piece::Latin(rest)] if shaped.code(&c[0]).is_some() && rest == " 🦄"), "{lines:?}");
+        assert_eq!(first_undrawable_in_line(" 🦄"), Some('🦄'));
     }
 
     #[test]

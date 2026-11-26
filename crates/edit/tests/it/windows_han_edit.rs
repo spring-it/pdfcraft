@@ -38,7 +38,7 @@ fn reopen(doc: &Document) -> Document {
 /// saved output to check that the glyphs are real document text, not just present in the editor.
 #[test]
 fn unidentified_subset_can_save_the_reported_simplified_chinese_glyphs() {
-    let replacement = "丁水岸东方艾丝袜姐";
+    let replacement = "萨达，這頁的數據已更新。";
     if pdfcraft_fonts::ui_chinese_fonts().is_empty() {
         return;
     }
@@ -91,4 +91,71 @@ fn desktop_approved_font_supplies_missing_han_without_replacing_source_letters()
     assert_eq!(lines.iter().map(|line| line.text.as_str()).collect::<String>(), replacement);
     assert_eq!(lines[0].base_font, "Helvetica");
     assert!(lines.iter().any(|line| line.font.starts_with("PCFull")), "the licensed desktop face should be used, not the bundled Type 3 fallback");
+}
+
+const EDITABLE_CN: &str = "萨达：沃飞翼览 PDF 數據已更新（第12頁）";
+
+#[test]
+fn new_page_text_and_header_round_trip_as_unicode() {
+    if pdfcraft_fonts::ui_chinese_fonts().is_empty() {
+        return;
+    }
+    let mut doc = styled_text_page("Helvetica");
+    let text = pdfcraft_edit::AddedText { rect: [30.0, 100.0, 560.0, 145.0], text: EDITABLE_CN.into(), ..Default::default() };
+    pdfcraft_edit::add_content(&mut doc, 0, &pdfcraft_edit::Content::Text(text)).unwrap();
+    let mut header = pdfcraft_edit::HeaderFooter::default();
+    header.text[0] = "核准：薩達，第 <<1>> 頁".into();
+    pdfcraft_edit::add_header_footer(&mut doc, &[0], &header, false, &pdfcraft_edit::Context { date: (2026, 11, 26) }).unwrap();
+    let saved = reopen(&doc);
+    let lines = text::text_lines(&saved, 0).unwrap();
+    let all = lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join("\n");
+    assert!(all.contains(EDITABLE_CN), "{all:?}");
+    assert!(all.contains("核准：薩達，第 1 頁"), "{all:?}");
+    assert!(!all.contains('?'));
+}
+
+#[test]
+fn typewriter_and_text_box_write_real_unicode_appearances() {
+    use pdfcraft_annot::{Meta, NewAnnotation, Shape, Style, add_annotation, set_contents};
+    use pdfcraft_cos::Object;
+    if pdfcraft_fonts::ui_chinese_fonts().is_empty() {
+        return;
+    }
+    let mut doc = styled_text_page("Helvetica");
+    for shape in [
+        Shape::Typewriter { rect: [30.0, 80.0, 560.0, 124.0], font_size: 12.0 },
+        Shape::TextBox { rect: [30.0, 140.0, 560.0, 190.0], font_size: 12.0 },
+    ] {
+        let style = Style::default_for(&shape);
+        let meta = Meta::default();
+        let index =
+            add_annotation(&mut doc, &NewAnnotation { page: 0, shape, style, contents: "待更新".into(), author: String::new() }, &meta).unwrap();
+        set_contents(&mut doc, 0, index, EDITABLE_CN, &meta).unwrap();
+    }
+    let saved = reopen(&doc);
+    let p = &pdfcraft_model::pages(&saved)[0].dict;
+    let annotations = saved.resolve(p.get(b"Annots").unwrap());
+    for annotation in annotations.as_array().unwrap() {
+        let d = saved.dict(annotation).unwrap();
+        assert_eq!(d.get(b"Contents").and_then(Object::as_string).unwrap().to_text(), EDITABLE_CN);
+        assert!(pdfcraft_fonts::undrawn_mark(&d).is_none());
+        let ap = saved.dict(d.get(b"AP").unwrap()).unwrap();
+        let normal = saved.resolve(ap.get(b"N").unwrap());
+        let Object::Stream(normal) = &*normal else {
+            panic!("saved annotation must contain an appearance stream");
+        };
+        let operators = normal.decoded().unwrap();
+        assert!(!operators.contains(&b'?'));
+        let res = saved.dict(normal.dict.get(b"Resources").unwrap()).unwrap();
+        let fonts = saved.dict(res.get(b"Font").unwrap()).unwrap();
+        let subset = fonts.iter().find_map(|(_, font)| saved.dict(font).filter(|font| font.name(b"Subtype") == Some(b"Type3"))).unwrap();
+        let cmap = saved.resolve(subset.get(b"ToUnicode").unwrap());
+        let Object::Stream(cmap) = &*cmap else {
+            panic!("the subset must map the original text");
+        };
+        let map = String::from_utf8(cmap.decoded().unwrap()).unwrap();
+        for ch in EDITABLE_CN.chars().filter(|c| !c.is_ascii()) {
+            assert!(map.contains(&format!("<{:04X}>", u32::from(ch))), "{ch}: {map}");
+        }
+    }
 }

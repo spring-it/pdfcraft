@@ -45,6 +45,9 @@ fn company_home_omits_the_upstream_community_card() {
 fn home_restores_company_intro_version_and_online_browser_link() {
     let mut h = harness(|_| {});
     h.get_by_label("欢迎使用");
+    let welcome = h.get_by_label("欢迎使用").rect();
+    let online = h.get_by_label("在线版沃飞翼览 PDF").rect();
+    assert!(online.min.x > welcome.max.x && online.min.y - welcome.min.y < 24.0, "wide layout places the online card beside the welcome title");
     h.get_by_label(&format!("(v{})", pdfcraft_engine::build_info::version()));
     h.get_by_label("沃飞长空内部 PDF 阅读与处理工具 · 本地、安全、高效");
     h.get_by_label("沃飞翼览 PDF 支持本地离线处理，默认不上传文档，不需要账号。");

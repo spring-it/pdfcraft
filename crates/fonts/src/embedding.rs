@@ -33,9 +33,12 @@ pub fn covers(bytes: &[u8], text: &str) -> bool {
 
 /// Names come from the program, never a caller's guessed family.
 pub fn names(bytes: &[u8]) -> Result<(String, String), String> {
-    use skrifa::string::StringId;
     validate(bytes)?;
-    let f = FontRef::new(bytes).map_err(|e| e.to_string())?;
+    face_names(&FontRef::new(bytes).map_err(|e| e.to_string())?)
+}
+
+fn face_names(f: &FontRef<'_>) -> Result<(String, String), String> {
+    use skrifa::string::StringId;
     let name = |id| {
         f.localized_strings(id)
             .find(|s| s.language() == Some("en"))
@@ -51,19 +54,26 @@ pub fn names(bytes: &[u8]) -> Result<(String, String), String> {
 /// A selected external font is document input. Require its own open-licence declaration;
 /// never turn a proprietary system-interface fallback into an exported PDF font.
 pub fn validate_document_input(bytes: &[u8]) -> Result<(), String> {
+    validate(bytes)?;
+    validate_document_face(&FontRef::new(bytes).map_err(|e| e.to_string())?)
+}
+
+/// Validate a particular face of a collection before extracting its outlines. This does
+/// not permit copying a TTC into a PDF; it applies the same licence and face checks.
+pub(crate) fn validate_document_face(f: &FontRef<'_>) -> Result<(), String> {
     use skrifa::string::StringId;
-    let (family, _) = names(bytes)?;
+    validate_face(f)?;
+    let (family, _) = face_names(f)?;
     let key = face_key(&family);
     if ["sourcehan", "sourceserif", "sourcesans", "notosanscjk", "notoserifcjk"].iter().any(|n| key.starts_with(n)) {
         return Err("this font family is excluded by the project's asset policy".into());
     }
-    let f = FontRef::new(bytes).map_err(|e| e.to_string())?;
     // An Adobe scan that could not finish fails closed, like a match.
-    if any_name_record(&f, &[StringId::COPYRIGHT_NOTICE, StringId::MANUFACTURER], |t| t.to_ascii_lowercase().contains("adobe")) != Some(false) {
+    if any_name_record(f, &[StringId::COPYRIGHT_NOTICE, StringId::MANUFACTURER], |t| t.to_ascii_lowercase().contains("adobe")) != Some(false) {
         return Err("Adobe-authored font assets are excluded by the project's asset policy".into());
     }
     let licences = ["SIL OPEN FONT", "SIL Open Font", "Apache License", "Ubuntu Font Licence", "Bitstream Vera", "MIT License"];
-    if any_name_record(&f, &[StringId::LICENSE_DESCRIPTION], |t| licences.iter().any(|l| t.contains(l))) != Some(true) {
+    if any_name_record(f, &[StringId::LICENSE_DESCRIPTION], |t| licences.iter().any(|l| t.contains(l))) != Some(true) {
         return Err("select an openly licensed font whose name table declares its licence (OFL, Apache, Ubuntu, Bitstream Vera or MIT)".into());
     }
     Ok(())
@@ -98,6 +108,10 @@ pub fn validate(bytes: &[u8]) -> Result<(), String> {
         return Err("the selected font exceeds 16 MiB".into());
     }
     let font = FontRef::new(bytes).map_err(|_| "select a standalone TrueType/OpenType font (not a font collection)")?;
+    validate_face(&font)
+}
+
+fn validate_face(font: &FontRef<'_>) -> Result<(), String> {
     if font.fvar().is_ok() {
         return Err("select a static instance of this variable font before embedding".into());
     }

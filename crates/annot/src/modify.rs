@@ -31,7 +31,7 @@ pub(crate) fn refuse_foreign_text(doc: &Document, d: &Dict) -> Result<(), AnnotE
 /// Thai typed into a text box (`free_text`) that this build can't draw (it has no Thai face): refused
 /// with what to do, rather than drawn as `?`.
 pub(crate) fn refuse_undrawable_thai(free_text: bool, text: &str) -> Result<(), AnnotError> {
-    match free_text.then(|| pdfcraft_fonts::shaped_text::thai_refusal(text)).flatten() {
+    match free_text.then(|| pdfcraft_fonts::shaped_text::thai_refusal(text).or_else(|| pdfcraft_fonts::cjk_document::refusal(text))).flatten() {
         Some(why) => Err(AnnotError::Undrawable(why)),
         None => Ok(()),
     }

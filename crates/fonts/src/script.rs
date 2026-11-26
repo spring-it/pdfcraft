@@ -207,6 +207,9 @@ pub(crate) fn bounded_outline(font: &FontRef, gid: GlyphId, width: f64) -> Resul
 /// signatures nor its Inter fallback has a glyph for: [`script_outline`] would leave it out.
 /// `None` when they can draw all of them.
 pub fn script_missing(text: &str) -> Option<char> {
+    if crate::cjk_document::covers(text) {
+        return None;
+    }
     let font = FontRef::new(FONT).ok()?;
     let charmap = font.charmap();
     let fallback = FontRef::new(INTER_REGULAR).ok();
@@ -221,6 +224,28 @@ pub fn script_missing(text: &str) -> Option<char> {
 pub fn script_outline(text: &str) -> ScriptOutline {
     if text.chars().take(MAX_SIGNATURE_CHARS + 1).count() > MAX_SIGNATURE_CHARS {
         return ScriptOutline::default();
+    }
+    if text.chars().any(crate::cjk_document::is_cjk) {
+        if let Ok(clusters) = crate::shape_cjk(text) {
+            let mut outline = ScriptOutline::default();
+            let mut points = 0usize;
+            for cluster in clusters {
+                for (id, [dx, dy]) in cluster.glyphs {
+                    let Ok(g) = crate::shaped_glyph(cluster.script, id) else { return ScriptOutline::default() };
+                    for contour in g.contours {
+                        points = points.saturating_add(contour.len());
+                        if points > 262_144 {
+                            return ScriptOutline::default();
+                        }
+                        outline.contours.push(contour.into_iter().map(|[x, y]| [x + outline.width + dx, y + dy]).collect());
+                    }
+                    outline.ascent = outline.ascent.max(g.bbox[3] + dy);
+                    outline.descent = outline.descent.min(g.bbox[1] + dy);
+                }
+                outline.width += cluster.advance;
+            }
+            return outline;
+        }
     }
     let Ok(font) = FontRef::new(FONT) else { return ScriptOutline::default() };
     let loc = LocationRef::default();
@@ -312,10 +337,10 @@ mod tests {
     fn missing_script_glyphs_are_named() {
         assert_eq!(super::script_missing("Ada Lovelace-King"), None);
         assert_eq!(super::script_missing("Zoë Ñúñez"), None);
-        assert_eq!(super::script_missing("Ada 张三"), Some('张'));
+        assert_eq!(super::script_missing("Ada 🦄"), Some('🦄'));
         // Cyrillic and Greek come from the Inter fallback (#963), so they aren't missing.
         assert_eq!(super::script_missing("Саша Дермановић Νίκος"), None);
-        assert_eq!(super::script_missing("Саша 张"), Some('张'));
+        assert_eq!(super::script_missing("Саша 🦄"), Some('🦄'));
         assert_eq!(super::script_missing(" \t"), None);
     }
 

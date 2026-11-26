@@ -367,8 +367,9 @@ fn redraw_widgets_of(doc: &mut Document, f: &Field, only: Option<usize>) -> Resu
                 appearance::check_box_states(doc, w, f.kind, &on, &f.da)
             }
             FieldKind::PushButton => {
-                let (s, m) = button_appearance(doc, w, &f.da);
+                let (mut s, m) = button_appearance(doc, w, &f.da);
                 missing = m;
+                pdfcraft_fonts::shaped_text::store_streams(doc, &mut s.dict);
                 let r = doc.add(Object::Stream(s));
                 let mut d = Dict::new();
                 d.set(b"N".to_vec(), Object::Ref(r));
@@ -463,9 +464,9 @@ pub(crate) fn button_appearance(doc: &Document, w: &Widget, field_da: &str) -> (
     if !icon_only && !caption.is_empty() {
         let da = wobj.as_dict().and_then(|d| d.get(b"DA")).and_then(|o| doc.resolve(o).as_string().map(|s| s.to_text()));
         let auto = ((height - 4.0) * 0.6).clamp(4.0, 14.0);
-        let (ops, name, font, m) = appearance::button_caption(doc, da.as_deref().unwrap_or(field_da), &caption, width, height, auto);
+        let (ops, caption_fonts, m) = appearance::button_caption(doc, da.as_deref().unwrap_or(field_da), &caption, width, height, auto);
         content.extend(ops);
-        fonts.set(name.into_bytes(), font);
+        fonts = caption_fonts;
         missing = m;
     }
     let mut res = Dict::new();

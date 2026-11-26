@@ -561,7 +561,21 @@ pub fn undrawable_text(d: &Dict) -> Option<(&'static str, char)> {
         b"Redact" => ("the redaction's overlay text", text(b"OverlayText")?),
         _ => return None,
     };
-    Some((what, first_undrawable(&text)?))
+    let missing = if d.name(b"Subtype") == Some(b"Redact") { first_undrawable(&text) } else { shaped_text::first_undrawable(&text) };
+    Some((what, missing?))
+}
+
+/// Put one caption into the existing text object. CJK uses a portable outline appearance;
+/// the caller's existing positioning and font code stays unchanged for other scripts.
+fn cjk_caption(out: &mut Vec<u8>, text: &str, size: f64, at: [f64; 2], fonts: &mut Dict) -> bool {
+    if !pdfcraft_fonts::cjk_document::covers(text) {
+        return false;
+    }
+    let (lines, shaped) = shaped_text::appearance_lines(&[text.to_owned()], fonts);
+    let Some(pieces) = lines.first().filter(|p| p.iter().any(|p| matches!(p, shaped_text::Piece::Shaped(_)))) else { return false };
+    let mut current = None;
+    shaped.show_line(out, pieces, at[0], at[1], size, "Helv", win_ansi, |s| pdfcraft_fonts::Std14::Helvetica.text_width(s, size), &mut current);
+    true
 }
 
 /// `/Font` resources naming `/Helv`: standard Helvetica with WinAnsiEncoding.
@@ -905,11 +919,15 @@ fn finish_appearance(context: &AppearanceContext<'_>, mut drawing: AppearanceDra
             let x = (context.rect[0] + context.rect[2] - text_width(&value, size)) * 0.5;
             let y = context.rect[3] - 12.0;
             let col = context.stroke.unwrap_or([0.0, 0.47, 0.84]);
-            out.extend(format!("{}BT /Helv {} Tf {} {} Td ", rg(col), n(size), n(x), n(y)).bytes());
-            // WinAnsi bytes (e.g. 0xB2 for "²") go into the stream as-is, not through UTF-8.
-            out.extend(literal(&win_ansi(&value)));
-            out.extend_from_slice(b" Tj ET\n");
-            drawing.resources.set(b"Font".to_vec(), helvetica_resource());
+            let mut fonts = font_resources(pdfcraft_fonts::Std14::Helvetica);
+            out.extend(format!("{}BT ", rg(col)).bytes());
+            if !cjk_caption(&mut out, &value, size, [x, y], &mut fonts) {
+                out.extend(format!("/Helv {} Tf {} {} Td ", n(size), n(x), n(y)).bytes());
+                out.extend(literal(&win_ansi(&value)));
+                out.extend_from_slice(b" Tj ");
+            }
+            out.extend_from_slice(b"ET\n");
+            drawing.resources.set(b"Font".to_vec(), Object::Dict(fonts));
         }
     }
     Some(form(context.rect, &out, drawing.resources))
@@ -1102,14 +1120,23 @@ fn draw_line(context: &AppearanceContext<'_>, drawing: &mut AppearanceDrawing) -
         }
     }
     if let Some((text, m)) = layout.caption {
-        // The caption is black, in the standard font the measurement label uses.
-        tail.extend(
-            format!("q 0 g BT /Helv {} Tf {} {} {} {} {} {} Tm ", n(CAPTION_SIZE), n(m[0]), n(m[1]), n(m[2]), n(m[3]), n(m[4]), n(m[5])).bytes(),
-        );
-        // WinAnsi bytes go into the stream as-is, not through UTF-8.
-        tail.extend(literal(&win_ansi(&text)));
-        tail.extend_from_slice(b" Tj ET Q\n");
-        res.set(b"Font".to_vec(), helvetica_resource());
+        // The caption is black. Keep the rotated line's transform when shaping CJK text.
+        let mut fonts = font_resources(pdfcraft_fonts::Std14::Helvetica);
+        if pdfcraft_fonts::cjk_document::covers(&text) {
+            let mut shaped_tail = format!("q 0 g {} {} {} {} {} {} cm BT ", n(m[0]), n(m[1]), n(m[2]), n(m[3]), n(m[4]), n(m[5])).into_bytes();
+            if cjk_caption(&mut shaped_tail, &text, CAPTION_SIZE, [0.0, 0.0], &mut fonts) {
+                shaped_tail.extend_from_slice(b"ET Q\n");
+                tail.extend(shaped_tail);
+            }
+        }
+        if fonts.len() == 1 {
+            tail.extend(
+                format!("q 0 g BT /Helv {} Tf {} {} {} {} {} {} Tm ", n(CAPTION_SIZE), n(m[0]), n(m[1]), n(m[2]), n(m[3]), n(m[4]), n(m[5])).bytes(),
+            );
+            tail.extend(literal(&win_ansi(&text)));
+            tail.extend_from_slice(b" Tj ET Q\n");
+        }
+        res.set(b"Font".to_vec(), Object::Dict(fonts));
     }
     Some(())
 }
@@ -1312,16 +1339,15 @@ fn draw_stamp(context: &AppearanceContext<'_>, mut drawing: AppearanceDrawing) -
             }
             let tw = text_width(l, size);
             let ty = y0 + (band - size * 0.72) / 2.0;
-            content.extend(format!("BT\n0.2 0.2 0.2 rg\n/Helv {} Tf\n1 0 0 1 {} {} Tm ", n(size), n(x0 + (w - tw) / 2.0), n(ty)).bytes());
-            content.extend(literal(&win_ansi(l)));
-            content.extend_from_slice(b" Tj\nET\n");
-            let mut f = Dict::new();
-            f.set(b"Type".to_vec(), Object::name("Font"));
-            f.set(b"Subtype".to_vec(), Object::name("Type1"));
-            f.set(b"BaseFont".to_vec(), Object::name("Helvetica"));
-            f.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
-            let mut fonts = Dict::new();
-            fonts.set(b"Helv".to_vec(), Object::Dict(f));
+            let x = x0 + (w - tw) / 2.0;
+            content.extend(b"BT\n0.2 0.2 0.2 rg\n");
+            let mut fonts = font_resources(pdfcraft_fonts::Std14::Helvetica);
+            if !cjk_caption(&mut content, l, size, [x, ty], &mut fonts) {
+                content.extend(format!("/Helv {} Tf\n1 0 0 1 {} {} Tm ", n(size), n(x), n(ty)).bytes());
+                content.extend(literal(&win_ansi(l)));
+                content.extend_from_slice(b" Tj\n");
+            }
+            content.extend_from_slice(b"ET\n");
             res.set(b"Font".to_vec(), Object::Dict(fonts));
         }
         let mut xo = Dict::new();

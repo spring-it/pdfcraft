@@ -71,42 +71,54 @@ fn tool_card(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static c
     }
 }
 
+fn welcome(ui: &mut egui::Ui, t: &Tokens) {
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        ui.label(egui::RichText::new("欢迎使用").font(theme::brand(24.0)));
+        ui.label(egui::RichText::new("沃飞翼览 PDF").font(theme::brand(24.0)));
+        ui.label(egui::RichText::new(format!("(v{})", pdfcraft_engine::build_info::version())).font(theme::semibold(17.0)).color(t.text_muted));
+    });
+    ui.label(egui::RichText::new("沃飞长空内部 PDF 阅读与处理工具 · 本地、安全、高效").color(t.text_muted).font(theme::company(14.0)));
+}
+
+fn online_card(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
+    egui::Frame::NONE
+        .fill(t.card)
+        .stroke(Stroke::new(1.0, t.border))
+        .corner_radius(CornerRadius::same(10))
+        .inner_margin(egui::Margin::symmetric(14, 10))
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                let (icon_rect, _) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::hover());
+                icons::paint(ui, icon_rect, "globe", 23.0, t.accent_text);
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new("在线版沃飞翼览 PDF").font(theme::brand(14.0)));
+                    ui.label(egui::RichText::new("无需安装，点击后使用默认浏览器打开").font(theme::company(12.0)).color(t.text_muted));
+                });
+                let button = ui.button(egui::RichText::new("立即访问 ↗").font(theme::company(13.0)).color(t.accent_text));
+                button.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "立即访问在线版"));
+                if button.clicked() {
+                    app.run_command("help.online");
+                }
+            });
+        });
+}
+
 /// Draw the Home page with the welcome text, community card and recent documents.
 pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         egui::Frame::NONE.inner_margin(egui::Margin { left: 36, right: 36, top: 28, bottom: 28 }).show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing.x = 6.0;
-                ui.label(egui::RichText::new("欢迎使用").font(theme::brand(24.0)));
-                ui.label(egui::RichText::new("沃飞翼览 PDF").font(theme::brand(24.0)));
-                ui.label(
-                    egui::RichText::new(format!("(v{})", pdfcraft_engine::build_info::version())).font(theme::semibold(17.0)).color(t.text_muted),
-                );
-            });
-            ui.label(egui::RichText::new("沃飞长空内部 PDF 阅读与处理工具 · 本地、安全、高效").color(t.text_muted).font(theme::company(14.0)));
-            ui.add_space(14.0);
-            egui::Frame::NONE
-                .fill(t.card)
-                .stroke(Stroke::new(1.0, t.border))
-                .corner_radius(CornerRadius::same(10))
-                .inner_margin(egui::Margin::symmetric(14, 10))
-                .show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.horizontal_wrapped(|ui| {
-                        let (icon_rect, _) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::hover());
-                        icons::paint(ui, icon_rect, "globe", 23.0, t.accent_text);
-                        ui.vertical(|ui| {
-                            ui.label(egui::RichText::new("在线版沃飞翼览 PDF").font(theme::brand(14.0)));
-                            ui.label(egui::RichText::new("无需安装，点击后使用默认浏览器打开").font(theme::company(12.0)).color(t.text_muted));
-                        });
-                        let button = ui.button(egui::RichText::new("立即访问 ↗").font(theme::company(13.0)).color(t.accent_text));
-                        button.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "立即访问在线版"));
-                        if button.clicked() {
-                            app.run_command("help.online");
-                        }
-                    });
+            if ui.available_width() >= 850.0 {
+                ui.columns(2, |columns| {
+                    welcome(&mut columns[0], &t);
+                    online_card(app, &mut columns[1], &t);
                 });
+            } else {
+                welcome(ui, &t);
+                ui.add_space(10.0);
+                online_card(app, ui, &t);
+            }
             ui.add_space(22.0);
 
             egui::Frame::NONE
