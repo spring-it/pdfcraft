@@ -153,13 +153,35 @@ fn individual_and_bulk_installed_fonts_survive_save_and_undo() {
     h.get_by_label("Shared Field Properties");
     h.get_by_label("Appearance").click();
     h.run_steps(4);
+    h.get_by_label("Font:").scroll_to_me();
+    h.run_steps(16);
+    h.get_by_label("Font:").click();
+    h.run_steps(4);
     let bulk = h.state_mut().bulk_field_props.as_mut().unwrap();
-    bulk.font.apply = true;
+    assert!(bulk.font.apply, "the Font checkbox enables the bulk change");
     bulk.installed_font = Some((postscript.clone(), program));
+    // The selected face is wider than “Mixed”; settle the modal after changing its draft so
+    // the OK click uses current coordinates, as it does after a real dropdown action.
+    h.run_steps(4);
+    let staged = h.state().bulk_field_props.as_ref().unwrap().edits(doc(&h)).unwrap();
+    assert!(staged.len() == 2 && staged.iter().all(|edit| matches!(edit, Edit::SetFieldProps { props, .. } if props.installed_font.is_some())));
     h.get_by_label("OK").click();
     h.run_steps(4);
+    assert!(
+        h.state().dialog.is_none(),
+        "bulk OK must apply and close the dialog: {:?}",
+        h.state().bulk_field_props.as_ref().and_then(|draft| draft.error.as_deref())
+    );
     for name in ["alpha", "beta"] {
         assert_eq!(doc(&h).field_font_name(name).as_deref(), Some(postscript.as_str()));
+    }
+    h.state_mut().execute("edit.undo");
+    h.run_steps(4);
+    assert_eq!(doc(&h).field_look("alpha").unwrap().font, FieldFont::Courier);
+    assert_eq!(doc(&h).field_look("beta").unwrap().font, FieldFont::Times);
+    h.state_mut().execute("edit.redo");
+    h.run_steps(4);
+    for name in ["alpha", "beta"] {
         assert!(h.state_mut().apply_edit(Edit::SetFieldValue { name: name.into(), value: FieldValue::Text(phrase.into()) }));
     }
     let mut s = Session::new();
