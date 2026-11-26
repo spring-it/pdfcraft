@@ -1742,11 +1742,12 @@ mod company_watermark_tests {
         long.text = "M".repeat(50);
         long.font_size = 60.0;
         let ctx = egui::Context::default();
-        let _ = ctx.run_ui(egui::RawInput { max_texture_side: Some(1024), ..Default::default() }, |ui| {
+        let mut output = ctx.run_ui(egui::RawInput { max_texture_side: Some(1024), ..Default::default() }, |ui| {
             let preview = installed_watermark_preview(ui, draft.watermark_font.as_ref().unwrap(), &long).unwrap();
             assert!(preview.texture.size()[0] <= 1024, "wide preview must fit the backend");
             assert!(preview.points.x * crate::watermark_text::DPI as f32 > 1024.0, "preview retains the actual page-space size");
         });
+        output.textures_delta.clear();
         draft.wm.text = "机密文件".into();
         assert!(edit(&draft, MarkKind::Watermark, 1).unwrap_err().contains("水印字体缺少字符"), "explicit fonts never silently swap faces");
     }
@@ -1759,8 +1760,8 @@ mod company_watermark_tests {
         let directory = tempfile::tempdir().unwrap();
         std::fs::write(directory.path().join("ChineseFace.ttc"), watermark_fixture_collection(&[inter, cjk.bytes])).unwrap();
         let catalog = pdfcraft_engine::text_fonts::discover_desktop(&[directory.path().to_owned()]);
-        let face = catalog.into_iter().find(|face| face.names.family.contains("WenKai")).expect("Chinese TTC member");
-        let installed = crate::watermark_text::InstalledFont::from_picker(face, "zh-hans").unwrap();
+        let face = catalog.iter().find(|face| face.names.face_index == 1).unwrap_or_else(|| panic!("Chinese TTC member missing from {catalog:?}"));
+        let installed = crate::watermark_text::InstalledFont::from_picker(face.clone(), "zh-hans").unwrap();
         assert!(installed.label.contains("文楷"), "read the actual Chinese name from the name table: {:?}", installed.label);
         let mut draft = MarksDraft::default();
         draft.watermark_font = Some(installed);
