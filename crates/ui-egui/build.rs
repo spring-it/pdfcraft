@@ -66,25 +66,14 @@ fn craft_i18n() -> String {
     for (code, shared, app) in entries {
         // `{:?}` escapes the path (Windows backslashes) as a Rust string literal.
         let shared = shared.map_or_else(|| "\"\"".to_string(), |p| format!("include_str!({p:?})"));
-        let app_catalog = if code == "zh-hans" {
-            // Preserve upstream lookup keys and replace only the displayed translations.
-            println!("cargo::rerun-if-changed={}", app.display());
+        let supplement = match code.as_str() {
+            "zh-hans" => Some(include_str!("i18n/zh-hans.tsv")),
+            "zh-hant" => Some(include_str!("i18n/zh-hant.tsv")),
+            _ => None,
+        };
+        let app_catalog = if let Some(supplement) = supplement {
             match std::fs::read_to_string(&app) {
-                Ok(text) => {
-                    let branded = text
-                        .lines()
-                        .map(|line| {
-                            match line.split_once('\t').and_then(|(context, rest)| rest.split_once('\t').map(|(key, value)| (context, key, value))) {
-                                Some((context, key, value)) if !context.starts_with('#') => {
-                                    format!("{context}\t{key}\t{}", value.replace("PdfCraft", "沃飞翼览 PDF"))
-                                }
-                                _ => line.to_owned(),
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n");
-                    format!("{branded:?}")
-                }
+                Ok(text) => format!("{:?}", company_chinese_catalog(&text, supplement, &code)),
                 Err(e) => {
                     println!("cargo::error=reading {}: {e}", app.display());
                     format!("include_str!({app:?})")
@@ -97,6 +86,34 @@ fn craft_i18n() -> String {
     }
     o.push_str("];\n");
     o
+}
+
+/// Merge the enterprise additions with the pinned catalog. Upstream localized rows win
+/// over gap fillers, so a future upstream catalog update needs no duplicate-row cleanup.
+fn company_chinese_catalog(upstream: &str, supplement: &str, code: &str) -> String {
+    let mut rows = std::collections::BTreeMap::new();
+    for line in upstream.lines().chain(supplement.lines()) {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut cols = line.splitn(3, '\t');
+        let (Some(context), Some(source), Some(translation)) = (cols.next(), cols.next(), cols.next()) else {
+            println!("cargo::error=invalid {code} localization row: {line}");
+            continue;
+        };
+        // Brand only the translation, never its lookup key. Leave credits/product names that
+        // are already reworded by the catalogs untouched.
+        let entry = rows.entry((context, source)).or_insert(translation);
+        if *entry == source {
+            *entry = translation;
+        }
+    }
+    let mut out = String::new();
+    for ((context, source), translation) in rows {
+        let value = translation.replace("PdfCraft", "沃飞翼览 PDF");
+        let _ = writeln!(out, "{context}\t{source}\t{value}");
+    }
+    out
 }
 
 /// One embedded locale: its code, its `common.tsv` if it has one, and its PdfCraft catalog.

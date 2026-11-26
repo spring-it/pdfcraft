@@ -80,6 +80,23 @@ fn help_commands_open_each_link() {
     }
 }
 
+#[test]
+fn chinese_preferences_render_localized_controls_in_both_scripts() {
+    if !pdfcraft_ui_egui::i18n::catalogs_embedded() {
+        return;
+    }
+    for (code, search, general) in [("zh-hans", "搜索设置…", "常规与界面"), ("zh-hant", "搜尋設定…", "一般與介面")] {
+        let h = harness(move |app| {
+            app.set_option("language", code).unwrap();
+            assert!(app.execute("app.preferences"));
+        });
+        h.get_by_label(search);
+        h.get_by_label(general);
+        assert!(h.query_by_label("Search settings…").is_none());
+        assert!(h.query_by_label("General & Interface").is_none());
+    }
+}
+
 /// Runs frames until the node labelled `label` exists and has stopped moving, then returns it.
 ///
 /// The About dialog is a modal centred on its own size, and switching tabs changes that size, so

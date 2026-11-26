@@ -185,6 +185,34 @@ fn windows_display_language_resolves_chinese_scripts() {
     assert_eq!(first_supported("no-NO\r\nen-US\r\n"), Lang::from_code("nb"));
 }
 
+/// Auto follows Windows display language even when a launcher exported an English locale.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn windows_auto_prefers_display_language_to_launcher_environment() {
+    needs_catalogs!();
+    let english_env = |name: &str| (name == "LANG").then(|| "en_US.UTF-8".to_owned());
+    assert_eq!(windows_auto_lang(Some("zh-CN\r\nen-US"), english_env), Lang::from_code("zh-hans").unwrap());
+    assert_eq!(windows_auto_lang(Some("zh-TW\r\nen-US"), english_env), Lang::from_code("zh-hant").unwrap());
+    assert_eq!(windows_auto_lang(Some("unrecognized-XX"), english_env), Lang::EN);
+    let chinese_env = |name: &str| (name == "LC_ALL").then(|| "zh_CN.UTF-8".to_owned());
+    assert_eq!(windows_auto_lang(Some("en-US\r\nzh-CN"), chinese_env), Lang::EN);
+    assert_eq!(windows_auto_lang(None, chinese_env), Lang::from_code("zh-hans").unwrap());
+    assert_eq!(Lang::from_pref("en"), Lang::EN, "an explicit setting remains authoritative");
+}
+
+#[test]
+fn enterprise_chinese_catalog_rows_load_without_english_fallback() {
+    needs_catalogs!();
+    for (code, supplement) in [("zh-hans", include_str!("../../i18n/zh-hans.tsv")), ("zh-hant", include_str!("../../i18n/zh-hant.tsv"))] {
+        let lang = Lang::from_code(code).expect("Chinese language is offered");
+        for (context, source, _) in rows(supplement) {
+            let translated = tr_ctx(lang, &context, &source);
+            assert_ne!(translated, source, "{code}: {source}");
+            assert!(translated.chars().any(|c| matches!(c, '\u{3400}'..='\u{9fff}')) || translated == "×", "{code}: {source}: {translated}");
+        }
+    }
+}
+
 #[cfg(target_os = "windows")]
 #[test]
 fn neutral_locale_does_not_override_display_language() {

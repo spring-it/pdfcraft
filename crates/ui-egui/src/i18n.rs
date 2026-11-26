@@ -400,23 +400,32 @@ pub fn system_lang() -> Lang {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn detect_system_lang() -> Lang {
-    if let Some(l) = env_lang(|var| std::env::var(var).ok()) {
-        return l;
-    }
-    // Apps started from the Finder don't inherit LANG: use the macOS preferred-languages list.
-    // The absolute path keeps a `defaults` earlier on PATH from running; any failure means English.
-    #[cfg(target_os = "macos")]
-    if let Ok(out) = std::process::Command::new("/usr/bin/defaults").args(["read", "-g", "AppleLanguages"]).output()
-        && out.status.success()
-        && let Some(l) = first_supported(&String::from_utf8_lossy(&out.stdout))
-    {
-        return l;
-    }
     #[cfg(target_os = "windows")]
-    if let Some(l) = windows_ui_language().as_deref().and_then(first_supported) {
-        return l;
+    return windows_auto_lang(windows_ui_language().as_deref(), |var| std::env::var(var).ok());
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(l) = env_lang(|var| std::env::var(var).ok()) {
+            return l;
+        }
+        // Apps started from the Finder don't inherit LANG: use the macOS preferred-languages list.
+        // The absolute path keeps a `defaults` earlier on PATH from running; any failure means English.
+        #[cfg(target_os = "macos")]
+        if let Ok(out) = std::process::Command::new("/usr/bin/defaults").args(["read", "-g", "AppleLanguages"]).output()
+            && out.status.success()
+            && let Some(l) = first_supported(&String::from_utf8_lossy(&out.stdout))
+        {
+            return l;
+        }
+        Lang::EN
     }
-    Lang::EN
+}
+
+/// Auto means the user's Windows display language, not the locale inherited from a shell,
+/// terminal, or installer. The environment is useful only if Windows gives no supported tag.
+#[cfg(any(target_os = "windows", all(test, not(target_arch = "wasm32"))))]
+fn windows_auto_lang(display: Option<&str>, var: impl Fn(&str) -> Option<String>) -> Lang {
+    display.and_then(first_supported).or_else(|| env_lang(var)).unwrap_or(Lang::EN)
 }
 
 /// The language the locale variables name, `LC_ALL` first, then `LC_MESSAGES`, then `LANG`;

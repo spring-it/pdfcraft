@@ -1,0 +1,143 @@
+# Enterprise UI gaps for the pinned upstream catalog. Context, source, translation.
+	1 line	1 行
+	A script edited here can be at most 256 KiB long; that change wasn't made.	此处最多可编辑 256 KiB 的脚本，未应用该更改。
+	Accept or reject the OCR review before closing this document	请先接受或拒绝 OCR 审阅结果，再关闭文档
+	Accept or reject the OCR review of the other document before running OCR here	请先接受或拒绝另一份文档的 OCR 审阅结果，再对此文档运行 OCR
+	Add Tools to Hotbar	添加工具到快捷工具栏
+	Another file dialog is still open. This one will open when it closes.	已有文件对话框打开，关闭后将显示此对话框。
+	Background removal	去除底色
+	Black and white (binarize)	黑白（二值化）
+	Bookmarks nested too deep to list could not be copied, so nothing was cut.	部分书签嵌套过深，无法复制，未剪切任何内容。
+	Bookmarks nested too deep to list were left out of the copy.	嵌套过深的书签未被复制。
+	Built-in	内置
+	CONFIDENTIAL	内部资料
+	Cancel re-read	取消重新识别
+	Check for updates when PdfCraft starts	启动时检查更新
+	Cleans up the scanned pictures in place: recognized text, comments and links on the pages stay as they are.	直接清理扫描图像，保留页面上已有的识别文字、批注和链接。
+	Close menu	关闭菜单
+	Columns and rows must each be 1 to 99.	行数和列数都必须在 1 到 99 之间。
+	Combine engines	组合识别引擎
+	Comment	批注
+	Couldn't enhance the scanned pages	无法增强扫描页面
+	Couldn't open {name}: the background worker stopped	无法打开 {name}：后台任务已停止
+	Couldn't open {name}: {reason}	无法打开 {name}：{reason}
+	Couldn't show the file picker. Please try again.	无法显示文件选择器，请重试。
+	Creep:	装订补偿：
+	Custom calculation script:	自定义计算脚本：
+	Custom scale	自定义缩放比例
+	Despeckle	去斑点
+	Detecting paper…	正在检测纸张…
+	Detecting…	正在检测…
+	Discard embedded search index	移除内嵌搜索索引
+	Discard external cross-references	移除外部交叉引用
+	Dock navigation rail on Left	将导航栏停靠在左侧
+	Dock navigation rail on Right	将导航栏停靠在右侧
+	Drag hotbar	拖动快捷工具栏
+	Edge shadow removal	去除边缘阴影
+	Edit attachment description	编辑附件说明
+	Edit description	编辑说明
+	Engine	识别引擎
+	Enhance	增强
+	Enhance Scanned File	增强扫描文件
+	Enhance scanned file…	增强扫描文件…
+	Enhancing scans… image {d} of {t}	正在增强扫描图像，第 {d} 张，共 {t} 张
+	Enhancing the scanned pages was cancelled	已取消扫描页面增强
+	Esc leaves full screen	按 Esc 退出全屏
+	Evens out the paper so a grey or yellowed background turns white, and darkens faint strokes. 0 is off.	均衡纸面底色，使发灰或发黄的背景变白，并加深浅色笔画。设为 0 时关闭。
+	Every line set in the style chosen for a level becomes a bookmark of that level, under a new first bookmark.	符合所选样式的每一行都会生成对应级别的书签，并置于一个新建的首个书签下。
+	Extend the docked toolbar along the entire side. Choose a side above to enable.	将停靠的工具栏延伸至整个侧边。请先在上方选择停靠位置。
+	Fixed 1 hairline on 1 page	已修正 1 页上的 1 条极细线
+	Fixed {n} hairlines on 1 page	已修正 1 页上的 {n} 条极细线
+	Float	浮动
+	Freehand-Highlight	手绘高亮
+	Full screen fills the screen with one page at a time	全屏时每次显示一页
+	Full-side strip	铺满侧边
+	General & Interface	常规与界面
+	Hotbar settings	快捷工具栏设置
+	Hotbar settings / add tools	快捷工具栏设置／添加工具
+	Hotbar tools	快捷工具栏中的工具
+	Inherit Zoom	沿用缩放比例
+	Invert middle-button drag	反转鼠标中键拖动方向
+	Its {standard} identification couldn't be kept, so the file no longer says it conforms to {standard}.	无法保留 {standard} 标识，文件不再声明符合 {standard}。
+	Its {standard} identification was written back on its own.	已单独写回 {standard} 标识。
+	Layout & Sizing	布局与尺寸
+	Level {n}	第 {n} 级
+	Lightens shadows along the edges of the scan, such as a book's gutter or a copier's dark border	淡化扫描件边缘的阴影，例如书脊内侧阴影或复印时产生的黑边
+	Lowering this forgets the oldest files. At 0 there is no list.	减少此数量会清除最早的记录。设为 0 时不显示列表。
+	Moves each sheet's pages toward the fold by this much more than the sheet outside it, so the margins match once the booklet is folded and trimmed.	每张纸上的页面比外围一张多向折线移动此距离，使小册子折叠并裁切后边距一致。
+	Navigation rail side	导航栏位置
+	New bookmarks from text styles	按文本样式生成书签
+	New bookmarks from text styles…	按文本样式生成书签…
+	No printers match.	未找到匹配的打印机。
+	No scanned pages were cleaned up.	未清理任何扫描页面。
+	Not added: {names}. Combine takes PDFs, images and text files.	未添加：{names}。合并功能支持 PDF、图像和文本文件。
+	Only web (http, https) and email addresses open, and PdfCraft asks first, as for other links.	仅支持打开网页（HTTP、HTTPS）和电子邮件地址，且会像打开其他链接一样先征求确认。
+	Open web and email addresses written in the page text	打开页面文字中的网页和电子邮件地址
+	Optimizing… reading page {d} of {t}	正在优化，读取第 {d} 页，共 {t} 页
+	Optimizing… reading the pages	正在优化，读取页面
+	PDF/A and PDF/UA	PDF/A 和 PDF/UA
+	Page Properties	页面属性
+	Page Setup…	页面设置…
+	Page properties…	页面属性…
+	Page setup dialog is not available on this system.	当前系统不支持页面设置对话框。
+	Panning or auto-scrolling with the middle (wheel) button moves the page the other way.	使用鼠标中键（滚轮）平移或自动滚动时，页面将反向移动。
+	Part of the selected text is on a page whose text could not be read, so nothing was marked for redaction. Mark that page with a box instead.	选区中有一页的文字无法读取，未标记任何密文区域。请改用矩形在该页标记。
+	Paste bookmarks	粘贴书签
+	PdfCraft's checks found no problems for {level}. This is not a validator result.	应用未发现与 {level} 有关的问题。此检查不能替代正式验证。
+	PdfCraft's checks now find no problems for {level}. This is not a validator result. Save to keep the changes.	应用现在未发现与 {level} 有关的问题。此检查不能替代正式验证，请保存以保留更改。
+	Re-reading the page…	正在重新识别页面…
+	Re-reading the region…	正在重新识别区域…
+	Reading the drawing for snapping…	正在读取图形以启用自动吸附…
+	Recent files to keep	保留的最近文件数
+	Remove from hotbar	从快捷工具栏移除
+	Remove scan speckle	去除扫描斑点
+	Remove this leaf tag from reading order and mark its direct content as an artifact	从阅读顺序中移除此末级标签，并将其直接内容标记为非正文元素
+	Removes isolated dark specks such as dust and scanner noise. The only filter black and white scans take.	去除灰尘或扫描噪声形成的孤立黑点。这是黑白扫描件唯一支持的滤镜。
+	Reset side panels	重置侧栏
+	Review the recognition, then Accept to write the editable document	检查识别结果后，点击“接受”写入可编辑文字
+	Scanned pages are already being enhanced	正在增强扫描页面
+	Search all tools…	搜索所有工具…
+	Search printers	搜索打印机
+	Search settings…	搜索设置…
+	Selects paper size and orientation from the printer driver. For paper tray, print quality or other driver defaults, use Properties…	通过打印机驱动选择纸张大小和方向。要设置纸盒、打印质量或其他驱动程序选项，请打开属性…
+	Show or hide the Tools panel	显示或隐藏工具面板
+	Show or hide the side panel	显示或隐藏侧栏
+	Show tab numbers	显示标签页编号
+	Signed and saved, but the form's postSign script couldn't finish: {e}	已签名并保存，但表单的签名后脚本未能运行完成：{e}
+	Stick to a side:	停靠位置：
+	Straighten pages scanned sideways or upside down	校正横置或倒置的扫描页面
+	Straighten skewed text lines	校正倾斜的文字行
+	Subscript	下标
+	Superscript	上标
+	Tab Order	Tab 键顺序
+	That didn't work: an internal error stopped it ({m}).	操作未完成，发生内部错误（{m}）。
+	The Windows store's digital IDs couldn't be listed: {e}	无法列出 Windows 证书存储中的数字 ID：{e}
+	The app didn't shut down normally. These documents had changes that were autosaved:	应用未正常退出。以下文档的修改已自动保存：
+	The creep moves the innermost sheet's pages too far for this many pages. Reduce Creep.	按当前页数计算，最内层纸张的页面偏移过大。请减小装订补偿。
+	The document changed while the dialog was open, so nothing was changed. Open Page properties again to set the tab order.	弹窗打开期间文档发生了变化，未应用更改。请重新打开页面属性设置 Tab 键顺序。
+	The document changed while the dialog was open, so nothing was changed. Open the description editor again.	弹窗打开期间文档发生了变化，未应用更改。请重新打开说明编辑器。
+	The document changed while you were choosing a file, so nothing was changed.	选择文件期间文档发生了变化，未应用任何更改。
+	The document changed. Reopen Document Properties to edit the current version.	文档已发生变化。请重新打开文档属性来编辑当前版本。
+	The document was closed before it could be saved.	文档尚未保存就已关闭。
+	The document's XMP metadata held the redacted text and was removed.	文档的 XMP 元数据包含密文处理的文字，已删除该元数据。
+	The form asks for the attached file {name}, which this document doesn't have.	表单需要附件 {name}，但当前文档不包含该文件。
+	The image is marked for redaction. Apply it with Redact a PDF	图像已标记为待处理的密文区域，请在 PDF 密文工具中应用
+	The pages were extracted but not deleted, because the document changed while you were choosing a folder.	选择文件夹期间文档发生了变化。页面已提取，但没有从原文档中删除。
+	The re-read was cancelled; the words are unchanged	已取消重新识别，文字未更改
+	This document has no text to make bookmarks from.	此文档中没有可用于生成书签的文字。
+	This script is too long to edit here ({kib} KiB); its start is shown. It is kept as it is.	脚本过长（{kib} KiB），无法在此编辑。仅显示开头，原脚本保持不变。
+	Toolbar size	工具栏大小
+	Turn off so that only Ctrl+L (⌘L on macOS) leaves full screen, as for a kiosk display.	关闭后，只能使用 Ctrl+L（macOS 上为 ⌘L）退出全屏，适合展台演示。
+	Turn off to keep the page display, such as continuous scrolling, in full screen.	关闭后，全屏时将沿用连续滚动等页面显示方式。
+	Unspecified	未指定
+	Use Column Order	按列顺序
+	Use Document Structure	按文档结构
+	Use Row Order	按行顺序
+	Vertical layout	纵向布局
+	bold	粗体
+	by	×
+	italic	斜体
+	{font}, {size} pt	{font}，{size} 磅
+	{list} and {last}	{list}和{last}
+	{n} lines	{n} 行
+	{rule} - {status}	{rule}：{status}

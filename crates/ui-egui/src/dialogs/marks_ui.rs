@@ -942,7 +942,11 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                     ui.add_enabled_ui(!d.use_file, |ui| {
                         ui.label(tl!("Text"));
                         ui.add(
-                            crate::widgets::block(&mut d.wm.text).desired_rows(2).desired_width(320.0).hint_text("CONFIDENTIAL").id_salt("wm-text"),
+                            crate::widgets::block(&mut d.wm.text)
+                                .desired_rows(2)
+                                .desired_width(320.0)
+                                .hint_text(tl!("CONFIDENTIAL"))
+                                .id_salt("wm-text"),
                         );
                     });
                     ui.horizontal(|ui| {
