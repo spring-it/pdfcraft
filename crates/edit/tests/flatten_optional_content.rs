@@ -307,6 +307,7 @@ fn unsupported_membership_keeps_popup_replies_after_save_and_reopen() {
 /// Undrawable text in a retained reply must not block an unrelated drawable annotation.
 #[test]
 fn unsupported_membership_keeps_undrawable_reply_without_refusing_flatten() {
+    // Han is drawable with the document fallback; use an unsupported emoji for this negative case.
     for marked_appearance in [false, true] {
         let mut doc = fixture("/OC null", 4, "");
         let root = ObjRef::new(8, 0);
@@ -314,13 +315,13 @@ fn unsupported_membership_keeps_undrawable_reply_without_refusing_flatten() {
         reply.remove(b"OC");
         reply.set(b"Subtype".to_vec(), Object::Name(b"FreeText".to_vec()));
         reply.set(b"IRT".to_vec(), Object::Ref(root));
-        reply.set(b"Contents".to_vec(), Object::String(pdfcraft_cos::PdfString::text("漢")));
+        reply.set(b"Contents".to_vec(), Object::String(pdfcraft_cos::PdfString::text("🦄")));
         if marked_appearance {
-            pdfcraft_fonts::set_undrawn_mark(&mut reply, Some('漢'));
+            pdfcraft_fonts::set_undrawn_mark(&mut reply, Some('🦄'));
         } else {
             reply.remove(b"AP");
         }
-        assert_eq!(pdfcraft_annot::appearance::undrawable_text(&reply).map(|(_, c)| c), Some('漢'));
+        assert_eq!(pdfcraft_annot::appearance::undrawable_text(&reply).map(|(_, c)| c), Some('🦄'));
         let reply = doc.add(Object::Dict(reply));
         let mut drawable = doc.get(root).as_dict().unwrap().clone();
         drawable.remove(b"OC");
