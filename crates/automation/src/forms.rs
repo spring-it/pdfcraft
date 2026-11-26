@@ -679,6 +679,7 @@ impl Automation {
             },
             options: a.get("options").map(|_| a.strs("options")).transpose()?.map(|v| v.into_iter().map(str::to_owned).collect()),
             font_size: a.opt_num("font_size")?,
+            installed_font: None, // The automation API accepts PDF font names, not local font files.
             look: None,
             appearance: a.get("appearance").map(look_arg).transpose()?.filter(|p| *p != pdfcraft_engine::FieldLookPatch::default()),
             format: a.get("format").map(format_arg).transpose()?,
