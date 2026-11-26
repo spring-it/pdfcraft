@@ -94,7 +94,7 @@ fn at_zero_home_has_no_recent_section() {
     let h = harness(0, &[]);
     assert!(h.query_by_label("Recent").is_none(), "no heading");
     assert!(h.query_by_label_contains("Files you open in 沃飞翼览 PDF appear here").is_none(), "and no promise of a list");
-    h.get_by_label_contains("文档处理在本地完成");
+    h.get_by_label("沃飞翼览 PDF 支持本地离线处理，默认不上传文档，不需要账号。");
 }
 
 #[test]
