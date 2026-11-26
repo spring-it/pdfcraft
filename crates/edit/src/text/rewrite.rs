@@ -1,8 +1,8 @@
 use super::blocks::{BlockStyle, TextBlock, paragraph_separator, row_break, wrap};
 use super::fallback::{
-    Encoder, MAX_TYPE3_GLYPHS, Type3Fallback, Type3Run, chinese_font_name, drop_unused_fallback_fonts, is_variation_selector, needs_type3,
-    no_japanese_font, source_character_advance, source_encodes, source_fallback_runs, source_family, source_program_completes, source_runs,
-    source_show, source_space, source_width, type3_encode, type3_font,
+    Encoder, MAX_TYPE3_GLYPHS, Type3Fallback, Type3Run, drop_unused_fallback_fonts, is_variation_selector, needs_type3, no_japanese_font,
+    source_character_advance, source_encodes, source_fallback_runs, source_family, source_program_completes, source_runs, source_show, source_space,
+    source_width, type3_encode, type3_font,
 };
 use super::interp::{Carry, Origin, TextState, interpret};
 use super::lines::{
@@ -86,15 +86,7 @@ pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usi
         None => {
             let fallback_shown = crate::bidi::to_visual(&text);
             if needs_type3(&text) {
-                let fallback = type3_font(
-                    doc,
-                    &mut fonts_res,
-                    &text,
-                    source_family(&target.base_font),
-                    target.bold,
-                    max_glyphs,
-                    chinese_font_name(&target.base_font),
-                )?;
+                let fallback = type3_font(doc, &mut fonts_res, &text, source_family(&target.base_font), target.bold, max_glyphs, &target.base_font)?;
                 let runs = type3_encode(&fallback, &fallback_shown)
                     .ok_or_else(|| EditError::Invalid(format!("\"{text}\" can't be shown by the {} fallback", fallback.family)))?;
                 let size = font_size_before(&ops, first).unwrap_or(target.size);
@@ -366,6 +358,7 @@ fn choose_rewrite_path(
     let visual_indic = members.iter().any(|line| line.visual_order);
     let has_special_text = text.is_some_and(|draft| {
         draft.contains(row_break)
+            || style.local_han_font.is_some()
             || pdfcraft_fonts::source_shaping::required(draft)
             || !pdfcraft_fonts::embedding::matching_faces(&block.base_font).is_empty()
     });
@@ -1169,7 +1162,7 @@ pub(crate) fn rewrite_block_from(
     let tm = emit_text_matrix(o, emit)?;
     let type3 = if !reuse && needs_type3(&flat) {
         let missing: String = flat.chars().filter(|ch| !source_chars.contains(ch)).collect();
-        Some(type3_font(doc, &mut fonts_res, &missing, family, bold, max_glyphs, chinese_font_name(&b.base_font))?)
+        Some(type3_font(doc, &mut fonts_res, &missing, family, bold, max_glyphs, &b.base_font)?)
     } else {
         None
     };

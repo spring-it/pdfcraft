@@ -11,34 +11,7 @@ use super::{
 // A glyph budget worth 64 full batches (15,360 glyphs with the production batch size).
 // Lowering the internal batch size for tests lowers the budget by the same ratio.
 const MAX_STYLED_FALLBACK_BATCHES: usize = 64;
-fn is_han_character(ch: char) -> bool {
-    matches!(ch, '\u{3400}'..='\u{4DBF}' | '\u{4E00}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '\u{20000}'..='\u{2FA1F}')
-}
-
-fn chinese_font_name(name: &str) -> bool {
-    let lower = name.to_ascii_lowercase();
-    [
-        "simsun",
-        "simhei",
-        "stsong",
-        "fangsong",
-        "kaiti",
-        "yahei",
-        "dengxian",
-        "mingliu",
-        "jhenghei",
-        "wenkai",
-        "lxgw",
-        "fzsong",
-        "fangzheng",
-        "songti",
-        "heiti",
-        "adobegb",
-        "gb1",
-    ]
-    .iter()
-    .any(|part| lower.contains(part))
-}
+use super::super::fallback::{allow_chinese_rescue, chinese_font_name, contains_kana, has_simplified_hint, is_han_character};
 
 fn chinese_text_run(text: &str) -> bool {
     let mut has_han = false;
@@ -212,6 +185,15 @@ impl CharacterPreparation<'_> {
         let mut substituted = None;
         let mut fallback = FallbackBuilder::new(max_glyphs);
         let mut resolver = FontResolver { doc, fonts, metrics, full_faces: HashMap::new(), programs: HashMap::new() };
+        // A font from the desktop's installed-font catalogue is still an external document
+        // input. Check its licence and embedding permissions before creating PDF resources.
+        let local_font = style.local_han_font.as_deref().and_then(|bytes| {
+            pdfcraft_fonts::embedding::validate_document_input(bytes).ok()?;
+            let (family, face) = pdfcraft_fonts::embedding::names(bytes).ok()?;
+            Some((bytes.as_slice(), family, face))
+        });
+        let no_kana = !contains_kana(draft);
+        let rescue = no_kana && has_simplified_hint(draft);
         for (range, index) in spans {
             let source = lines.get(index).unwrap_or(first);
             let span = draft.get(range.clone()).unwrap_or_default();
@@ -293,11 +275,22 @@ impl CharacterPreparation<'_> {
                 None => (None, None),
             };
             let span_text = span;
+            let local = local_font.as_ref().filter(|_| {
+                selected_resource.is_none()
+                    && (chinese_font_name(&source.base_font) || no_kana && allow_chinese_rescue(&source.base_font, span))
+                    && style.family.is_none()
+                    && style.bold.is_none()
+                    && !source.bold
+                    && !source.italic
+                    && overrides.get(&index).is_none_or(|r| r.family.is_none())
+            });
             let uniform_han = !use_thai_outlines
                 && existing_thai.is_none()
                 && program_name.is_none()
                 && !span_text.is_empty()
-                && chinese_font_name(&source.base_font)
+                && local.is_none()
+                && (chinese_font_name(&source.base_font)
+                    || rescue && has_simplified_hint(span_text) && allow_chinese_rescue(&source.base_font, span_text))
                 && chinese_text_run(span_text)
                 && span_text.chars().collect::<std::collections::HashSet<_>>().len() <= MAX_TYPE3_GLYPHS
                 && style.resource.is_none()
@@ -337,8 +330,12 @@ impl CharacterPreparation<'_> {
                     name.clone()
                 } else if let Some(name) = resolver.encodable_font(source, &text, requested)? {
                     name
+                } else if let Some((bytes, family, face)) =
+                    local.filter(|(bytes, _, _)| is_han_character(ch) && pdfcraft_fonts::embedding::covers(bytes, &text))
+                {
+                    resolver.embed_face(format!("desktop:{face}"), bytes, family, "the local font could not be loaded")?
                 } else if needs_type3(&text) {
-                    fallback.prepare(source, ch, &text, chars.len())?
+                    fallback.prepare(source, ch, &text, chars.len(), rescue)?
                 } else {
                     let name = resolver.substitute_font(source);
                     substituted = Some(source_family(&source.base_font).base_font(source.bold, source.italic).to_owned());
@@ -411,10 +408,20 @@ impl FallbackBuilder {
         Ok(())
     }
 
-    fn prepare(&mut self, source: &TextLine, ch: char, text: &str, position: usize) -> Result<String, EditError> {
+    fn prepare(&mut self, source: &TextLine, ch: char, text: &str, position: usize, rescue: bool) -> Result<String, EditError> {
         let prefer_chinese = chinese_font_name(&source.base_font);
         let (faces, _) = type3_faces(text, source_family(&source.base_font), source.bold, prefer_chinese)?;
-        let face = fallback_face(&faces, &[ch], |face, ch| japanese_glyph_from(face, ch).is_ok()).ok_or_else(|| no_fallback_font(text))?;
+        let face = faces
+            .iter()
+            .copied()
+            .find(|face| japanese_glyph_from(face, ch).is_ok())
+            .or_else(|| {
+                (!prefer_chinese && rescue && is_han_character(ch) && allow_chinese_rescue(&source.base_font, text))
+                    .then(|| pdfcraft_fonts::ui_chinese_fonts().into_iter().find(|face| japanese_glyph_from(face, ch).is_ok()))
+                    .flatten()
+            })
+            .or_else(|| faces.first().copied())
+            .ok_or_else(|| no_fallback_font(text))?;
         self.prepare_with_face(source, ch, face, position)?;
         Ok(String::new())
     }

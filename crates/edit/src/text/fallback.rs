@@ -378,7 +378,7 @@ fn no_hebrew_font() -> EditError {
 /// bundled Latin face behind them, which covers the Latin, Greek and Cyrillic letters they lack
 /// (#2593: the Japanese faces have no қ, ғ, ҳ, ә, ө, ү, ұ or һ).
 /// Recognise common Chinese source-font names so Han text keeps a Chinese document face.
-pub(super) fn chinese_font_name(name: &str) -> bool {
+pub(crate) fn chinese_font_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     [
         "simsun",
@@ -398,6 +398,20 @@ pub(super) fn chinese_font_name(name: &str) -> bool {
         "heiti",
         "adobegb",
         "gb1",
+        "fzss",
+        "fzbs",
+        "fzxbs",
+        "fzcs",
+        "fzht",
+        "fzhei",
+        "fzlth",
+        "fzdh",
+        "fzkt",
+        "fzkai",
+        "fzfs",
+        "宋",
+        "黑体",
+        "楷体",
     ]
     .iter()
     .any(|part| lower.contains(part))
@@ -405,6 +419,27 @@ pub(super) fn chinese_font_name(name: &str) -> bool {
 
 pub(crate) fn is_han_character(ch: char) -> bool {
     matches!(ch, '\u{3400}'..='\u{4DBF}' | '\u{4E00}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '\u{20000}'..='\u{2FA1F}')
+}
+
+/// Mixed or subset CID paragraphs can lose the original Chinese family name. Allow a
+/// Simplified Chinese last resort for Han in an unidentified font, but not known Japanese
+/// faces or a run containing kana. The Japanese fallback still gets first refusal.
+pub(crate) fn allow_chinese_rescue(name: &str, text: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    !["bizud", "ipag", "shippori", "mincho", "koz", "heisei", "gothic", "japan"].iter().any(|hint| name.contains(hint)) && !contains_kana(text)
+}
+
+/// A conservative set of common Simplified spellings absent from the Japanese document faces.
+/// Arbitrary rare Han is not a language hint: otherwise an unidentified Japanese run that
+/// lacks one glyph would silently get a Chinese outline.
+pub(crate) fn has_simplified_hint(text: &str) -> bool {
+    text.chars().any(|ch| {
+        matches!(ch, '东' | '丝' | '网' | '电' | '这' | '们' | '说' | '欢' | '览' | '药' | '认' | '读' | '语' | '书' | '页' | '门' | '学' | '简')
+    })
+}
+
+pub(crate) fn contains_kana(text: &str) -> bool {
+    text.chars().any(|ch| matches!(ch, '\u{3040}'..='\u{30ff}' | '\u{ff66}'..='\u{ff9f}'))
 }
 
 pub(crate) fn type3_faces(
@@ -445,13 +480,12 @@ pub(super) fn type3_font(
     family: crate::added::Family,
     bold: bool,
     max_glyphs: usize,
-    prefer_chinese: bool,
+    source_name: &str,
 ) -> Result<Type3Fallback, EditError> {
+    let prefer_chinese = chinese_font_name(source_name);
     let (faces, hebrew) = type3_faces(text, family, bold, prefer_chinese)?;
     let chinese_fallbacks = pdfcraft_fonts::ui_chinese_fonts();
-    // type3_faces includes Chinese fallback faces only for a Chinese source font. A Japanese
-    // document must not silently substitute a Chinese face for a glyph missing from its Japanese
-    // fonts: that changes the document's script appearance and makes an impossible edit succeed.
+    let rescued_han = has_simplified_hint(text) && allow_chinese_rescue(source_name, text);
     // Each unique character once, in order of first appearance.
     let mut chars = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -476,7 +510,11 @@ pub(super) fn type3_font(
     // Pick the Type 3 face from the script-appropriate family, then use the full ordered list
     // below for per-glyph fallback. Otherwise a Chinese font that happens to cover Latin and
     // Cyrillic can incorrectly become the face for an entire Japanese or Uzbek edit.
-    let preferred_faces = if prefer_chinese && has_han {
+    let use_complete_chinese_face = rescued_han
+        && named.iter().all(|ch| is_han_character(*ch) || ch.is_whitespace())
+        && named.iter().any(|ch| is_han_character(*ch) && !japanese.iter().any(|face| pdfcraft_fonts::face_has(face.bytes, *ch)))
+        && chinese_fallbacks.iter().any(|face| named.iter().all(|ch| pdfcraft_fonts::face_has(face.bytes, *ch)));
+    let preferred_faces = if has_han && (prefer_chinese || use_complete_chinese_face) {
         chinese_fallbacks.clone()
     } else if has_han || japanese.iter().any(|face| named.iter().all(|ch| japanese_glyph_from(face, *ch).is_ok())) {
         japanese
@@ -509,6 +547,14 @@ pub(super) fn type3_font(
                 if let Some(glyph) = type3_glyph(candidate, ch)? {
                     drawn = Some(glyph);
                     break;
+                }
+            }
+            if drawn.is_none() && !prefer_chinese && rescued_han && is_han_character(ch) {
+                for candidate in &chinese_fallbacks {
+                    if let Some(glyph) = type3_glyph(candidate, ch)? {
+                        drawn = Some(glyph);
+                        break;
+                    }
                 }
             }
             drawn

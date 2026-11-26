@@ -4,8 +4,8 @@
 //! collections (Adobe-Japan1, GB1, CNS1, Korea1) and a font name such as `KozGoPr6N-Medium` or
 //! `MSung-Light` without embedding the font. hayro maps those CIDs to Unicode itself, but it needs
 //! a face to draw them with; without one the text is blank. The craft-fonts Japanese faces come
-//! first (see `japanese_fallback` in `raster.rs`); this module is the last resort: one face
-//! already installed on this machine, used for the viewer only (`RenderConfig::system_fonts`, off
+//! first on non-Windows platforms (see `japanese_fallback` in `raster.rs`); Windows prefers
+//! one face already installed on this machine, used for the viewer only (`RenderConfig::system_fonts`, off
 //! for exports, printing and OCR). It is read at runtime and never embedded or shipped
 //! (docs/development.md "Fonts and attribution"), Noto CJK and Source Han are left out on purpose (clean-room.md), and
 //! `PDFCRAFT_SYSTEM_FONTS=0` turns it off, as for the interface font.
@@ -228,7 +228,8 @@ fn candidates(script: Script, family: ChineseFamily, bold: bool) -> Vec<Candidat
             Script::TraditionalChinese => &["msjh.ttc", "mingliu.ttc", "msyh.ttc"],
             Script::Korean => &["malgun.ttf", "gulim.ttc"],
         };
-        names.iter().map(|f| dir.join(f)).collect()
+        let user = std::env::var_os("LOCALAPPDATA").map(PathBuf::from).map(|p| p.join("Microsoft/Windows/Fonts"));
+        names.iter().flat_map(|f| user.as_ref().map(|p| p.join(f)).into_iter().chain(std::iter::once(dir.join(f)))).collect()
     } else if cfg!(target_os = "macos") {
         let names: &[&str] = match script {
             Script::Japanese => &["ヒラギノ角ゴシック W3.ttc", "Hiragino Sans GB.ttc", "PingFang.ttc"],

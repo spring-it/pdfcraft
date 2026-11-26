@@ -10,6 +10,7 @@ pub const DISCORD: &str = "https://github.com/spring-it/pdfcraft";
 pub const WEBSITE: &str = "https://github.com/spring-it/pdfcraft";
 pub const APP_PAGE: &str = "https://github.com/spring-it/pdfcraft";
 pub const GITHUB: &str = "https://github.com/spring-it/pdfcraft";
+pub const ONLINE: &str = "https://wfclaw.aerofugia.com/wfclaw-app/aiapp-app/jfjmp8";
 
 /// A link and the registry command that opens it.
 #[derive(Clone, Copy, Debug)]
@@ -21,8 +22,11 @@ pub struct Link {
     pub icon: &'static str,
 }
 
-/// The only public link shown by this enterprise build is its source repository.
-pub const LINKS: &[Link] = &[Link { command: "help.github", label: "沃飞翼览 PDF 源代码", url: GITHUB, icon: "code-xml" }];
+/// The company browser app and the source repository; neither opens automatically.
+pub const LINKS: &[Link] = &[
+    Link { command: "help.online", label: "打开在线版", url: ONLINE, icon: "globe" },
+    Link { command: "help.github", label: "沃飞翼览 PDF 源代码", url: GITHUB, icon: "code-xml" },
+];
 
 pub fn for_command(id: &str) -> Option<&'static Link> {
     LINKS.iter().find(|l| l.command == id)

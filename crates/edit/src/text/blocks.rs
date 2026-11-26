@@ -501,6 +501,9 @@ pub struct BlockStyle {
     pub ranges: Vec<RangeStyle>,
     /// Explicit page font resource or bundled document-font choice from the page font inventory.
     pub resource: Option<String>,
+    /// Optional approved local document font from the desktop editor, for missing Han
+    /// glyphs only. Never used in place of the source or an explicitly selected font.
+    pub local_han_font: Option<std::sync::Arc<Vec<u8>>>,
     /// A standard font family, bold, italic.
     pub family: Option<(crate::added::Family, bool, bool)>,
     /// Override weight without choosing a different family (`None` keeps the source weight).

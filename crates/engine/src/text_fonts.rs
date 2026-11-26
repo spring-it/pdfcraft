@@ -32,6 +32,74 @@ pub fn installed_directories() -> Vec<PathBuf> {
     }
 }
 
+/// A licensed installed face for a desktop Chinese paragraph edit. This is deliberately
+/// not used for automation, and does not include Windows fonts restricted to screen display.
+#[cfg(windows)]
+pub fn preferred_local_han(text: &str, source_family: &str) -> Option<std::sync::Arc<Vec<u8>>> {
+    if std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_some_and(|v| v == "0") {
+        return None;
+    }
+    let mut chars = std::collections::BTreeSet::new();
+    for ch in text.chars() {
+        match ch {
+            '\u{3040}'..='\u{30ff}' | '\u{ff66}'..='\u{ff9f}' => return None,
+            '\u{3400}'..='\u{4dbf}' | '\u{4e00}'..='\u{9fff}' | '\u{20000}'..='\u{2fa1f}' => {
+                chars.insert(ch);
+                if chars.len() > 240 {
+                    return None;
+                }
+            }
+            _ => {}
+        }
+    }
+    if chars.is_empty() {
+        return None;
+    }
+    use std::io::Read as _;
+    use std::sync::{Arc, OnceLock};
+    static CATALOGUE: OnceLock<Vec<FontFile>> = OnceLock::new();
+    let source = pdfcraft_fonts::embedding::face_key(source_family);
+    let han: String = chars.into_iter().collect();
+    let fonts = CATALOGUE.get_or_init(|| {
+        // Scan the per-user directory separately so system files cannot consume its budget.
+        let user = std::env::var_os("LOCALAPPDATA").map(PathBuf::from).map(|p| p.join("Microsoft/Windows/Fonts"));
+        let mut fonts = user.as_ref().map_or_else(Vec::new, |p| discover(std::slice::from_ref(p)));
+        if let Some(windows) = std::env::var_os("WINDIR") {
+            fonts.extend(discover(&[PathBuf::from(windows).join("Fonts")]));
+        }
+        fonts
+    });
+    // Try matching names first, then an ordinary Chinese face. Revalidate at embedding
+    // time too: the file can have been replaced since the catalogue was created.
+    for exact in [true, false] {
+        let mut remaining_bytes = 64 << 20;
+        for font in fonts {
+            let family = pdfcraft_fonts::embedding::face_key(&font.family);
+            let face = pdfcraft_fonts::embedding::face_key(&font.face);
+            if ["bold", "heavy", "italic", "oblique", "black"].iter().any(|hint| face.contains(hint)) || exact != (family == source || face == source)
+            {
+                continue;
+            }
+            let Ok(meta) = std::fs::symlink_metadata(&font.path) else { continue };
+            if !meta.is_file() || meta.len() > (16 << 20) || meta.len() > remaining_bytes {
+                continue;
+            }
+            remaining_bytes -= meta.len();
+            let mut bytes = Vec::new();
+            let valid = std::fs::File::open(&font.path).and_then(|f| f.take(meta.len() + 1).read_to_end(&mut bytes));
+            if valid.is_ok()
+                && bytes.len() as u64 == meta.len()
+                && pdfcraft_fonts::embedding::covers(&bytes, "东欢")
+                && pdfcraft_fonts::embedding::covers(&bytes, &han)
+                && pdfcraft_fonts::embedding::validate_document_input(&bytes).is_ok()
+            {
+                return Some(Arc::new(bytes));
+            }
+        }
+    }
+    None
+}
+
 /// Bounded scan with resolved roots and no descendant symlinks.
 /// Only standalone, openly licensed, embeddable faces are listed.
 /// The caller controls roots (automation resolves confinement before calling this).

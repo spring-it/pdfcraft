@@ -1691,6 +1691,7 @@ fn dialog_about(ui: &mut egui::Ui, _req: &mut Pending) -> bool {
             ui.vertical(|ui| {
                 ui.label(egui::RichText::new("沃飞翼览 PDF").font(theme::brand(20.0)));
                 ui.label(crate::i18n::fmt(tl!("Version {v}"), &[("v", &pdfcraft_engine::build_info::version())]));
+                ui.label(egui::RichText::new("沃飞长空内部 PDF 阅读与处理工具").font(theme::company(14.0)));
             });
             ui.add_space(6.0);
             ui.label(tl!("A clean-room, open-source PDF application written in Rust. MIT OR Apache-2.0."));
@@ -1701,6 +1702,17 @@ fn dialog_about(ui: &mut egui::Ui, _req: &mut Pending) -> bool {
                 .color(t.text_muted)
                 .small(),
             );
+            ui.add_space(12.0);
+            ui.label(egui::RichText::new("基于开源 PdfCraft 定制，原作者版权归 ArtCraft Team 及贡献者所有。").font(theme::company(14.0)));
+            ui.label(
+                egui::RichText::new("许可证：MIT OR Apache-2.0。第三方素材与字体许可请见安装目录中的 NOTICE、LICENSE-* 和 OFL-*.txt。")
+                    .font(theme::company(14.0)),
+            );
+            ui.add_space(12.0);
+            ui.separator();
+            ui.label(egui::RichText::new("内部定制开发者信息").font(theme::brand(14.0)));
+            ui.label(egui::RichText::new("数字发展室").font(theme::company(14.0)));
+            ui.label("Bing.Zheng1@aerofugia.com");
         }
     }
     true

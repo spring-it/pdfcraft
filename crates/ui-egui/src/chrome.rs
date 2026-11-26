@@ -784,7 +784,20 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         }
                     });
                     ui.add_space(8.0);
-                    let search_w = (left - MODE_BAR_RIGHT).clamp(0.0, 260.0);
+                    // Keep full search and the essential controls at narrow widths. Help also
+                    // offers the online entry when there is no room in this toolbar.
+                    let show_online = left >= MODE_BAR_RIGHT + MODE_BAR_SEARCH_MIN + 110.0;
+                    let mut online_width = 0.0;
+                    if show_online {
+                        let online = theme::hand(ui.button(egui::RichText::new("在线版 ↗").font(theme::company(13.0)).color(t.accent_text)))
+                            .on_hover_text("在默认浏览器中打开沃飞翼览 PDF 在线版");
+                        online.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "在线版：在默认浏览器中打开"));
+                        online_width = online.rect.width() + 4.0;
+                        if online.clicked() {
+                            app.run_command("help.online");
+                        }
+                    }
+                    let search_w = (left - MODE_BAR_RIGHT - online_width).clamp(0.0, 260.0);
                     let opened = if search_w >= MODE_BAR_SEARCH_MIN {
                         widgets::search_box(ui, tl!("Find tools and commands"), search_w).clicked()
                     } else {

@@ -9,7 +9,7 @@ use crate::{PdfCraftApp, icons, panels::human_size, widgets};
 
 pub mod folders_ui;
 
-const RECOMMENDED: [&str; 5] = ["organize", "comment", "form", "edit", "protect"];
+const RECOMMENDED: [&str; 4] = ["organize", "comment", "edit", "protect"];
 
 /// A soft shadow that rises on hover and settles when the card is pressed.
 pub(crate) fn card_lift(ui: &egui::Ui, t: &Tokens, rect: Rect, press: theme::Press) {
@@ -76,20 +76,36 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         egui::Frame::NONE.inner_margin(egui::Margin { left: 36, right: 36, top: 28, bottom: 28 }).show(ui, |ui| {
-            ui.label(egui::RichText::new("沃飞翼览 PDF").font(theme::brand(24.0)));
-            ui.label(
-                egui::RichText::new("企业定制 PDF 工作台。文档处理在本地完成，保护公司资料安全。").color(t.text_muted).font(theme::company(14.0)),
-            );
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                ui.label(egui::RichText::new("欢迎使用").font(theme::brand(24.0)));
+                ui.label(egui::RichText::new("沃飞翼览 PDF").font(theme::brand(24.0)));
+                ui.label(
+                    egui::RichText::new(format!("(v{})", pdfcraft_engine::build_info::version())).font(theme::semibold(17.0)).color(t.text_muted),
+                );
+            });
+            ui.label(egui::RichText::new("沃飞长空内部 PDF 阅读与处理工具 · 本地、安全、高效").color(t.text_muted).font(theme::company(14.0)));
             ui.add_space(14.0);
             egui::Frame::NONE
                 .fill(t.card)
                 .stroke(Stroke::new(1.0, t.border))
-                .corner_radius(CornerRadius::same(12))
-                .inner_margin(egui::Margin::same(14))
+                .corner_radius(CornerRadius::same(10))
+                .inner_margin(egui::Margin::symmetric(14, 10))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.label(egui::RichText::new("沃飞翼览 PDF 企业定制版").font(theme::brand(15.0)));
-                    ui.label(egui::RichText::new("支持 PDF 阅读、文本编辑、页面管理和企业水印。").color(t.text_muted).font(theme::company(13.0)));
+                    ui.horizontal_wrapped(|ui| {
+                        let (icon_rect, _) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::hover());
+                        icons::paint(ui, icon_rect, "globe", 23.0, t.accent_text);
+                        ui.vertical(|ui| {
+                            ui.label(egui::RichText::new("在线版沃飞翼览 PDF").font(theme::brand(14.0)));
+                            ui.label(egui::RichText::new("无需安装，点击后使用默认浏览器打开").font(theme::company(12.0)).color(t.text_muted));
+                        });
+                        let button = ui.button(egui::RichText::new("立即访问 ↗").font(theme::company(13.0)).color(t.accent_text));
+                        button.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "立即访问在线版"));
+                        if button.clicked() {
+                            app.run_command("help.online");
+                        }
+                    });
                 });
             ui.add_space(22.0);
 
@@ -218,6 +234,8 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     ui.label(
                         egui::RichText::new(if crate::i18n::current().code() == "en" {
                             "Files you open in 沃飞翼览 PDF appear here. Drop a PDF anywhere to open it."
+                        } else if crate::i18n::current().code() == "zh-hans" {
+                            "在沃飞翼览 PDF 中打开的文件会显示在这里，也可将 PDF 文件直接拖入窗口。"
                         } else {
                             tl!("Files you open in PdfCraft appear here. Drop a PDF anywhere to open it.")
                         })
@@ -314,8 +332,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             ui.add_space(20.0);
             widgets::section_title(ui, tl!("Privacy"));
             ui.label(
-                egui::RichText::new(tl!("The app works offline. No telemetry, no account, and no cloud processing unless you add a provider."))
-                    .color(t.text_muted),
+                egui::RichText::new("沃飞翼览 PDF 支持本地离线处理，默认不上传文档，不需要账号。").font(theme::company(14.0)).color(t.text_muted),
             );
         });
     });

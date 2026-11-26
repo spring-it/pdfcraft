@@ -1,4 +1,4 @@
-//! Community links remain available in Help and About; the company home page omits upstream promotion.
+//! Company links and support details are available without restoring upstream promotion.
 
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
@@ -42,6 +42,19 @@ fn company_home_omits_the_upstream_community_card() {
 }
 
 #[test]
+fn home_restores_company_intro_version_and_online_browser_link() {
+    let mut h = harness(|_| {});
+    h.get_by_label("欢迎使用");
+    h.get_by_label(&format!("(v{})", pdfcraft_engine::build_info::version()));
+    h.get_by_label("沃飞长空内部 PDF 阅读与处理工具 · 本地、安全、高效");
+    h.get_by_label("沃飞翼览 PDF 支持本地离线处理，默认不上传文档，不需要账号。");
+    assert!(h.state().last_opened_url.is_none(), "opening the desktop home must not launch the online app");
+    settled(&mut h, "立即访问在线版").click();
+    h.run_steps(3);
+    assert_eq!(h.state().last_opened_url.as_deref(), Some(links::ONLINE));
+}
+
+#[test]
 fn about_dialog_shows_the_company_brand() {
     let pdf = b"%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF";
     // With a document open, so the home screen's own brand and links are not on screen.
@@ -52,6 +65,9 @@ fn about_dialog_shows_the_company_brand() {
     assert!(h.query_all_by_label("沃飞翼览 PDF").count() >= 1, "the company wordmark");
     assert!(h.query_by_label("ArtCraft").is_none(), "the upstream brand is not shown");
     assert!(h.query_by_label("Join our Discord").is_none(), "the upstream Discord link is not shown");
+    h.get_by_label("沃飞长空内部 PDF 阅读与处理工具");
+    h.get_by_label("内部定制开发者信息");
+    h.get_by_label("数字发展室");
 }
 
 #[test]
