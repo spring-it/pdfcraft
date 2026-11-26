@@ -404,6 +404,9 @@ mod tests {
         let ctx = egui::Context::default();
         ctx.set_fonts(theme::font_definitions());
         let mut app = PdfCraftApp::new();
+        // The enterprise home no longer recommends Form by default, but pinned cards
+        // use the same renderer and exercise the same long translated description.
+        assert!(app.pin_tool("form"));
         let blurb = catalog::group("form")
             .unwrap()
             .sections

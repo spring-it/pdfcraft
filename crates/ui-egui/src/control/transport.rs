@@ -554,7 +554,9 @@ mod transport_tests {
     fn only_so_many_connections_may_wait_to_authenticate() {
         use std::io::{BufReader, Write};
         let (_control, client) = crate::control::attach(&egui::Context::default());
-        let ep = super::serve_with(client, TEST_LIMITS).unwrap();
+        // Leave time for several socket round trips even on a loaded Windows runner.
+        let limits = super::Limits { auth_deadline: std::time::Duration::from_secs(2), ..TEST_LIMITS };
+        let ep = super::serve_with(client, limits).unwrap();
         let auth = serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": "auth", "params": { "token": ep.token } });
         let first = connect(ep.port);
         let second = connect(ep.port);
@@ -570,7 +572,8 @@ mod transport_tests {
         let mut r2 = BufReader::new(second.try_clone().unwrap());
         let mut w2 = second.try_clone().unwrap();
         writeln!(w2, "{auth}").unwrap();
-        assert_eq!(next_line(&mut r2).unwrap()["result"]["ok"], true);
+        let reply = next_line(&mut r2).expect("the second connection gets an authentication reply");
+        assert_eq!(reply["result"]["ok"], true, "{reply}");
         let fourth = connect(ep.port);
         let mut r4 = BufReader::new(fourth.try_clone().unwrap());
         let mut w4 = fourth.try_clone().unwrap();
@@ -578,8 +581,10 @@ mod transport_tests {
         assert_eq!(next_line(&mut r4).unwrap()["result"]["ok"], true, "admitted and authenticated");
         // The first was closed at the deadline (its place freed on that way out too): after it,
         // another connection is admitted even though the first never authenticated.
-        drop(first);
-        std::thread::sleep(TEST_LIMITS.auth_deadline + std::time::Duration::from_millis(100));
+        let mut r1 = BufReader::new(first);
+        let reply = next_line(&mut r1).expect("the first connection times out without authenticating");
+        assert_eq!(reply["error"]["code"], -32004, "{reply}");
+        assert!(next_line(&mut r1).is_none(), "and closed");
         let fifth = connect(ep.port);
         let mut r5 = BufReader::new(fifth.try_clone().unwrap());
         let mut w5 = fifth.try_clone().unwrap();
