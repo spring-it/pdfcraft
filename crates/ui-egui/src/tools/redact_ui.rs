@@ -27,6 +27,8 @@ pub struct RedactPrefs {
     pub codes: Vec<&'static str>,
     /// Overlay text font, size (0 = auto), colour, alignment and repetition.
     pub look: pdfcraft_engine::OverlayLook,
+    /// A picker read/validation failure, shown in the properties dialog only.
+    pub local_font_error: Option<String>,
     /// How an unapplied mark looks on the page: its outline colour (`/C`), the fill shown while
     /// the pointer is over it (a preference, not written to the file) and its opacity (`/CA`).
     pub outline: Rgb,
@@ -48,6 +50,7 @@ impl Default for RedactPrefs {
             code_set: REDACTION_CODE_SETS[0],
             codes: Vec::new(),
             look: Default::default(),
+            local_font_error: None,
             outline: [0.89, 0.13, 0.13],
             hover_fill: [0.89, 0.13, 0.13],
             opacity: 1.0,
@@ -512,13 +515,49 @@ pub(crate) fn props_body(ui: &mut egui::Ui, d: &mut RedactPrefs, _t: &Tokens) ->
                 let look = &mut d.look;
                 ui.label(tl!("Font:"));
                 ui.add_enabled_ui(on, |ui| {
-                    craft_ui::ComboBox::from_id_salt("overlay-font").selected_text(look.font.name()).show_ui(ui, |ui| {
+                    let label = look
+                        .selected_local_font()
+                        .map_or_else(|| look.font.name().to_owned(), |font| crate::font_picker::label(ui.ctx(), font.name()));
+                    craft_ui::ComboBox::from_id_salt("overlay-font").selected_text(label).show_ui(ui, |ui| {
                         for f in pdfcraft_engine::OverlayFont::ALL {
-                            ui.selectable_value(&mut look.font, f, f.name());
+                            if ui.selectable_label(look.local_font.is_none() && look.font == f, f.name()).clicked() {
+                                look.font = f;
+                                look.local_font = None;
+                                d.local_font_error = None;
+                            }
+                        }
+                        #[cfg(not(target_arch = "wasm32"))]
+                        if let Some(font) = crate::font_picker::choices(ui) {
+                            d.local_font_error =
+                                pdfcraft_engine::text_fonts::load_document_face(&font).and_then(|bytes| look.select_local_font(bytes)).err();
                         }
                     });
                 });
                 ui.end_row();
+                if on {
+                    if let Some(error) = &d.local_font_error {
+                        ui.label("");
+                        ui.add_sized(
+                            [220.0, 0.0],
+                            egui::Label::new(
+                                egui::RichText::new(format!("{} {error}", tl!("Could not load the local font."))).color(ui.visuals().error_fg_color),
+                            )
+                            .wrap(),
+                        );
+                        ui.end_row();
+                    } else if look.local_font.is_some() {
+                        ui.label("");
+                        ui.add_sized(
+                            [220.0, 0.0],
+                            egui::Label::new(
+                                egui::RichText::new(tl!("If you restart before applying the redaction, select the same installed font again."))
+                                    .small(),
+                            )
+                            .wrap(),
+                        );
+                        ui.end_row();
+                    }
+                }
                 ui.label(tl!("Font size:"));
                 ui.add_enabled_ui(on, |ui| {
                     ui.horizontal(|ui| {

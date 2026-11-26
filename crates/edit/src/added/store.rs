@@ -28,7 +28,7 @@ fn read_value<T>(doc: &Document, o: &Object, f: impl FnOnce(&Object) -> T) -> T 
     }
 }
 
-fn parse(doc: &Document, d: &Dict) -> Option<Content> {
+fn parse(doc: &Document, d: &Dict, local_face: Option<pdfcraft_fonts::embedding::ExplicitFace>) -> Option<Content> {
     let r = nums(doc, d.get(b"Rect"));
     let rect: [f64; 4] = r.try_into().ok()?;
     match d.name(b"Kind")? {
@@ -49,6 +49,7 @@ fn parse(doc: &Document, d: &Dict) -> Option<Content> {
             let mut t = AddedText {
                 rect,
                 text,
+                local_face,
                 family,
                 bold,
                 italic,
@@ -108,6 +109,8 @@ fn for_each_content_entry(doc: &Document, page: &pdfcraft_model::Page, mut visit
 /// Finds page marks and editable added content in one pass over the page content entries.
 pub fn scan_markers(doc: &Document) -> MarkerScan {
     let mut scan = MarkerScan::default();
+    let mut font_budget = 64usize << 20;
+    let mut faces = std::collections::HashMap::<ObjRef, Option<pdfcraft_fonts::embedding::ExplicitFace>>::new();
     for (pi, page) in page_list(doc).iter().enumerate() {
         for_each_content_entry(doc, page, |entry| {
             with_resolved(doc, entry, |resolved| {
@@ -137,7 +140,24 @@ pub fn scan_markers(doc: &Document) -> MarkerScan {
                 let Some(params_object) = dict.get(b"PCAdded") else { return };
                 with_resolved(doc, params_object, |resolved_params| {
                     let Some(params) = resolved_params.as_dict() else { return };
-                    if let Some(content) = parse(doc, params) {
+                    let local_face = params.get(b"PCTypeface").and_then(|font| {
+                        let reference = pdfcraft_fonts::embedding::ExplicitFace::program_ref(doc, font)?;
+                        if !faces.contains_key(&reference) && (faces.len() >= 64 || font_budget < 16 << 20) {
+                            return None;
+                        }
+                        faces
+                            .entry(reference)
+                            .or_insert_with(|| {
+                                let face = pdfcraft_fonts::embedding::ExplicitFace::from_pdf_program(doc, reference)?;
+                                font_budget = font_budget.saturating_sub(face.program_len());
+                                Some(face)
+                            })
+                            .clone()
+                    });
+                    if params.contains(b"PCTypeface") && local_face.is_none() {
+                        return; // Visible PDF content, but cannot be restyled with a different font silently.
+                    }
+                    if let Some(content) = parse(doc, params, local_face) {
                         // Display points depend on the page's /UserUnit. An item records the one it was
                         // written for; none means 1, as for items written before display space followed
                         // /UserUnit.
@@ -178,6 +198,12 @@ fn validate(c: &Content) -> Result<(), EditError> {
             }
             if (r[2] - r[0]).abs() < 1.0 {
                 return Err(EditError::Invalid("the text box is too narrow".into()));
+            }
+            if let Some(face) = &t.local_face {
+                if let Some(c) = face.first_missing(&t.text) {
+                    return Err(crate::undrawable(c));
+                }
+                return Ok(());
             }
             if t.text.chars().any(is_thai) && pdfcraft_fonts::document_thai_font().is_none() {
                 return Err(thai_error(GlyphError::NoFont, &t.text));
@@ -236,6 +262,13 @@ fn write(doc: &mut Document, page: usize, c: &Content, obj: Option<ObjRef>) -> R
     let mut sd = Dict::new();
     sd.set(b"PCMark".to_vec(), Object::name(TAG));
     let mut added = params(c);
+    if let Content::Text(t) = c
+        && t.local_face.is_some()
+        && let Some(fonts) = res.get(b"Font").and_then(Object::as_dict)
+        && let Some((_, font)) = fonts.iter().next()
+    {
+        added.set(b"PCTypeface".to_vec(), font.clone());
+    }
     if user_unit != 1.0 {
         added.set(b"UserUnit".to_vec(), Object::Real(user_unit));
     }

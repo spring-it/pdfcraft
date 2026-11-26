@@ -124,6 +124,54 @@ fn shared_properties_preserve_mixed_values_and_undo_the_whole_change() {
 }
 
 #[test]
+fn individual_and_bulk_installed_fonts_survive_save_and_undo() {
+    let phrase = "中文查核 123";
+    let Some(face) = pdfcraft_fonts::ui_chinese_fonts()
+        .into_iter()
+        .find(|face| pdfcraft_fonts::embedding::validate_document_input(face.bytes).is_ok() && pdfcraft_fonts::embedding::covers(face.bytes, phrase))
+    else {
+        return;
+    };
+    let program = std::sync::Arc::new(face.bytes.to_vec());
+    let (_, postscript) = pdfcraft_fonts::embedding::names(&program).unwrap();
+    let mut h = harness();
+
+    select(&mut h, &["alpha"]);
+    h.get_by_label("Text Field Properties");
+    h.get_by_label("Appearance").click();
+    h.run_steps(4);
+    h.state_mut().field_props.as_mut().unwrap().installed_font = Some((postscript.clone(), program.clone()));
+    h.get_by_label("OK").click();
+    h.run_steps(4);
+    assert_eq!(doc(&h).field_font_name("alpha").as_deref(), Some(postscript.as_str()));
+    assert_eq!(doc(&h).field_look("beta").unwrap().font, FieldFont::Times);
+    h.state_mut().execute("edit.undo");
+    h.run_steps(4);
+    assert_eq!(doc(&h).field_look("alpha").unwrap().font, FieldFont::Courier);
+
+    select(&mut h, &["alpha", "beta"]);
+    h.get_by_label("Shared Field Properties");
+    h.get_by_label("Appearance").click();
+    h.run_steps(4);
+    let bulk = h.state_mut().bulk_field_props.as_mut().unwrap();
+    bulk.font.apply = true;
+    bulk.installed_font = Some((postscript.clone(), program));
+    h.get_by_label("OK").click();
+    h.run_steps(4);
+    for name in ["alpha", "beta"] {
+        assert_eq!(doc(&h).field_font_name(name).as_deref(), Some(postscript.as_str()));
+        assert!(h.state_mut().apply_edit(Edit::SetFieldValue { name: name.into(), value: FieldValue::Text(phrase.into()) }));
+    }
+    let mut s = Session::new();
+    let id = s.open("saved.pdf", None, std::sync::Arc::new(bytes(&h)), None).unwrap();
+    let saved = s.get(id).unwrap();
+    for name in ["alpha", "beta"] {
+        assert_eq!(saved.field_font_name(name).as_deref(), Some(postscript.as_str()));
+        assert_eq!(saved.form.iter().find(|f| f.name == name).unwrap().value, [phrase]);
+    }
+}
+
+#[test]
 fn visiting_shared_property_tabs_without_changes_does_not_dirty_the_document() {
     let mut h = harness();
     let before = bytes(&h);

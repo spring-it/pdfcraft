@@ -1,4 +1,4 @@
-use super::{Calculate, FieldLook, FieldProps, FormField, FormFieldKind, Format, Validate};
+use super::{Calculate, FieldFont, FieldLook, FieldProps, FormField, FormFieldKind, Format, Validate};
 
 // ───────────────────────────────────────────────────────────────────────── Field Properties
 
@@ -23,6 +23,9 @@ impl crate::PdfCraftApp {
         let Some(f) = self.session.get(id).and_then(|d| d.form.iter().find(|f| f.name == name).cloned()) else { return };
         let mut d = FieldDraft::new(&f, widget);
         d.look = self.session.get(id).and_then(|doc| doc.field_look(name));
+        if let Some(font) = self.session.get(id).and_then(|doc| doc.field_font_name(name)) {
+            d.current_font_name = font;
+        }
         d.check_style = self.session.get(id).and_then(|doc| doc.field_check_style(name));
         if let Some(o) = d.original.as_mut() {
             o.look = d.look;
@@ -136,6 +139,11 @@ pub struct FieldDraft {
     /// `/MK /R`: 0, 90, 180 or 270 degrees counterclockwise.
     pub rotation: i64,
     pub look: Option<FieldLook>,
+    /// The actual face when no explicit new font has been chosen. Imported PDF fonts are kept.
+    pub current_font_name: String,
+    pub standard_font: Option<FieldFont>,
+    pub installed_font: Option<(String, std::sync::Arc<Vec<u8>>)>,
+    pub font_error: Option<String>,
     /// Check boxes and radio buttons: the mark when on (Options tab).
     pub check_style: Option<pdfcraft_engine::CheckStyle>,
     pub format: Format,
@@ -169,7 +177,7 @@ pub(crate) fn da_size(da: &str) -> f64 {
     size
 }
 
-pub(crate) fn da_font(da: &str) -> &str {
+fn da_font(da: &str) -> &str {
     let (mut two_back, mut previous, mut font) = ("", "", "Helv");
     for token in da.split_whitespace() {
         if token == "Tf" {
@@ -210,6 +218,10 @@ impl FieldDraft {
             position: [r[0], r[1], r[2] - r[0], r[3] - r[1]],
             rotation: f.widgets.get(widget).map(|w| w.rotation).unwrap_or(0),
             look: None,
+            current_font_name: da_font(&f.da).into(),
+            standard_font: None,
+            installed_font: None,
+            font_error: None,
             check_style: None,
             format: f.actions.format.clone(),
             validate: f.actions.validate.clone(),
@@ -255,10 +267,22 @@ impl FieldDraft {
         t
     }
 
+    pub(super) fn has_text_appearance(&self) -> bool {
+        matches!(self.kind, FormFieldKind::Text | FormFieldKind::Combo | FormFieldKind::List | FormFieldKind::PushButton)
+    }
+
     /// The properties that changed (`None` when nothing did).
     pub fn props(&self) -> Option<FieldProps> {
         let o = self.original.as_ref().as_ref()?;
         let ch = |a: bool, b: bool| (a != b).then_some(a);
+        let mut appearance = pdfcraft_engine::FieldLookPatch { font: self.standard_font, ..Default::default() };
+        if let (Some(before), Some(after)) = (o.look, self.look) {
+            appearance.border = (before.border != after.border).then_some(after.border);
+            appearance.fill = (before.fill != after.fill).then_some(after.fill);
+            appearance.width = (before.width != after.width).then_some(after.width);
+            appearance.style = (before.style != after.style).then_some(after.style);
+            appearance.text = (before.text != after.text).then_some(after.text);
+        }
         let p = FieldProps {
             name: (self.name.trim() != o.name).then(|| self.name.trim().to_string()),
             tooltip: (self.tooltip != o.tooltip).then(|| self.tooltip.clone()),
@@ -276,8 +300,9 @@ impl FieldDraft {
                 (self.widget, [x, y, x + w.max(4.0), y + h.max(4.0)])
             }),
             rotation: (self.rotation != o.rotation).then_some((self.widget, self.rotation)),
-            look: (self.look != o.look).then_some(self.look).flatten(),
-            appearance: None,
+            look: None,
+            appearance: (appearance != pdfcraft_engine::FieldLookPatch::default()).then_some(appearance),
+            installed_font: self.installed_font.as_ref().map(|(_, bytes)| bytes.clone()),
             check_style: (self.check_style != o.check_style).then_some(self.check_style).flatten(),
             format: (self.format != o.format).then(|| self.format.clone()),
             validate: (self.validate != o.validate).then(|| self.validate.clone()),

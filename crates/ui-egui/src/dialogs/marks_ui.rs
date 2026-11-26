@@ -173,6 +173,7 @@ impl MarksDraft {
         if kind == MarkKind::Watermark {
             self.custom_enabled = false;
             self.custom_pages.clear();
+            self.watermark_font_error = None;
         }
     }
 }
@@ -207,6 +208,7 @@ fn pages_phrase(pages: &[usize], one: &str, many: &str) -> String {
 #[derive(Clone, Debug, PartialEq)]
 pub struct MarksDraft {
     pub hf: HeaderFooter,
+    hf_font_error: Option<String>,
     pub wm: Watermark,
     pub bg: Background,
     pub range: PageRange,
@@ -227,8 +229,10 @@ pub struct MarksDraft {
     /// The page (0-based) the preview was stepped to; `None` previews the current page. Reset
     /// each time the dialog opens.
     pub preview: Option<usize>,
-    /// Windows system font family used to rasterize Chinese watermark text.
+    /// Legacy watermark font preset when no explicit installed face was chosen.
     pub font_family: usize,
+    pub(crate) watermark_font: Option<crate::watermark_text::InstalledFont>,
+    watermark_font_error: Option<String>,
     /// Optional 1-based custom page selection for watermark operations.
     pub custom_enabled: bool,
     pub custom_pages: String,
@@ -238,6 +242,7 @@ impl Default for MarksDraft {
     fn default() -> Self {
         Self {
             hf: HeaderFooter::default(),
+            hf_font_error: None,
             wm: Watermark {
                 text: "内部资料".into(),
                 font_size: 15.0,
@@ -263,6 +268,8 @@ impl Default for MarksDraft {
             backdrops: BackdropCheck::default(),
             preview: None,
             font_family: 0,
+            watermark_font: None,
+            watermark_font_error: None,
             custom_enabled: false,
             custom_pages: String::new(),
         }
@@ -550,6 +557,7 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     d.preview = Some(preview_page);
     let page = doc.info.pages.get(preview_page).map(|p| (p.width as f64, p.height as f64)).unwrap_or((612.0, 792.0));
     let mut browse = false;
+    let mut preview_error = false;
     let title = if d.replace { "更新水印" } else { "添加水印" };
     ui.label(egui::RichText::new(title).font(theme::brand(18.0)));
     ui.add_space(8.0);
@@ -596,20 +604,45 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             });
             ui.horizontal_wrapped(|ui| {
                 let font_label = ui.label("字体");
-                craft_ui::ComboBox::from_id_salt("wofei-watermark-font")
-                    .selected_text(["微软雅黑", "黑体", "Arial", "Georgia", "等宽字体"][d.font_family.min(4)])
-                    .show_ui(ui, |ui| {
-                        for (i, label) in ["微软雅黑", "黑体", "Arial", "Georgia", "等宽字体"].iter().enumerate() {
-                            ui.selectable_value(&mut d.font_family, i, *label);
-                        }
-                    })
-                    .response
-                    .labelled_by(font_label.id);
+                let presets = ["微软雅黑", "黑体", "Arial", "Georgia", "等宽字体"];
+                let selected = d.watermark_font.as_ref().map_or_else(|| presets[d.font_family.min(4)].to_owned(), |font| font.label.clone());
+                ui.add_enabled_ui(!d.use_file, |ui| {
+                    craft_ui::ComboBox::from_id_salt("wofei-watermark-font")
+                        .selected_text(selected)
+                        .show_ui(ui, |ui| {
+                            for (i, label) in presets.into_iter().enumerate() {
+                                if ui.selectable_label(d.watermark_font.is_none() && d.font_family == i, label).clicked() {
+                                    d.font_family = i;
+                                    d.watermark_font = None;
+                                    d.watermark_font_error = None;
+                                    ui.close();
+                                }
+                            }
+                            #[cfg(not(target_arch = "wasm32"))]
+                            if let Some(face) = crate::font_picker::raster_choices(ui) {
+                                let language = crate::i18n::current().code();
+                                match crate::watermark_text::InstalledFont::from_picker(face, language) {
+                                    Ok(font) => {
+                                        d.watermark_font = Some(font);
+                                        d.watermark_font_error = None;
+                                    }
+                                    Err(e) => d.watermark_font_error = Some(format!("无法加载本机字体：{e}")),
+                                }
+                            }
+                        })
+                        .response
+                        .labelled_by(font_label.id);
+                });
                 let size_label = ui.label("字号");
                 ui.add(egui::Slider::new(&mut d.wm.font_size, 8.0..=100.0).suffix(" pt")).labelled_by(size_label.id);
                 ui.label("颜色");
                 color_button(ui, &mut d.wm.color);
             });
+            if !d.use_file
+                && let Some(message) = &d.watermark_font_error
+            {
+                ui.colored_label(ui.visuals().error_fg_color, message);
+            }
             ui.horizontal_wrapped(|ui| {
                 ui.label("旋转");
                 for angle in [-45.0, 0.0, 45.0] {
@@ -682,13 +715,14 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             right.label(egui::RichText::new("实时预览").font(theme::brand(15.0)));
             right.add_space(6.0);
             let file_name = d.file.as_ref().filter(|_| d.use_file).map(|f| f.0.as_str());
-            watermark_preview(
+            preview_error = watermark_preview(
                 right,
                 t,
                 WatermarkPreviewArgs {
                     size: page,
                     watermark: &d.wm,
                     file_name,
+                    installed: d.watermark_font.as_ref(),
                     use_file: d.use_file,
                     canvas_width: right_width,
                     canvas_height: preview_height,
@@ -716,7 +750,10 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
     });
     ui.add_space(8.0);
     let has_source = if d.use_file { d.file.is_some() } else { !d.wm.text.trim().is_empty() };
-    let ready = has_source && selected_pages(d, count).is_ok_and(|pages| !pages.is_empty());
+    let ready = has_source
+        && !preview_error
+        && (d.use_file || d.watermark_font_error.is_none())
+        && selected_pages(d, count).is_ok_and(|pages| !pages.is_empty());
     let mut apply = false;
     let mut cancel = false;
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -750,14 +787,89 @@ struct WatermarkPreviewArgs<'a> {
     size: (f64, f64),
     watermark: &'a Watermark,
     file_name: Option<&'a str>,
+    installed: Option<&'a crate::watermark_text::InstalledFont>,
     use_file: bool,
     canvas_width: f32,
     canvas_height: f32,
 }
 
+#[derive(Clone)]
+struct WatermarkPreviewImage {
+    texture: egui::TextureHandle,
+    points: egui::Vec2,
+}
+
+/// Rasterize a selected installed face only when the actual pixels change, not on every UI
+/// frame or after edits that position/repeat the already drawn text.
+#[derive(Clone)]
+struct WatermarkPreviewTexture {
+    font: crate::watermark_text::InstalledFont,
+    text: String,
+    size: f64,
+    color: [f64; 3],
+    texture_limit: u32,
+    result: Result<WatermarkPreviewImage, String>,
+}
+
+fn installed_watermark_preview(
+    ui: &egui::Ui,
+    font: &crate::watermark_text::InstalledFont,
+    mark: &Watermark,
+) -> Result<WatermarkPreviewImage, String> {
+    let id = ui.scope_id().with("watermark-installed-face");
+    let texture_limit = ui.input(|i| i.max_texture_side).clamp(1, 4096) as u32;
+    let cached = ui.data(|d| d.get_temp::<WatermarkPreviewTexture>(id));
+    if let Some(cached) = cached
+        && &cached.font == font
+        && cached.text == mark.text
+        && cached.size == mark.font_size
+        && cached.color == mark.color
+        && cached.texture_limit == texture_limit
+    {
+        return cached.result;
+    }
+    let result = crate::watermark_text::raster(&mark.text, mark.font_size, mark.color, 0, Some(font)).and_then(|original| {
+        use resvg::tiny_skia::{FilterQuality, Pixmap, PixmapPaint, Transform};
+        let [width, height] = [original.width(), original.height()];
+        let points = vec2(width as f32, height as f32) / crate::watermark_text::DPI as f32;
+        let reduced;
+        let image = if width.max(height) > texture_limit {
+            // The export can be wider than a GPU texture. Shrink only the preview pixels;
+            // the visual size/spacing on its page continue to reflect the exported image.
+            let factor = texture_limit as f32 / width.max(height) as f32;
+            let (w, h) = ((width as f32 * factor).ceil() as u32, (height as f32 * factor).ceil() as u32);
+            let mut small = Pixmap::new(w.clamp(1, texture_limit), h.clamp(1, texture_limit)).ok_or("无法创建水印预览。")?;
+            let paint = PixmapPaint { quality: FilterQuality::Bilinear, ..PixmapPaint::default() };
+            small.draw_pixmap(0, 0, original.as_ref(), &paint, Transform::from_scale(factor, factor), None);
+            reduced = small;
+            &reduced
+        } else {
+            &original
+        };
+        let data = egui::ColorImage::from_rgba_premultiplied([image.width() as usize, image.height() as usize], image.data());
+        let texture = ui.ctx().load_texture("watermark-installed-face-preview", data, egui::TextureOptions::LINEAR);
+        Ok(WatermarkPreviewImage { texture, points })
+    });
+    ui.data_mut(|d| {
+        d.insert_temp(
+            id,
+            WatermarkPreviewTexture {
+                font: font.clone(),
+                text: mark.text.clone(),
+                size: mark.font_size,
+                color: mark.color,
+                texture_limit,
+                result: result.clone(),
+            },
+        )
+    });
+    result
+}
+
 /// Large page preview used by the two-column watermark dialog.
-fn watermark_preview(ui: &mut egui::Ui, t: &Tokens, args: WatermarkPreviewArgs<'_>) {
-    let WatermarkPreviewArgs { size, watermark: wm, file_name, use_file, canvas_width, canvas_height } = args;
+fn watermark_preview(ui: &mut egui::Ui, t: &Tokens, args: WatermarkPreviewArgs<'_>) -> bool {
+    let WatermarkPreviewArgs { size, watermark: wm, file_name, installed, use_file, canvas_width, canvas_height } = args;
+    let selected = installed.filter(|_| !use_file && !wm.text.trim().is_empty()).map(|font| installed_watermark_preview(ui, font, wm));
     let (w, h) = (size.0.max(1.0), size.1.max(1.0));
     let canvas_size = vec2(canvas_width.max(1.0), canvas_height.max(0.0));
     let (canvas, _) = ui.allocate_exact_size(canvas_size, egui::Sense::hover());
@@ -789,27 +901,51 @@ fn watermark_preview(ui: &mut egui::Ui, t: &Tokens, args: WatermarkPreviewArgs<'
             }
             return;
         }
+        if matches!(selected, Some(Err(_))) {
+            return;
+        }
+        let angle = -(wm.rotation as f32).to_radians();
         let text = if wm.text.trim().is_empty() { "内部资料" } else { wm.text.trim() };
         let size = (wm.font_size as f32 * scale).max(5.0);
-        let galley = painter.layout_no_wrap(text.to_string(), theme::company(size), rgb32(wm.color).gamma_multiply(wm.opacity as f32));
-        let angle = -(wm.rotation as f32).to_radians();
-        let half = galley.size() / 2.0;
-        let (sn, cs) = angle.sin_cos();
-        let text_offset = vec2(half.x * cs - half.y * sn, half.x * sn + half.y * cs);
-        let draw_one = |centre: egui::Pos2| {
-            painter.add(egui::epaint::TextShape::new(centre - text_offset, galley.clone(), Color32::BLACK).with_angle(angle));
+        let image = selected.as_ref().and_then(|result| result.as_ref().ok());
+        let galley = image
+            .is_none()
+            .then(|| painter.layout_no_wrap(text.to_string(), theme::company(size), rgb32(wm.color).gamma_multiply(wm.opacity as f32)));
+        let extent = if let Some(image) = image {
+            image.points * scale
+        } else if let Some(galley) = &galley {
+            galley.size()
+        } else {
+            return;
         };
+        let half = extent / 2.0;
+        let rotation = egui::emath::Rot2::from_angle(angle);
+        let text_offset = rotation * half;
         let clipped = painter.with_clip_rect(page);
+        let draw_one = |centre: egui::Pos2| {
+            if let Some(image) = image {
+                let mut mesh = egui::epaint::Mesh::with_texture(image.texture.id());
+                mesh.add_rect_with_uv(
+                    Rect::from_center_size(centre, extent),
+                    Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+                    Color32::WHITE.gamma_multiply(wm.opacity as f32),
+                );
+                mesh.rotate(rotation, centre);
+                clipped.add(egui::Shape::mesh(mesh));
+            } else if let Some(galley) = &galley {
+                clipped.add(egui::epaint::TextShape::new(centre - text_offset, galley.clone(), Color32::BLACK).with_angle(angle));
+            }
+        };
         if wm.tile {
-            let step_x = (galley.size().x + wm.tile_gap[0] as f32 * scale).max(24.0);
-            let step_y = (galley.size().y + wm.tile_gap[1] as f32 * scale).max(24.0);
+            let step_x = (extent.x + wm.tile_gap[0] as f32 * scale).max(24.0);
+            let step_y = (extent.y + wm.tile_gap[1] as f32 * scale).max(24.0);
             let mut y = page.top() - step_y;
             let mut row = 0;
             while y < page.bottom() + step_y && row < 30 {
                 let mut x = page.left() - step_x + if row % 2 == 0 { 0.0 } else { step_x / 2.0 };
                 let mut col = 0;
                 while x < page.right() + step_x && col < 30 {
-                    clipped.add(egui::epaint::TextShape::new(pos2(x, y) - text_offset, galley.clone(), Color32::BLACK).with_angle(angle));
+                    draw_one(pos2(x, y));
                     x += step_x;
                     col += 1;
                 }
@@ -830,6 +966,12 @@ fn watermark_preview(ui: &mut egui::Ui, t: &Tokens, args: WatermarkPreviewArgs<'
     } else {
         draw_content();
         draw_mark();
+    }
+    if let Some(Err(message)) = selected {
+        ui.colored_label(ui.visuals().error_fg_color, message);
+        true
+    } else {
+        false
     }
 }
 
@@ -859,11 +1001,29 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
             ui.horizontal(|ui| {
                 // The standard faces a header can be drawn in (#3754).
                 ui.label(tl!("Font:"));
-                craft_ui::ComboBox::from_id_salt("hf-font").selected_text(d.hf.font.label()).width(100.0).show_ui(ui, |ui| {
-                    for f in [FontFamily::Helvetica, FontFamily::Times, FontFamily::Courier] {
-                        ui.selectable_value(&mut d.hf.font, f, f.label());
-                    }
-                });
+                let label = d.hf.local_face.as_ref().map_or(d.hf.font.label(), |f| f.name());
+                craft_ui::ComboBox::from_id_salt("hf-font").selected_text(crate::font_picker::label(ui.ctx(), label)).width(128.0).show_ui(
+                    ui,
+                    |ui| {
+                        for f in [FontFamily::Helvetica, FontFamily::Times, FontFamily::Courier] {
+                            if ui.selectable_label(d.hf.local_face.is_none() && d.hf.font == f, f.label()).clicked() {
+                                d.hf.font = f;
+                                d.hf.local_face = None;
+                                d.hf_font_error = None;
+                            }
+                        }
+                        #[cfg(not(target_arch = "wasm32"))]
+                        if let Some(font) = crate::font_picker::choices(ui) {
+                            match pdfcraft_engine::text_fonts::load_document_face(&font).and_then(pdfcraft_fonts::embedding::ExplicitFace::new) {
+                                Ok(face) => {
+                                    d.hf.local_face = Some(face);
+                                    d.hf_font_error = None;
+                                }
+                                Err(error) => d.hf_font_error = Some(error),
+                            }
+                        }
+                    },
+                );
                 ui.label(tl!("Size"));
                 ui.add(egui::DragValue::new(&mut d.hf.font_size).range(4.0..=72.0).speed(0.5));
                 ui.add(widgets::checkbox(&mut d.hf.underline, tl!("Underline")));
@@ -927,6 +1087,9 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                 ui.add(egui::DragValue::new(&mut d.hf.start_number).range(1..=999_999));
             });
             ui.add(widgets::checkbox(&mut d.hf.shrink, tl!("Shrink the page content to make room for the header and footer")));
+            if let Some(error) = &d.hf_font_error {
+                ui.label(egui::RichText::new(error).color(ui.visuals().error_fg_color));
+            }
         }
         MarkKind::Watermark => {
             ui.horizontal(|ui| {
@@ -1291,7 +1454,10 @@ fn watermark_file(d: &MarksDraft) -> Result<Option<pdfcraft_engine::MarkFile>, S
     if d.use_file {
         return Ok(mark_file(d));
     }
-    let png = crate::watermark_text::png(&d.wm.text, d.wm.font_size, d.wm.color, d.font_family)?;
+    if let Some(error) = &d.watermark_font_error {
+        return Err(error.clone());
+    }
+    let png = crate::watermark_text::png(&d.wm.text, d.wm.font_size, d.wm.color, d.font_family, d.watermark_font.as_ref())?;
     Ok(Some(pdfcraft_engine::MarkFile { name: "wofei-watermark.png".into(), bytes: std::sync::Arc::new(png), page: 0 }))
 }
 
@@ -1507,6 +1673,99 @@ mod company_watermark_tests {
             (normal_portrait.x / normal_portrait.y - original_aspect).abs() < 0.01,
             "ordinary portrait pages should retain their natural aspect ratio: {normal_portrait:?}"
         );
+    }
+
+    /// Assemble a TTC from static TrueType fixtures. Its table offsets are relative to the
+    /// collection rather than the embedded standalone face header.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn watermark_fixture_collection(faces: &[&[u8]]) -> Vec<u8> {
+        let mut out = b"ttcf\x00\x01\x00\x00".to_vec();
+        out.extend_from_slice(&(faces.len() as u32).to_be_bytes());
+        out.resize(12 + 4 * faces.len(), 0);
+        for (index, font) in faces.iter().enumerate() {
+            while !out.len().is_multiple_of(4) {
+                out.push(0);
+            }
+            let start = out.len();
+            out[12 + 4 * index..16 + 4 * index].copy_from_slice(&(start as u32).to_be_bytes());
+            out.extend_from_slice(font);
+            let tables = u16::from_be_bytes(font[4..6].try_into().unwrap());
+            for i in 0..usize::from(tables) {
+                let field = start + 20 + 16 * i;
+                let relative = u32::from_be_bytes(out[field..field + 4].try_into().unwrap());
+                out[field..field + 4].copy_from_slice(&(relative + start as u32).to_be_bytes());
+            }
+        }
+        out
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn selected_installed_watermark_font_changes_the_saved_pixels_and_never_silently_falls_back() {
+        let directory = tempfile::tempdir().unwrap();
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts");
+        let inter = std::fs::read(dir.join("Inter-Regular.ttf")).unwrap();
+        let mono = std::fs::read(dir.join("JetBrainsMono-Regular.ttf")).unwrap();
+        std::fs::write(directory.path().join("TextFaces.ttc"), watermark_fixture_collection(&[&inter, &mono])).unwrap();
+        let faces = pdfcraft_engine::text_fonts::discover_desktop(&[directory.path().to_owned()]);
+        let select = |name| {
+            let face = faces.iter().find(|f| f.names.postscript == name).expect("installed font discovered");
+            crate::watermark_text::InstalledFont::from_picker(face.clone(), "zh-hans").expect("font can be rasterized")
+        };
+        let mut draft = MarksDraft::default();
+        draft.wm.text = "Draft iiiWWW".into();
+        draft.wm.tile = false;
+        draft.watermark_font = Some(select("Inter-Regular"));
+        let a = watermark_file(&draft).unwrap().unwrap().bytes;
+        draft.watermark_font = Some(select("JetBrainsMono-Regular"));
+        let b = watermark_file(&draft).unwrap().unwrap().bytes;
+        let (a_pixels, b_pixels) = (resvg::tiny_skia::Pixmap::decode_png(&a).unwrap(), resvg::tiny_skia::Pixmap::decode_png(&b).unwrap());
+        assert_ne!(a_pixels.width(), b_pixels.width(), "changing the actual face must change the watermark's glyph metrics");
+
+        let mut session = pdfcraft_engine::Session::new();
+        let original = session.create_from_text("Sample", "A PDF to protect").unwrap();
+        let id = session.open("sample.pdf", None, original, None).unwrap();
+        session.apply(id, edit(&draft, MarkKind::Watermark, 1).unwrap()).unwrap();
+        let saved = session.save_bytes(id).unwrap();
+        let reopened = pdfcraft_cos::Document::open(saved).unwrap();
+        assert!(!pdfcraft_model::pages(&reopened).is_empty());
+        let width = i64::from(b_pixels.width());
+        let height = i64::from(b_pixels.height());
+        assert!(
+            reopened.scan_objects().any(|(_, o)| matches!(
+                o.as_ref(), pdfcraft_cos::Object::Stream(s) if s.dict.name(b"Subtype") == Some(b"Image") &&
+                    s.dict.int(b"Width") == Some(width) && s.dict.int(b"Height") == Some(height)
+            )),
+            "the PDF must contain the installed face's raster, not just its name in the dropdown"
+        );
+        let mut long = draft.wm.clone();
+        long.text = "M".repeat(50);
+        long.font_size = 60.0;
+        let ctx = egui::Context::default();
+        let _ = ctx.run_ui(egui::RawInput { max_texture_side: Some(1024), ..Default::default() }, |ui| {
+            let preview = installed_watermark_preview(ui, draft.watermark_font.as_ref().unwrap(), &long).unwrap();
+            assert!(preview.texture.size()[0] <= 1024, "wide preview must fit the backend");
+            assert!(preview.points.x * crate::watermark_text::DPI as f32 > 1024.0, "preview retains the actual page-space size");
+        });
+        draft.wm.text = "机密文件".into();
+        assert!(edit(&draft, MarkKind::Watermark, 1).unwrap_err().contains("水印字体缺少字符"), "explicit fonts never silently swap faces");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn chinese_installed_watermark_face_uses_the_native_name_and_draws_chinese() {
+        let Some(cjk) = pdfcraft_fonts::ui_chinese_fonts().into_iter().find(|face| face.family.contains("WenKai")) else { return };
+        let inter = include_bytes!("../../../../assets/fonts/Inter-Regular.ttf");
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("ChineseFace.ttc"), watermark_fixture_collection(&[inter, cjk.bytes])).unwrap();
+        let catalog = pdfcraft_engine::text_fonts::discover_desktop(&[directory.path().to_owned()]);
+        let face = catalog.into_iter().find(|face| face.names.family.contains("WenKai")).expect("Chinese TTC member");
+        let installed = crate::watermark_text::InstalledFont::from_picker(face, "zh-hans").unwrap();
+        assert!(installed.label.contains("文楷"), "read the actual Chinese name from the name table: {:?}", installed.label);
+        let mut draft = MarksDraft::default();
+        draft.watermark_font = Some(installed);
+        draft.wm.text = "机密文件".into();
+        assert!(watermark_file(&draft).unwrap().unwrap().bytes.len() > 400);
     }
 
     #[test]

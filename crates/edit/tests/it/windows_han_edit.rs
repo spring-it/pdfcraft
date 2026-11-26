@@ -159,3 +159,35 @@ fn typewriter_and_text_box_write_real_unicode_appearances() {
         }
     }
 }
+
+#[test]
+fn chosen_local_face_is_saved_for_add_text_and_header_and_can_be_reedited() {
+    use pdfcraft_edit::{AddedText, Content, Context, HeaderFooter};
+    let Some(choice) =
+        pdfcraft_fonts::ui_chinese_fonts().into_iter().find_map(|f| pdfcraft_fonts::embedding::ExplicitFace::new(f.bytes.to_vec()).ok())
+    else {
+        if std::env::var("CRAFT_FONTS_REQUIRED").as_deref() == Ok("1") {
+            panic!("required build must ship an approved Chinese font fixture");
+        }
+        return;
+    };
+    let mut doc = styled_text_page("Helvetica");
+    let t = AddedText { text: "核准文件 ABC".into(), rect: [30.0, 110.0, 555.0, 155.0], local_face: Some(choice.clone()), ..Default::default() };
+    pdfcraft_edit::add_content(&mut doc, 0, &Content::Text(t)).unwrap();
+    let mut header = HeaderFooter { local_face: Some(choice.clone()), ..Default::default() };
+    header.text[0] = "第 <<1>> 頁 HDR".into();
+    pdfcraft_edit::add_header_footer(&mut doc, &[0], &header, false, &Context { date: (2026, 11, 26) }).unwrap();
+    let mut saved = reopen(&doc);
+    let mut found = pdfcraft_edit::list_added(&saved).into_iter().next().unwrap();
+    let Content::Text(t) = &mut found.content else { panic!("the saved item is text") };
+    assert_eq!(t.local_face.as_ref().map(|f| f.name()), Some(choice.name()));
+    let lines = text::text_lines(&saved, 0).unwrap();
+    for phrase in ["核准文件 ABC", "第 1 頁 HDR"] {
+        assert!(lines.iter().any(|l| l.text.contains(phrase) && l.font.starts_with("PCFull")), "{phrase}: {lines:?}");
+    }
+    t.text = "這是重新編輯".into();
+    pdfcraft_edit::update_content(&mut saved, 0, 0, &found.content).unwrap();
+    let changed = reopen(&saved);
+    let lines = text::text_lines(&changed, 0).unwrap();
+    assert!(lines.iter().any(|l| l.text == "這是重新編輯" && l.font.starts_with("PCFull")), "{lines:?}");
+}

@@ -105,6 +105,46 @@ pub(super) fn draw_laid_shaped(
     Ok(())
 }
 
+fn draw_explicit(
+    doc: &mut Document,
+    t: &AddedText,
+    face: &pdfcraft_fonts::embedding::ExplicitFace,
+    taken: &Dict,
+    out: &mut Vec<u8>,
+) -> Result<Dict, EditError> {
+    let lines = wrapped(t);
+    let rows = lines.iter().map(|(text, ..)| face.layout(text).map_err(EditError::Invalid)).collect::<Result<Vec<_>, _>>()?;
+    let mut fonts = taken.clone();
+    let (resource, encoded) = face.embed_rows(doc, &mut fonts, &rows).map_err(EditError::Invalid)?;
+    let mut own_fonts = Dict::new();
+    if let Some(f) = fonts.get(resource.as_bytes()) {
+        own_fonts.set(resource.as_bytes().to_vec(), f.clone());
+    }
+    let r = text_rect(t);
+    let paragraphs: Vec<usize> = lines.iter().map(|(_, _, p)| *p).collect();
+    out.extend(format!("BT /{resource} {} Tf {}\n", n(t.size), t.fill_op()).bytes());
+    for (i, ((line, rtl, _), (row, cids))) in lines.iter().zip(rows.iter().zip(encoded)).enumerate() {
+        let logical: String = line.encode_utf16().map(|u| format!("{u:04X}")).collect();
+        out.extend(format!("/Span <</ActualText <FEFF{logical}>>> BDC\n").bytes());
+        let width = row.advance * t.size + t.char_spacing * row.glyphs.len() as f64;
+        let (x, _) = placed(t, r, &paragraphs, i, width, line.matches(' ').count(), *rtl);
+        let y = r[3] - (i as f64 * 1.2 + 0.95) * t.size;
+        for (j, (glyph, cid)) in row.glyphs.iter().zip(cids).enumerate() {
+            out.extend(
+                format!(
+                    "1 0 0 1 {} {} Tm <{cid:04X}> Tj\n",
+                    n(x + glyph.position[0] * t.size + j as f64 * t.char_spacing),
+                    n(y + glyph.position[1] * t.size)
+                )
+                .bytes(),
+            );
+        }
+        out.extend_from_slice(b"EMC\n");
+    }
+    out.extend_from_slice(b"ET\n");
+    Ok(own_fonts)
+}
+
 /// Content and resources for an item; `view` maps display space to user space. `taken` holds the
 /// page's font names. `existing`: the item is being replaced, so a build without the Arabic or
 /// Hebrew face keeps drawing that text as `?`, as before it was supported, rather than refusing to
@@ -123,6 +163,12 @@ pub(super) fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict
     .into_bytes();
     match c {
         Content::Text(t) => {
+            if let Some(face) = &t.local_face {
+                let fonts = draw_explicit(doc, t, face, taken, &mut out)?;
+                res.set(b"Font".to_vec(), Object::Dict(fonts));
+                out.extend_from_slice(b"Q\n");
+                return Ok((out, res));
+            }
             let base = t.family.base_font(t.bold, t.italic);
             let name = font_name(base);
             let mut font = Dict::new();

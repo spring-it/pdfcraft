@@ -1,6 +1,6 @@
 use super::join::{check_join, join_radio_group};
 use super::look::{BorderStyle, da_string, patch_da, patch_widget_look, redraw_widgets};
-use super::tree::{ancestor_sets, attach, check_place, child_named, clash, detach, ensure_form, inherited, name_parts, own_inherited};
+use super::tree::{ancestor_sets, attach, check_place, child_named, clash, detach, ensure_form, inherited, install_font, name_parts, own_inherited};
 use super::{Dict, Document, Field, FieldKind, FieldProps, FormError, MIN_FIELD_SIDE, ObjRef, Object, PdfString, fields, flags, invalid};
 
 /// Re-point a choice field's `/I`, positions in `/Opt`, at the new list `exports` after `/Opt` was
@@ -137,6 +137,21 @@ fn set_props_target(doc: &mut Document, name: &str, object: Option<ObjRef>, prop
     }
     let all = fields(doc);
     let f = all.iter().find(|f| f.name == name && object.is_none_or(|obj| f.obj == obj)).ok_or_else(|| FormError::NoSuchField(name.into()))?.clone();
+    let installed = props
+        .installed_font
+        .as_ref()
+        .map(|bytes| {
+            if !matches!(f.kind, FieldKind::Text | FieldKind::Combo | FieldKind::List | FieldKind::PushButton) {
+                return invalid("this kind of field has no editable text font");
+            }
+            if props.look.is_some() || props.appearance.is_some_and(|patch| patch.font.is_some()) {
+                return invalid("choose either a standard or an installed field font");
+            }
+            pdfcraft_fonts::embedding::validate_document_input(bytes).map_err(FormError::Invalid)?;
+            let (_, postscript) = pdfcraft_fonts::embedding::names(bytes).map_err(FormError::Invalid)?;
+            Ok((bytes, postscript))
+        })
+        .transpose()?;
     let export_options = props.export_value.as_ref().map(|(index, value)| button_export_options(&f, *index, value)).transpose()?;
     if props.export_value.is_some() && props.options.is_some() {
         return invalid("give export_value or options, not both");
@@ -191,9 +206,11 @@ fn set_props_target(doc: &mut Document, name: &str, object: Option<ObjRef>, prop
     let (new_name, join) = rename_field(doc, &all, &f, name, props)?;
     // The new default appearance when the size or the look changes.
     let size = props.font_size.unwrap_or_else(|| crate::appearance::parse_da(&f.da).size);
+    let installed_resource = installed.map(|(bytes, name)| install_font(doc, bytes, &name)).transpose()?;
+    let installed_resource = installed_resource.as_deref();
     let new_da = match &props.look {
         Some(l) => da_string(l.font, size, l.text),
-        None => patch_da(&f.da, props.font_size, &props.appearance.unwrap_or_default()),
+        None => patch_da(&f.da, props.font_size, &props.appearance.unwrap_or_default(), installed_resource),
     };
     if props.look.is_some() || props.appearance.is_some_and(|p| p.font.is_some()) {
         ensure_form(doc)?;
@@ -301,17 +318,21 @@ fn set_props_target(doc: &mut Document, name: &str, object: Option<ObjRef>, prop
             }
             None => {}
         }
-        if props.font_size.is_some() || props.look.is_some() || props.appearance.is_some_and(|p| p.font.is_some() || p.text.is_some()) {
+        if props.font_size.is_some()
+            || props.look.is_some()
+            || props.appearance.is_some_and(|p| p.font.is_some() || p.text.is_some())
+            || installed_resource.is_some()
+        {
             d.set(b"DA".to_vec(), PdfString::literal(new_da.clone().into_bytes()));
         }
     })?;
-    if props.appearance.is_some() || (props.font_size.is_some() && props.look.is_none()) {
+    if props.appearance.is_some() || (props.font_size.is_some() && props.look.is_none()) || installed_resource.is_some() {
         let patch = &props.appearance.unwrap_or_default();
         for w in &f.widgets {
             patch_widget_look(doc, w, patch)?;
             // A widget's own /DA overrides its field's /DA. Patch that override separately
             // rather than replacing its font or colour with the first widget's defaults.
-            if w.obj != f.obj && (props.font_size.is_some() || patch.font.is_some() || patch.text.is_some()) {
+            if w.obj != f.obj && (props.font_size.is_some() || patch.font.is_some() || patch.text.is_some() || installed_resource.is_some()) {
                 let da = doc
                     .get(w.obj)
                     .as_dict()
@@ -319,7 +340,7 @@ fn set_props_target(doc: &mut Document, name: &str, object: Option<ObjRef>, prop
                     .map(|v| doc.resolve(&v))
                     .and_then(|v| v.as_string().map(|s| s.to_text()));
                 if let Some(da) = da {
-                    let da = patch_da(&da, props.font_size, patch);
+                    let da = patch_da(&da, props.font_size, patch, installed_resource);
                     doc.update_dict(w.obj, |d| d.set(b"DA".to_vec(), PdfString::literal(da.into_bytes())))?;
                 }
             }

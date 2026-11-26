@@ -31,15 +31,15 @@ pub enum FilePurpose {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn discover_fonts_safely(
-    discover: impl FnOnce() -> Vec<pdfcraft_engine::text_fonts::FontFile> + std::panic::UnwindSafe,
-) -> Vec<pdfcraft_engine::text_fonts::FontFile> {
+    discover: impl FnOnce() -> Vec<pdfcraft_engine::text_fonts::InstalledFace> + std::panic::UnwindSafe,
+) -> Vec<pdfcraft_engine::text_fonts::InstalledFace> {
     std::panic::catch_unwind(discover).unwrap_or_default()
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Default)]
 struct FontScanCache {
-    files: Option<Vec<pdfcraft_engine::text_fonts::FontFile>>,
+    files: Option<Arc<Vec<pdfcraft_engine::text_fonts::InstalledFace>>>,
     loading: bool,
 }
 
@@ -54,8 +54,8 @@ impl FontScanCache {
         true
     }
 
-    fn finish(&mut self, files: Vec<pdfcraft_engine::text_fonts::FontFile>) {
-        self.files = Some(files);
+    fn finish(&mut self, files: Vec<pdfcraft_engine::text_fonts::InstalledFace>) {
+        self.files = Some(Arc::new(files));
         self.loading = false;
     }
 }
@@ -63,7 +63,7 @@ impl FontScanCache {
 /// Discover installed document fonts off the GUI thread. Reload permits retrying a
 /// failed scan or discovering newly installed fonts without restarting the app.
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn installed_font_files(ctx: &egui::Context, reload: bool) -> Option<Vec<pdfcraft_engine::text_fonts::FontFile>> {
+pub(crate) fn installed_font_files(ctx: &egui::Context, reload: bool) -> Option<Arc<Vec<pdfcraft_engine::text_fonts::InstalledFace>>> {
     use std::sync::{Mutex, OnceLock};
     type Files = Arc<Mutex<FontScanCache>>;
     static CACHE: OnceLock<Files> = OnceLock::new();
@@ -75,7 +75,8 @@ pub(crate) fn installed_font_files(ctx: &egui::Context, reload: bool) -> Option<
         if std::thread::Builder::new()
             .name("document-font-discovery".into())
             .spawn(move || {
-                let fonts = discover_fonts_safely(|| pdfcraft_engine::text_fonts::discover(&pdfcraft_engine::text_fonts::installed_directories()));
+                let fonts =
+                    discover_fonts_safely(|| pdfcraft_engine::text_fonts::discover_desktop(&pdfcraft_engine::text_fonts::installed_directories()));
                 if let Ok(mut result) = result.lock() {
                     result.finish(fonts);
                 }
@@ -1249,10 +1250,17 @@ mod font_scan_tests {
         cache.finish(Vec::new());
         assert!(!cache.begin(false), "reuse a finished scan until explicitly reloaded");
         assert!(cache.begin(true), "an empty or failed scan can be retried");
-        cache.finish(vec![pdfcraft_engine::text_fonts::FontFile {
+        cache.finish(vec![pdfcraft_engine::text_fonts::InstalledFace {
             path: "installed.ttf".into(),
-            family: "Installed".into(),
-            face: "Installed".into(),
+            names: pdfcraft_fonts::embedding::DisplayFace {
+                family: "Installed".into(),
+                postscript: "Installed".into(),
+                chinese_simplified: None,
+                chinese_traditional: None,
+                face_index: 0,
+                can_embed: true,
+                can_rasterize: true,
+            },
         }]);
         assert!(cache.begin(true), "a populated scan can discover newly installed fonts");
         assert!(cache.files.is_none());

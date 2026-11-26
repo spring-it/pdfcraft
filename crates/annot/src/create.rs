@@ -345,7 +345,7 @@ pub fn add_annotation(doc: &mut Document, new: &NewAnnotation, meta: &Meta) -> R
             d.set(b"C".to_vec(), rgb(style.color));
             d.set(b"QuadPoints".to_vec(), num_array(&quads.concat()));
         }
-        Shape::Redact { quads, overlay, look } => set_redaction_properties(&mut d, style, quads, overlay, look),
+        Shape::Redact { quads, overlay, look } => set_redaction_properties(&mut d, style, quads, overlay, look)?,
         Shape::Rectangle { .. } | Shape::Oval { .. } => {
             d.set(b"C".to_vec(), rgb(style.color));
             if let Some(f) = style.fill {
@@ -570,11 +570,26 @@ fn validate_style(style: &Style) -> Result<(), AnnotError> {
     Ok(())
 }
 
-fn set_redaction_properties(dict: &mut Dict, style: &Style, quads: &[[f64; 8]], overlay: &str, look: &OverlayLook) {
+fn set_redaction_properties(dict: &mut Dict, style: &Style, quads: &[[f64; 8]], overlay: &str, look: &OverlayLook) -> Result<(), AnnotError> {
     dict.set(b"C".to_vec(), rgb(style.color));
     dict.set(b"IC".to_vec(), rgb(style.fill.unwrap_or([0.0, 0.0, 0.0])));
     dict.set(b"QuadPoints".to_vec(), num_array(&quads.concat()));
     if !overlay.is_empty() {
+        if let Some(key) = look.local_font {
+            if overlay.len() > OverlayLook::MAX_LOCAL_TEXT_BYTES {
+                return Err(AnnotError::Invalid("The installed-font redaction overlay is too long.".into()));
+            }
+            let face = look
+                .selected_local_font()
+                .ok_or_else(|| AnnotError::Invalid("Select the same local redaction font before marking this text.".into()))?;
+            if face.first_missing(overlay).is_some() {
+                return Err(AnnotError::Undrawable("The selected font cannot draw all the redaction overlay text.".into()));
+            }
+            if face.layout(overlay).is_err() {
+                return Err(AnnotError::Invalid("The selected font cannot lay out this redaction overlay as one line.".into()));
+            }
+            dict.set(b"PCLocalOverlayFont".to_vec(), PdfString::literal(format!("{key:016x}").into_bytes()));
+        }
         dict.set(b"OverlayText".to_vec(), PdfString::text(overlay));
         let [r, g, b] = look.color.map(|x| x.clamp(0.0, 1.0));
         let size = if look.size > 0.0 { look.size.min(400.0) } else { 0.0 };
@@ -584,6 +599,7 @@ fn set_redaction_properties(dict: &mut Dict, style: &Style, quads: &[[f64; 8]], 
             dict.set(b"Repeat".to_vec(), Object::Bool(true));
         }
     }
+    Ok(())
 }
 
 fn add_popup(doc: &mut Document, parent: ObjRef, rect: Option<[f64; 4]>, annots: &mut Vec<Object>) -> Result<(), AnnotError> {

@@ -304,7 +304,10 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
             }
             Some(FontChoice::Load) => app.pick_files(crate::files::FilePurpose::TextFont { page: ed.page }, false),
             #[cfg(not(target_arch = "wasm32"))]
-            Some(FontChoice::Installed(path)) => app.use_paths(crate::files::FilePurpose::TextFont { page: ed.page }, &[path]),
+            Some(FontChoice::Installed(font)) => match pdfcraft_engine::text_fonts::load_document_face(&font) {
+                Ok(bytes) => app.use_files(crate::files::FilePurpose::TextFont { page: ed.page }, vec![(font.names.postscript, bytes)]),
+                Err(error) => app.notify(error),
+            },
             #[cfg(target_arch = "wasm32")]
             Some(FontChoice::Installed(_)) => {}
             None => {}
@@ -323,7 +326,7 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
         }
         let mut style = draft.style.clone();
         let paragraphs = crate::format_text_ui::Paragraphs { text: &draft.text, selection: draft.selection.clone(), tidy: true };
-        let out = added_text_format(ui, t, &mut style, Some(paragraphs));
+        let out = added_text_format(app, ui, t, &mut style, Some(paragraphs));
         if let Some(script) = out.script {
             let mut toggled = draft.clone();
             if crate::edit_text_ui::toggle_script(&mut toggled.text, &mut toggled.selection, script) {
@@ -367,7 +370,7 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
     match selected {
         Some((page, index, text)) => {
             let mut style = text.clone();
-            added_text_format(ui, t, &mut style, None);
+            added_text_format(app, ui, t, &mut style, None);
             if style != text {
                 // The reusable style follows the selection only when the edit took, so a refused one adds nothing odd later.
                 if app.apply_edit(pdfcraft_engine::Edit::UpdateContent { page, index, content: pdfcraft_engine::AddedContent::Text(style.clone()) }) {
@@ -378,7 +381,7 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
         None if app.quick_tool == crate::QuickTool::AddText => {
             crate::content_ui::hint(ui, t);
             let mut style = app.text_style.clone();
-            added_text_format(ui, t, &mut style, None);
+            added_text_format(app, ui, t, &mut style, None);
             app.text_style = style;
         }
         None => {}
@@ -388,16 +391,35 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
 /// Format text for added text: the standard families, size, colour, style and alignment
 /// (of the lines `paragraphs` selects, while the text is being typed).
 fn added_text_format(
+    app: &mut PdfCraftApp,
     ui: &mut egui::Ui,
     t: &Tokens,
     style: &mut pdfcraft_engine::AddedText,
     paragraphs: Option<crate::format_text_ui::Paragraphs>,
 ) -> crate::format_text_ui::Outcome {
-    let shown = style.family.label().to_string();
+    let shown = style.local_face.as_ref().map_or_else(|| style.family.label().into(), |f| f.name().to_owned());
     let out = crate::format_text_ui::panel(ui, t, style, None, crate::format_text_ui::Fonts { sources: None, shown, mixed_size: false }, paragraphs);
-    if let Some(crate::format_text_ui::FontChoice::Family(family)) = out.font {
-        style.family = family;
+    use crate::format_text_ui::FontChoice;
+    match &out.font {
+        Some(FontChoice::Family(family)) => {
+            style.family = *family;
+            style.local_face = None;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        Some(FontChoice::Installed(font)) => {
+            match pdfcraft_engine::text_fonts::load_document_face(font).and_then(pdfcraft_fonts::embedding::ExplicitFace::new) {
+                Ok(face) => {
+                    style.local_face = Some(face);
+                    style.bold = false;
+                    style.italic = false;
+                }
+                Err(e) => app.notify(e),
+            }
+        }
+        _ => {}
     }
+    #[cfg(target_arch = "wasm32")]
+    let _ = app;
     out
 }
 

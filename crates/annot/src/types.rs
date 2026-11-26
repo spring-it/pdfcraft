@@ -562,10 +562,27 @@ impl OverlayFont {
     }
 }
 
+#[derive(Default)]
+struct OverlayFontRegistry {
+    bytes: usize,
+    faces: std::collections::HashMap<u64, pdfcraft_fonts::embedding::ExplicitFace>,
+}
+
+// Only explicit local picker selections may put a font in this registry. A pending
+// annotation stores a lookup key, never a path or a program to replay as an applied overlay.
+fn overlay_fonts() -> &'static std::sync::Mutex<OverlayFontRegistry> {
+    use std::sync::{Mutex, OnceLock};
+    static FONTS: OnceLock<Mutex<OverlayFontRegistry>> = OnceLock::new();
+    FONTS.get_or_init(Mutex::default)
+}
+
 /// How redaction overlay text is drawn (Redaction Properties ▸ Appearance).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OverlayLook {
     pub font: OverlayFont,
+    /// Identifier of an installed face explicitly chosen in the current app session. A PDF may
+    /// refer to a key, but it cannot register a font or direct the app to read a file.
+    pub local_font: Option<u64>,
     /// Points; 0 = auto-size to fit the area.
     pub size: f64,
     pub color: Rgb,
@@ -575,9 +592,42 @@ pub struct OverlayLook {
     pub repeat: bool,
 }
 
+impl OverlayLook {
+    /// Byte limit for a local overlay's single line before shaping.
+    pub const MAX_LOCAL_TEXT_BYTES: usize = 4096;
+
+    pub fn select_local_font(&mut self, bytes: Vec<u8>) -> Result<(), String> {
+        let face = pdfcraft_fonts::embedding::ExplicitFace::new(bytes)?;
+        let size = face.program_len();
+        // An exact file must be reselected when reopening a pending mark after a restart.
+        // Use a stable fingerprint and never replace a different registered face on collision.
+        let key = face.bytes().iter().fold(0xcbf29ce484222325u64, |hash, byte| (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)).max(1);
+        let mut registry = overlay_fonts().lock().map_err(|_| "the redaction font registry is unavailable")?;
+        if let Some(existing) = registry.faces.get(&key) {
+            if existing != &face {
+                return Err("another redaction font already uses this identifier".into());
+            }
+        } else {
+            if size > (64usize << 20).saturating_sub(registry.bytes) || registry.faces.len() >= 64 {
+                return Err("too many local redaction fonts were selected in this session".into());
+            }
+            registry.bytes += size;
+            registry.faces.insert(key, face);
+        }
+        self.local_font = Some(key);
+        Ok(())
+    }
+
+    /// Returns no font when there was no explicit selection or a pending mark's font has
+    /// not been selected in this session. Do not substitute a different font in that case.
+    pub fn selected_local_font(&self) -> Option<pdfcraft_fonts::embedding::ExplicitFace> {
+        overlay_fonts().lock().ok()?.faces.get(&self.local_font?).cloned()
+    }
+}
+
 impl Default for OverlayLook {
     fn default() -> Self {
-        Self { font: OverlayFont::Helvetica, size: 0.0, color: [1.0, 0.0, 0.0], align: 1, repeat: false }
+        Self { font: OverlayFont::Helvetica, local_font: None, size: 0.0, color: [1.0, 0.0, 0.0], align: 1, repeat: false }
     }
 }
 

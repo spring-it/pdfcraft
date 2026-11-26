@@ -6,7 +6,11 @@ use pdfcraft_engine::links;
 use pdfcraft_ui_egui::{Dialog, PdfCraftApp};
 
 fn harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, PdfCraftApp> {
-    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+    harness_at_width(1400.0, setup)
+}
+
+fn harness_at_width(width: f32, setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, PdfCraftApp> {
+    let mut h = Harness::builder().with_size(egui::vec2(width, 900.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         setup(&mut app);
@@ -48,6 +52,14 @@ fn home_restores_company_intro_version_and_online_browser_link() {
     let welcome = h.get_by_label("欢迎使用").rect();
     let online = h.get_by_label("在线版沃飞翼览 PDF").rect();
     assert!(online.min.x > welcome.max.x && online.min.y - welcome.min.y < 24.0, "wide layout places the online card beside the welcome title");
+    let visit = h.get_by_label("立即访问在线版").rect();
+    assert!(visit.max.x > 1290.0, "the online link aligns to the far right, not the middle: {visit:?}");
+    let open = h.get_by_label("Open file").rect();
+    let tools = h.get_by_label("Recommended tools").rect();
+    assert!(
+        (150.0..=190.0).contains(&open.width()) && open.height() >= 42.0 && open.max.y < tools.min.y && (open.min.x - welcome.min.x).abs() < 5.0,
+        "Open file is the primary action above the tool cards: {open:?}"
+    );
     h.get_by_label(&format!("(v{})", pdfcraft_engine::build_info::version()));
     h.get_by_label("沃飞长空内部 PDF 阅读与处理工具 · 本地、安全、高效");
     h.get_by_label("沃飞翼览 PDF 支持本地离线处理，默认不上传文档，不需要账号。");
@@ -55,6 +67,28 @@ fn home_restores_company_intro_version_and_online_browser_link() {
     settled(&mut h, "立即访问在线版").click();
     h.run_steps(3);
     assert_eq!(h.state().last_opened_url.as_deref(), Some(links::ONLINE));
+}
+
+#[test]
+fn narrow_home_keeps_open_file_above_the_online_link_and_tools() {
+    let dir = std::env::temp_dir().join(format!("pdfcraft-home-open-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("home-picked.pdf");
+    std::fs::write(&path, include_bytes!("../data/form.pdf")).unwrap();
+    let mut h = harness_at_width(720.0, move |app| {
+        app.pick_override = Some(vec![path.to_string_lossy().into_owned()]);
+        app.run_inline = true;
+    });
+    let open = h.get_by_label("Open file").rect();
+    let online = h.get_by_label("立即访问在线版").rect();
+    let tools = h.get_by_label("Recommended tools").rect();
+    assert!(open.max.y < online.min.y && online.max.y < tools.min.y, "narrow Home stacks its main actions: {open:?}, {online:?}, {tools:?}");
+    assert!(open.min.x >= 0.0 && open.max.x <= 720.0 && online.max.x <= 720.0);
+    settled(&mut h, "Open file").click();
+    crate::support::wait_until(&mut h, "opening a file from Home", |app| app.active.is_some());
+    let (_, id) = h.state().active_ids().unwrap();
+    assert_eq!(h.state().session.get(id).unwrap().name, "home-picked.pdf");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

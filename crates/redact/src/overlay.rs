@@ -42,11 +42,109 @@ fn repeat_line(text: &str, across: f64, down: f64, remaining: usize) -> Result<(
     Ok((line, down))
 }
 
+fn number(v: f64) -> String {
+    let s = format!("{v:.3}");
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+/// A selected local font contributes only bounded paths computed here, not a resource,
+/// XObject, PDF fragment or font program taken from the document. This is important: the
+/// freshly generated stream is excluded from the residue check, while all old streams must
+/// still pass it. No object reference is allowed through this path.
+fn local_overlay(c: &mut Output<'_>, mark: &Mark) -> Result<(), RedactError> {
+    let look = &mark.look;
+    let face = look
+        .selected_local_font()
+        .ok_or_else(|| RedactError::Undrawable("Select the same installed redaction overlay font again, then apply; nothing was redacted.".into()))?;
+    if mark.overlay.len() > pdfcraft_annot::OverlayLook::MAX_LOCAL_TEXT_BYTES {
+        return Err(RedactError::OverlayLimit);
+    }
+    if face.first_missing(&mark.overlay).is_some() {
+        return Err(RedactError::Undrawable("The selected font cannot draw all the redaction overlay text.".into()));
+    }
+    let shape_error = |_| RedactError::Undrawable("The selected font cannot lay out this redaction overlay; nothing was redacted.".into());
+    let run = face.layout(&mark.overlay).map_err(shape_error)?;
+    if !(0.0..=32768.0).contains(&run.advance) || run.glyphs.len() > 4096 {
+        return Err(RedactError::OverlayLimit);
+    }
+    let mut path_room = *c.remaining;
+    let mut path = Output { bytes: Vec::new(), remaining: &mut path_room };
+    for glyph in run.glyphs {
+        let outline = face.outline(glyph.id.to_u32()).map_err(|_| RedactError::OverlayLimit)?;
+        let mut paints = false;
+        for contour in outline.contours {
+            if contour.len() < 2 {
+                continue;
+            }
+            for (i, point) in contour.iter().enumerate() {
+                let [x, y] = [point[0] + glyph.position[0], point[1] + glyph.position[1]];
+                if !x.is_finite() || !y.is_finite() || x.abs().max(y.abs()) > 65536.0 {
+                    return Err(RedactError::OverlayLimit);
+                }
+                path.push(format!("{} {} {} ", number(x), number(y), if i == 0 { "m" } else { "l" }))?;
+            }
+            path.push(b"h ")?;
+            paints = true;
+        }
+        if paints {
+            path.push(b"f ")?;
+        }
+    }
+    if path.bytes.is_empty() {
+        return Ok(());
+    }
+    let gap = if look.repeat { face.layout(" ").map_err(shape_error)?.advance.max(0.0) } else { 0.0 };
+    let [cr, cg, cb] = look.color.map(|v| v.clamp(0.0, 1.0));
+    for r in &mark.rects {
+        let (w, h) = (r[2] - r[0], r[3] - r[1]);
+        let mut size = if look.size > 0.0 { look.size } else { (h * 0.7).min(12.0) };
+        let tw = run.advance * size;
+        if look.size <= 0.0 && tw > (w - 2.0) && tw > 0.0 {
+            size *= (w - 2.0).max(0.0) / tw;
+        }
+        if size < 2.0 {
+            continue;
+        }
+        let (across, down, unit) = if look.repeat {
+            let unit = ((run.advance + gap) * size).max(0.01);
+            (((w - 2.0) / unit).floor().max(1.0), (h / (size * 1.2)).floor().max(1.0), unit)
+        } else {
+            (1.0, 1.0, 0.0)
+        };
+        let bounds = [across, down, unit, size];
+        if bounds.iter().any(|x| !x.is_finite()) || across * down > (*c.remaining / path.bytes.len()) as f64 {
+            return Err(RedactError::OverlayLimit);
+        }
+        let row_width = (across - 1.0) * unit + run.advance * size;
+        let x = match look.align {
+            0 => r[0] + 1.0,
+            2 => r[2] - 1.0 - row_width,
+            _ => r[0] + (w - row_width) / 2.0,
+        };
+        let mut y = r[1] + (h + down * size * 1.2) / 2.0 - size * 0.95;
+        if !x.is_finite() || !y.is_finite() {
+            return Err(RedactError::OverlayLimit);
+        }
+        c.push(format!("q {} {} {} {} re W n {} {} {} rg ", number(r[0]), number(r[1]), number(w), number(h), number(cr), number(cg), number(cb)))?;
+        for _ in 0..down as usize {
+            for column in 0..across as usize {
+                let left = x + column as f64 * unit;
+                if !left.is_finite() || !y.is_finite() {
+                    return Err(RedactError::OverlayLimit);
+                }
+                c.push(format!("q {} 0 0 {} {} {} cm ", number(size), number(size), number(left), number(y)))?;
+                c.push(&path.bytes)?;
+                c.push(b"Q ")?;
+            }
+            y -= size * 1.2;
+        }
+        c.push(b"Q\n")?;
+    }
+    Ok(())
+}
+
 pub(super) fn content(marks: &[&Mark], remaining: &mut usize) -> Result<Vec<u8>, RedactError> {
-    let n = |v: f64| {
-        let s = format!("{:.3}", v);
-        s.trim_end_matches('0').trim_end_matches('.').to_string()
-    };
+    let n = number;
     let mut c = Output { bytes: Vec::new(), remaining };
     for m in marks {
         let Some(fill) = m.fill else { continue };
@@ -71,6 +169,10 @@ pub(super) fn content(marks: &[&Mark], remaining: &mut usize) -> Result<Vec<u8>,
         let look = &m.look;
         if !look.size.is_finite() || !look.color.iter().all(|v| v.is_finite()) {
             return Err(RedactError::OverlayLimit);
+        }
+        if look.local_font.is_some() {
+            local_overlay(&mut c, m)?;
+            continue;
         }
         // Keep upstream's standard-14 metrics when preparing the bounded appearance.
         let (res, face) = match look.font {

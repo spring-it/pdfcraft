@@ -557,7 +557,9 @@ pub fn undrawable_text(d: &Dict) -> Option<(&'static str, char)> {
         b"Stamp" if matches!(d.get(b"PCStamp"), Some(Object::Bool(true))) || d.contains(b"PCPicture") => {
             ("the stamp's \"By\" line", text(b"PCByLine")?)
         }
-        // Drawn in Helvetica when the redaction is applied: refused when it is marked.
+        // The custom path has its own checks, both at creation and applying. The
+        // unapplied appearance only outlines the region, so moving it needs no local font.
+        b"Redact" if d.contains(b"PCLocalOverlayFont") => return None,
         b"Redact" => ("the redaction's overlay text", text(b"OverlayText")?),
         _ => return None,
     };

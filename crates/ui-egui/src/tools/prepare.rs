@@ -22,8 +22,8 @@ mod draft;
 mod properties;
 mod tabs;
 
+pub(crate) use draft::da_size;
 pub use draft::{ACTION_KINDS, ActionDraft, FieldDraft, FieldTab};
-pub(crate) use draft::{da_font, da_size};
 pub(crate) use properties::body;
 
 const SELECT_BLUE: Color32 = Color32::from_rgb(0x14, 0x73, 0xE6);

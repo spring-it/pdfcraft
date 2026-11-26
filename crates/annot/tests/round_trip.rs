@@ -469,7 +469,7 @@ fn redaction_keeps_quads_fill_and_overlay_text() {
             Shape::Redact {
                 quads: quads.clone(),
                 overlay: "SECRET".into(),
-                look: OverlayLook { font: OverlayFont::Courier, size: 0.0, color: [1.0, 0.0, 0.0], align: 2, repeat: true },
+                look: OverlayLook { font: OverlayFont::Courier, local_font: None, size: 0.0, color: [1.0, 0.0, 0.0], align: 2, repeat: true },
             },
             "remove this",
             [0.89, 0.13, 0.13],

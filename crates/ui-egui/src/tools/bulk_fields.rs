@@ -46,6 +46,10 @@ pub struct Draft {
     pub locked: Change<bool>,
     pub font_size: Change<f64>,
     pub font: Change<FieldFont>,
+    /// Checking the row makes it editable; an explicit selection is required to replace
+    /// an imported font or the different fonts of a mixed group.
+    pub standard_font_picked: bool,
+    pub installed_font: Option<(String, std::sync::Arc<Vec<u8>>)>,
     /// The original resource can be a custom font outside the three built-in choices.
     pub font_label: String,
     pub text: Change<[f64; 3]>,
@@ -117,15 +121,9 @@ impl Draft {
             .map(|(bit, label, inverted)| Change::from_values(fields.iter().map(|f| f.has(bit) != inverted)).map(|c| (bit, label, inverted, c)))
             .collect::<Option<Vec<_>>>()?;
         let mut font = Change::from_values(looks.iter().map(|l| l.font))?;
-        let resource = prepare::da_font(&fields.first()?.da);
-        font.mixed |= fields.iter().any(|f| prepare::da_font(&f.da) != resource);
-        let font_label = if font.mixed {
-            "Mixed".to_string()
-        } else if ["Helv", "Helvetica", "TiRo", "Times-Roman", "Cour", "Courier"].contains(&resource) {
-            font.value.label().to_string()
-        } else {
-            "Custom font".to_string()
-        };
+        let first_name = doc.field_font_name(&fields.first()?.name)?;
+        font.mixed |= fields.iter().any(|f| doc.field_font_name(&f.name).as_deref() != Some(first_name.as_str()));
+        let font_label = if font.mixed { "Mixed".to_string() } else { first_name };
         Some(Self {
             doc: doc.id,
             names,
@@ -136,6 +134,8 @@ impl Draft {
             locked: Change::from_values(fields.iter().map(|f| f.locked()))?,
             font_size: Change::from_values(fields.iter().map(|f| prepare::da_size(&f.da)))?,
             font,
+            standard_font_picked: false,
+            installed_font: None,
             font_label,
             text: Change::from_values(looks.iter().map(|l| l.text))?,
             border: Change::from_values(looks.iter().map(|l| l.border))?,
@@ -174,7 +174,8 @@ impl Draft {
                 width: self.width.apply.then_some(self.width.value),
                 style: self.style.apply.then_some(self.style.value),
                 text: (self.text_appearance && self.text.apply).then_some(self.text.value),
-                font: (self.text_appearance && self.font.apply).then_some(self.font.value),
+                font: (self.text_appearance && self.font.apply && self.standard_font_picked && self.installed_font.is_none())
+                    .then_some(self.font.value),
             };
             let props = FieldProps {
                 tooltip: self.tooltip.changed(&f.tooltip.clone().unwrap_or_default()),
@@ -182,6 +183,9 @@ impl Draft {
                 required: self.required.changed(&f.has(field_flags::REQUIRED)),
                 locked: self.locked.changed(&f.locked()),
                 appearance: (patch != FieldLookPatch::default()).then_some(patch),
+                installed_font: (self.text_appearance && self.font.apply)
+                    .then(|| self.installed_font.as_ref().map(|(_, bytes)| bytes.clone()))
+                    .flatten(),
                 font_size: (self.text_appearance && self.font_size.apply).then_some(self.font_size.value),
                 multiline: self.text_fields.then(|| self.multiline.changed(&f.has(field_flags::MULTILINE))).flatten(),
                 max_len: self.text_fields.then(|| self.max_length.changed(&f.max_len.unwrap_or(0))).flatten().map(|v| (v > 0).then_some(v)),
@@ -294,11 +298,36 @@ pub(crate) fn body(ui: &mut egui::Ui, d: &mut Draft, t: &theme::Tokens) -> (bool
                     row(ui, "Font Size:", &mut d.font_size, |ui, v| {
                         ui.add(egui::DragValue::new(v).range(0.0..=100.0).speed(0.25).suffix(" pt"));
                     });
-                    let font_label = if d.font.apply { d.font.value.label().to_string() } else { d.font_label.clone() };
+                    let font_label = if !d.font.apply {
+                        d.font_label.clone()
+                    } else if let Some((name, _)) = &d.installed_font {
+                        name.clone()
+                    } else if d.standard_font_picked {
+                        d.font.value.label().to_string()
+                    } else {
+                        d.font_label.clone()
+                    };
                     row(ui, "Font:", &mut d.font, |ui, v| {
-                        craft_ui::ComboBox::from_id_salt("bulk-font").selected_text(tl!(&font_label)).show_ui(ui, |ui| {
+                        let font_label = crate::font_picker::label(ui.ctx(), tl!(&font_label));
+                        craft_ui::ComboBox::from_id_salt("bulk-font").selected_text(font_label).show_ui(ui, |ui| {
                             for font in FieldFont::ALL {
-                                ui.selectable_value(v, font, font.label());
+                                if ui.selectable_label(d.standard_font_picked && d.installed_font.is_none() && *v == font, font.label()).clicked() {
+                                    *v = font;
+                                    d.standard_font_picked = true;
+                                    d.installed_font = None;
+                                    d.error = None;
+                                }
+                            }
+                            #[cfg(not(target_arch = "wasm32"))]
+                            if let Some(face) = crate::font_picker::choices(ui) {
+                                match pdfcraft_engine::text_fonts::load_document_face(&face) {
+                                    Ok(bytes) => {
+                                        d.installed_font = Some((face.names.postscript, std::sync::Arc::new(bytes)));
+                                        d.standard_font_picked = false;
+                                        d.error = None;
+                                    }
+                                    Err(error) => d.error = Some(error),
+                                }
                             }
                         });
                     });

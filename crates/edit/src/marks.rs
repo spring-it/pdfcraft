@@ -108,6 +108,7 @@ pub struct HeaderFooter {
     pub text: [String; 6],
     /// The standard face the text is drawn in (#3754): Helvetica (the default), Times or Courier.
     pub font: added::Family,
+    pub local_face: Option<pdfcraft_fonts::embedding::ExplicitFace>,
     pub font_size: f64,
     pub color: Rgb,
     pub underline: bool,
@@ -127,6 +128,7 @@ impl Default for HeaderFooter {
         Self {
             text: Default::default(),
             font: added::Family::Helvetica,
+            local_face: None,
             font_size: 8.0,
             color: [0.0; 3],
             underline: false,
@@ -144,6 +146,9 @@ impl HeaderFooter {
     /// `expand`'s output is, covers every page (and a `\r` that would be drawn is refused too).
     /// The dialog asks this too, so its preview never offers text that applying refuses (#2013).
     pub fn first_undrawable(&self) -> Option<char> {
+        if let Some(face) = &self.local_face {
+            return self.text.iter().flat_map(|t| t.lines()).find_map(|line| face.first_missing(line));
+        }
         self.text.iter().flat_map(|t| t.lines()).find_map(first_undrawable_in_line)
     }
 

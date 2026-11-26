@@ -689,6 +689,13 @@ impl Document {
         Some(pdfcraft_forms::look(&e.cos, f))
     }
 
+    /// The source face shown in the field's font dropdown, including imported fonts.
+    pub fn field_font_name(&self, name: &str) -> Option<String> {
+        let e = self.editor.as_ref()?;
+        let f = self.form.iter().find(|f| f.name == name)?;
+        Some(pdfcraft_forms::field_font_name(&e.cos, f))
+    }
+
     /// A check box's or radio button's mark (Field Properties ▸ Options), `None` for other fields.
     pub fn field_check_style(&self, name: &str) -> Option<CheckStyle> {
         let e = self.editor.as_ref()?;

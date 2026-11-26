@@ -1,8 +1,8 @@
 //! Rasterize watermark text, including Simplified Chinese, without redistributing OS fonts.
 //!
-//! Existing PDF watermark text uses WinAnsi and cannot encode Chinese. We outline the
-//! characters with a locally installed face, render transparent pixels using resvg, and
-//! pass a PNG to the existing editable/removable PDF watermark-image pipeline.
+//! The company watermark dialog draws Chinese and other supported glyphs with a locally
+//! installed face, rasterizes transparent pixels using resvg, and passes the PNG to the
+//! removable PDF watermark-image pipeline. No installed font program leaves the machine.
 //! This is the same "transparent text image" approach as the supplied HTML reference.
 
 use std::fmt::Write as _;
@@ -97,12 +97,49 @@ fn choose_face(text: &str, family: usize) -> Result<(Vec<u8>, u32), String> {
     {
         return Ok((latin.to_vec(), 0));
     }
-    Err("无法生成中文水印：此电脑没有覆盖所输入汉字的可用字体（建议安装微软雅黑或黑体）。".into())
+    for font in pdfcraft_fonts::ui_chinese_fonts().into_iter().chain(pdfcraft_fonts::ui_japanese_fonts()) {
+        if FontRef::new(font.bytes).is_ok_and(|f| supports(&f, text)) {
+            return Ok((font.bytes.to_vec(), 0));
+        }
+    }
+    Err("无法生成中文水印：没有字体能够覆盖全部输入字符，请选择支持这些字符的字体。".into())
+}
+
+/// An explicit, validated local face; its bytes never become a PDF resource.
+#[derive(Clone, PartialEq)]
+pub(crate) struct InstalledFont {
+    pub(crate) label: String,
+    bytes: std::sync::Arc<Vec<u8>>,
+}
+
+impl std::fmt::Debug for InstalledFont {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InstalledFont").field("label", &self.label).finish_non_exhaustive()
+    }
+}
+
+impl InstalledFont {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn from_picker(face: pdfcraft_engine::text_fonts::InstalledFace, language: &str) -> Result<Self, String> {
+        // Revalidate if the installed font changed or was removed since the catalog snapshot.
+        let bytes = pdfcraft_engine::text_fonts::load_raster_face(&face)?;
+        Ok(Self { label: face.label(language).to_owned(), bytes: std::sync::Arc::new(bytes) })
+    }
 }
 
 /// Render one line of watermark text to a transparent RGBA PNG.
 /// Includes all target glyphs as SVG paths, so no font assets are exported.
-pub fn png(text: &str, size: f64, color: [f64; 3], family: usize) -> Result<Vec<u8>, String> {
+pub(crate) fn png(text: &str, size: f64, color: [f64; 3], family: usize, installed: Option<&InstalledFont>) -> Result<Vec<u8>, String> {
+    raster(text, size, color, family, installed)?.encode_png().map_err(|e| format!("无法编码水印 PNG：{e}"))
+}
+
+pub(crate) fn raster(
+    text: &str,
+    size: f64,
+    color: [f64; 3],
+    family: usize,
+    installed: Option<&InstalledFont>,
+) -> Result<resvg::tiny_skia::Pixmap, String> {
     let text = text.trim();
     if text.is_empty() || text.chars().count() > MAX_GLYPHS || (text.contains('\n') || text.contains('\r')) {
         return Err("水印文字须为 1 至 80 个字符且不能包含换行。".into());
@@ -110,21 +147,31 @@ pub fn png(text: &str, size: f64, color: [f64; 3], family: usize) -> Result<Vec<
     if !size.is_finite() || !(8.0..=100.0).contains(&size) {
         return Err("水印字号必须介于 8–100 pt。".into());
     }
-    let (bytes, face_index) = choose_face(text, family)?;
-    let font = FontRef::from_index(&bytes, face_index).map_err(|_| "无法读取水印字体。")?;
+    let fallback;
+    let font = if let Some(installed) = installed {
+        // Never replace an explicit choice with a different face when glyphs are missing.
+        FontRef::new(&installed.bytes)
+    } else {
+        let (bytes, index) = choose_face(text, family)?;
+        fallback = bytes;
+        FontRef::from_index(&fallback, index)
+    }
+    .map_err(|_| "无法读取水印字体。")?;
     let loc = LocationRef::default();
     let units = f64::from(font.metrics(Size::unscaled(), loc).units_per_em.max(1));
     let advances = font.glyph_metrics(Size::unscaled(), loc);
     let mut x = 0.0f64;
     let mut paths = String::new();
     for ch in text.chars() {
-        let id = font.charmap().map(ch).ok_or_else(|| format!("水印字体缺少字符：{ch}"))?;
+        let id = font.charmap().map(ch).filter(|id| id.to_u32() != 0).ok_or_else(|| format!("水印字体缺少字符：{ch}"))?;
         if let Some(outline) = font.outline_glyphs().get(id) {
             let mut pen = SvgPen::default();
             outline.draw(DrawSettings::unhinted(Size::unscaled(), loc), &mut pen).map_err(|_| format!("无法绘制水印字符：{ch}"))?;
             if !pen.commands.is_empty() {
                 let _ = write!(paths, "<path transform=\"translate({x:.3} 0)\" d=\"{}\"/>", pen.commands);
             }
+        } else if installed.is_some() && !ch.is_whitespace() {
+            return Err(format!("无法绘制水印字符：{ch}"));
         }
         x += f64::from(advances.advance_width(id).unwrap_or(0.0));
     }
@@ -150,7 +197,7 @@ pub fn png(text: &str, size: f64, color: [f64; 3], family: usize) -> Result<Vec<
     if !pixmap.data().as_chunks::<4>().0.iter().any(|p| p[3] > 0) {
         return Err("水印文字没有绘制出可见像素。".into());
     }
-    pixmap.encode_png().map_err(|e| format!("无法编码水印 PNG：{e}"))
+    Ok(pixmap)
 }
 
 #[cfg(test)]
@@ -158,12 +205,12 @@ mod tests {
     use super::*;
     #[test]
     fn latin_watermark_produces_png() {
-        let bytes = png("CONFIDENTIAL", 34.0, [0.4, 0.5, 0.6], 2).unwrap();
+        let bytes = png("CONFIDENTIAL", 34.0, [0.4, 0.5, 0.6], 2, None).unwrap();
         assert!(bytes.starts_with(&[137, 80, 78, 71, 13, 10, 26, 10]));
     }
     #[test]
     fn chinese_watermark_renders_when_os_font_available() {
-        let result = png("内部资料 · 请勿外传", 34.0, [0.3, 0.4, 0.5], 0);
+        let result = png("内部资料 · 请勿外传", 34.0, [0.3, 0.4, 0.5], 0, None);
         if cfg!(windows) {
             let bytes = result.expect("Windows has a Simplified Chinese system font");
             assert!(bytes.len() > 400);
@@ -175,7 +222,7 @@ mod tests {
     fn chinese_watermark_is_embedded_into_a_saved_pdf() {
         // Verify PNG generation *and* native PDF integration, not just UI fields.
         let text = "机密文件";
-        let bytes = match png(text, 34.0, [0.4, 0.5, 0.6], 0) {
+        let bytes = match png(text, 34.0, [0.4, 0.5, 0.6], 0, None) {
             Ok(bytes) => bytes,
             Err(e) if !cfg!(windows) => {
                 eprintln!("CJK test skipped on OS without a Chinese font: {e}");
@@ -212,6 +259,6 @@ mod tests {
 
     #[test]
     fn long_untrusted_string_is_rejected() {
-        assert!(png(&"机密".repeat(90), 34.0, [0.1; 3], 0).is_err());
+        assert!(png(&"机密".repeat(90), 34.0, [0.1; 3], 0, None).is_err());
     }
 }

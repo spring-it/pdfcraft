@@ -151,6 +151,8 @@ pub struct AddedText {
     pub rect: [f64; 4],
     pub text: String,
     pub family: Family,
+    /// An explicitly selected local program, kept portable in the PDF.
+    pub local_face: Option<pdfcraft_fonts::embedding::ExplicitFace>,
     pub bold: bool,
     pub italic: bool,
     pub size: f64,
@@ -220,6 +222,7 @@ impl Default for AddedText {
         AddedText {
             rect: [0.0; 4],
             text: String::new(),
+            local_face: None,
             family: Family::Helvetica,
             bold: false,
             italic: false,

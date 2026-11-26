@@ -42,15 +42,15 @@ impl LookPatch {
 /// fill colour (`g`, `rg` or `k`), appending one when the string has none. Everything else (a
 /// custom font resource, colour space or other graphics state) is kept, and repeated edits don't
 /// grow the string.
-pub(super) fn patch_da(da: &str, size: Option<f64>, patch: &LookPatch) -> String {
-    if patch.font.is_none() && size.is_none() && patch.text.is_none() {
+pub(super) fn patch_da(da: &str, size: Option<f64>, patch: &LookPatch, custom_font: Option<&str>) -> String {
+    if custom_font.is_none() && patch.font.is_none() && size.is_none() && patch.text.is_none() {
         return da.to_string();
     }
     let mut toks: Vec<String> = da.split_whitespace().map(str::to_string).collect();
     let numeric = |s: &str| s.parse::<f64>().is_ok();
-    if patch.font.is_some() || size.is_some() {
+    if custom_font.is_some() || patch.font.is_some() || size.is_some() {
         let old = appearance::parse_da(da);
-        let font = patch.font.map_or_else(|| old.font.clone(), |f| f.resource().to_string());
+        let font = custom_font.or_else(|| patch.font.map(FieldFont::resource)).unwrap_or(&old.font);
         // `parse_da` reads sizes up to 300 points; keep the same bound when writing.
         let size = appearance::fmt(size.unwrap_or(old.size).clamp(0.0, 300.0));
         let at = toks.iter().enumerate().rev().find(|(i, t)| t.as_str() == "Tf" && *i >= 2).map(|(i, _)| i);
@@ -294,6 +294,25 @@ pub fn look(doc: &Document, f: &Field) -> Look {
             _ => FieldFont::Helvetica,
         },
     }
+}
+
+/// The actual PDF face in a field's default appearance, not the display name of its fallback.
+pub fn field_font_name(doc: &Document, f: &Field) -> String {
+    let name = f
+        .widgets
+        .first()
+        .and_then(|w| doc.get(w.obj).as_dict().and_then(|d| d.get(b"DA").cloned()))
+        .and_then(|da| doc.resolve(&da).as_string().map(|s| s.to_text()))
+        .map(|da| appearance::parse_da(&da).font)
+        .unwrap_or_else(|| appearance::parse_da(&f.da).font);
+    let face = || {
+        let af = crate::acroform(doc)?;
+        let dr = doc.resolve(af.get(b"DR")?);
+        let fonts = doc.resolve(dr.as_dict()?.get(b"Font")?);
+        let font = doc.resolve(fonts.as_dict()?.get(name.as_bytes())?);
+        Some(pdfcraft_fonts::pdf::base_font_name(doc, font.as_dict()?))
+    };
+    face().filter(|n| !n.is_empty()).unwrap_or(name)
 }
 
 /// A `/DA` string with the given font, size and colour.

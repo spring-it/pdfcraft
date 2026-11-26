@@ -104,7 +104,22 @@ fn online_card(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
         });
 }
 
-/// Draw the Home page with the welcome text, community card and recent documents.
+fn open_file(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
+    ui.add_space(12.0);
+    let label = tl!("Open file");
+    let foreground = if t.dark() { t.pasteboard } else { egui::Color32::WHITE };
+    let button = egui::Button::new(egui::RichText::new(label).font(theme::semibold(15.0)).color(foreground))
+        .fill(t.accent)
+        .corner_radius(CornerRadius::same(8))
+        .min_size(vec2(152.0, 44.0));
+    // The wide Home columns justify their children; keep this action a button, not a full-width bar.
+    let response = ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| ui.add(button)).inner;
+    if theme::hand(response).clicked() {
+        app.open_dialog();
+    }
+}
+
+/// Draw the Home page with the welcome text, open action, company link and recent documents.
 pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -112,10 +127,17 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             if ui.available_width() >= 850.0 {
                 ui.columns(2, |columns| {
                     welcome(&mut columns[0], &t);
-                    online_card(app, &mut columns[1], &t);
+                    open_file(app, &mut columns[0], &t);
+                    // Reserve only enough width for the card, against the page's right margin.
+                    columns[1].with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                        ui.allocate_ui_with_layout(vec2(374.0, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                            online_card(app, ui, &t);
+                        });
+                    });
                 });
             } else {
                 welcome(ui, &t);
+                open_file(app, ui, &t);
                 ui.add_space(10.0);
                 online_card(app, ui, &t);
             }
@@ -170,23 +192,6 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         );
                         if theme::hand(wm_resp).clicked() {
                             app.dispatch_command(ui.ctx(), "edit.watermark");
-                        }
-                        let (rect, resp) = ui.allocate_exact_size(vec2(170.0, 104.0), Sense::click());
-                        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tl!("Open file")));
-                        let press = theme::Press::track(ui, &resp);
-                        card_lift(ui, &t, rect, press);
-                        ui.painter().rect(
-                            rect,
-                            CornerRadius::same(10),
-                            press.fill(t.pasteboard, t.hover, t.pressed),
-                            Stroke::new(1.0, t.divider),
-                            egui::StrokeKind::Inside,
-                        );
-                        let body = rect.translate(press.offset());
-                        icons::paint(ui, Rect::from_center_size(body.center() - vec2(0.0, 16.0), vec2(28.0, 28.0)), "folder-open", 26.0, t.icon);
-                        ui.painter().text(body.center() + vec2(0.0, 22.0), Align2::CENTER_CENTER, tl!("Open file"), theme::semibold(13.0), t.text);
-                        if theme::hand(resp).clicked() {
-                            app.open_dialog();
                         }
                     });
                 });

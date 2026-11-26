@@ -189,6 +189,16 @@ fn overlay_look(doc: &Document, d: &Dict) -> pdfcraft_annot::OverlayLook {
             }
         }
     }
+    // A malformed or unknown key remains an explicit (unavailable) choice, never a fallback.
+    if let Some(key) = d.get(b"PCLocalOverlayFont") {
+        look.local_font = Some(
+            key.as_string()
+                .and_then(|s| std::str::from_utf8(&s.bytes).ok())
+                .filter(|s| s.len() == 16)
+                .and_then(|s| u64::from_str_radix(s, 16).ok())
+                .unwrap_or(0),
+        );
+    }
     look.align = d.int(b"Q").unwrap_or(1).clamp(0, 2) as u8;
     look.repeat = matches!(d.get(b"Repeat"), Some(Object::Bool(true)));
     look
@@ -571,9 +581,11 @@ fn apply_within(doc: &mut Document, pages: Option<&[usize]>, images: pdfcraft_co
     if chosen.is_empty() {
         return Err(RedactError::NothingToApply);
     }
-    // Overlay text is drawn in Helvetica; applying can't be undone in the file, so text it can't
-    // draw (a mark another program made) is refused before anything changes, never burnt in as `?`.
-    if let Some((m, c)) = chosen.iter().find_map(|m| pdfcraft_fonts::first_undrawable(&m.overlay).map(|c| (m, c))) {
+    // Standard overlays refuse characters they can't draw, never burning `?` into the file.
+    // The explicit installed-font path validates and constructs its own bounded outlines below.
+    if let Some((m, c)) =
+        chosen.iter().filter(|m| m.look.local_font.is_none()).find_map(|m| pdfcraft_fonts::first_undrawable(&m.overlay).map(|c| (m, c)))
+    {
         return Err(RedactError::Undrawable(format!(
             "{}; change or clear that mark's overlay text, then apply again (nothing was redacted)",
             pdfcraft_fonts::undrawable_message(&format!("the overlay text of a redaction mark on page {}", m.page + 1), c)

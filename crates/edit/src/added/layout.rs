@@ -14,7 +14,8 @@ pub(super) fn norm(r: [f64; 4]) -> [f64; 4] {
 /// The advance of `s` in the item's standard font: its glyphs' widths and the character spacing
 /// after each of them, as `Tc` moves the pen (ISO 32000-2 §9.3.2).
 pub(super) fn latin_width(t: &AddedText, s: &str) -> f64 {
-    t.family.width(s, t.size, t.bold, t.italic) + t.char_spacing * s.chars().count() as f64
+    t.local_face.as_ref().and_then(|f| f.nominal_width(s, t.size)).unwrap_or_else(|| t.family.width(s, t.size, t.bold, t.italic))
+        + t.char_spacing * s.chars().count() as f64
 }
 
 /// The lines of a text item after wrapping to its box width.
@@ -36,6 +37,26 @@ pub(super) fn wrapped(t: &AddedText) -> Vec<(String, bool, usize)> {
     let width = (t.rect[2] - t.rect[0]).max(t.size);
     let mut out = Vec::new();
     for (index, para) in t.text.split('\n').enumerate() {
+        if t.local_face.is_some() {
+            let measure = |s: &str| latin_width(t, s);
+            out.extend(
+                wrap_words(
+                    thai_words(
+                        para.chars()
+                            .map(|c| {
+                                let s = c.to_string();
+                                let w = measure(&s);
+                                (s, w)
+                            })
+                            .collect(),
+                    ),
+                    width,
+                )
+                .into_iter()
+                .map(|line| (line, false, index)),
+            );
+            continue;
+        }
         // Arabic or Hebrew: laid out with the bidirectional algorithm and shaped.
         let rtl_script = para.chars().any(|c| is_arabic(c) || is_hebrew(c));
         let thai = para.chars().any(is_thai);
@@ -199,6 +220,9 @@ pub(super) fn is_hebrew(c: char) -> bool {
 /// draw (or that has no face to draw it). Page-content tools refuse such text; the Add-text editor
 /// keeps it open.
 pub fn first_undrawable(t: &AddedText) -> Option<char> {
+    if let Some(face) = &t.local_face {
+        return face.first_missing(&t.text);
+    }
     if t.text.chars().any(is_thai) {
         if let Some(c) = t.text.chars().find(|c| is_thai(*c) && !pdfcraft_fonts::thai_has(*c)) {
             return Some(c);

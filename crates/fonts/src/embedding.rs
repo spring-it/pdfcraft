@@ -37,6 +37,11 @@ pub fn names(bytes: &[u8]) -> Result<(String, String), String> {
     face_names(&FontRef::new(bytes).map_err(|e| e.to_string())?)
 }
 
+/// Inspect only the name of a valid font program. For raster use, this does not grant PDF embedding permission.
+pub fn postscript_name(bytes: &[u8]) -> Result<String, String> {
+    face_names(&FontRef::new(bytes).map_err(|e| e.to_string())?).map(|(_, face)| face)
+}
+
 fn face_names(f: &FontRef<'_>) -> Result<(String, String), String> {
     use skrifa::string::StringId;
     let name = |id| {
@@ -49,6 +54,146 @@ fn face_names(f: &FontRef<'_>) -> Result<(String, String), String> {
     let family = name(StringId::FAMILY_NAME).ok_or("the font has no family name")?;
     let postscript = name(StringId::POSTSCRIPT_NAME).unwrap_or_else(|| family.replace(' ', ""));
     Ok((family, postscript))
+}
+
+/// Names for browsing installed fonts, including faces that may not be embedded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DisplayFace {
+    pub family: String,
+    pub postscript: String,
+    pub chinese_simplified: Option<String>,
+    pub chinese_traditional: Option<String>,
+    pub face_index: u32,
+    pub can_embed: bool,
+    pub can_rasterize: bool,
+}
+
+pub fn display_faces(bytes: &[u8], max_faces: u32) -> Vec<DisplayFace> {
+    use skrifa::string::StringId;
+    (0..max_faces)
+        .map_while(|i| FontRef::from_index(bytes, i).ok().map(|f| (i, f)))
+        .filter_map(|(face_index, f)| {
+            let (family, postscript) = face_names(&f).ok()?;
+            let chinese = |traditional: bool| {
+                let mut best = None::<(u8, String)>;
+                // Prefer explicit localized full names, but some fonts translate only the family.
+                for (id, priority) in [(StringId::FULL_NAME, 0), (StringId::FAMILY_NAME, 2)] {
+                    for record in f.localized_strings(id).take(128) {
+                        let tag = record.language().unwrap_or_default().to_ascii_lowercase();
+                        if tag != "zh" && !tag.starts_with("zh-") {
+                            continue;
+                        }
+                        let trad = ["hant", "-tw", "-hk", "-mo"].iter().any(|p| tag.contains(p));
+                        let value = record.chars().take(96).collect::<String>();
+                        if value.trim().is_empty() || value.chars().any(char::is_control) {
+                            continue;
+                        }
+                        let rank = priority + u8::from(trad != traditional) * 4;
+                        if best.as_ref().is_none_or(|(old, _)| rank < *old) {
+                            best = Some((rank, value));
+                        }
+                    }
+                }
+                best.map(|(_, value)| value)
+            };
+            let chinese_simplified = chinese(false);
+            let chinese_traditional = chinese(true);
+            let can_rasterize = standalone_size(bytes, face_index).is_some() && (f.glyf().is_ok() || f.cff().is_ok());
+            let can_embed = can_rasterize && validate_document_face(&f).is_ok();
+            Some(DisplayFace { family, postscript, chinese_simplified, chinese_traditional, face_index, can_embed, can_rasterize })
+        })
+        .collect()
+}
+
+/// Bound and validate a face's sfnt records. TTC table offsets are relative to the collection,
+/// not to the individual face header. The standalone font gets new offsets.
+fn directory(bytes: &[u8], index: u32) -> Option<(&[u8], Vec<([u8; 4], [u8; 4], &[u8])>)> {
+    const MAX: usize = 16 << 20;
+    let read = |i: usize| Some(u32::from_be_bytes(bytes.get(i..i.checked_add(4)?)?.try_into().ok()?) as usize);
+    let off = if bytes.starts_with(b"ttcf") {
+        if index as usize >= read(8)? {
+            return None;
+        }
+        read(12usize.checked_add((index as usize).checked_mul(4)?)?)?
+    } else if index == 0 {
+        0
+    } else {
+        return None;
+    };
+    let header = bytes.get(off..off.checked_add(12)?)?;
+    if !matches!(&header[..4], b"OTTO" | b"true" | b"\x00\x01\x00\x00") {
+        return None;
+    }
+    let count = u16::from_be_bytes(header[4..6].try_into().ok()?) as usize;
+    if !(1..=256).contains(&count) {
+        return None;
+    }
+    let start = off.checked_add(12)?;
+    let end = start.checked_add(count.checked_mul(16)?)?;
+    let mut size = 12 + count * 16;
+    let mut records = Vec::with_capacity(count);
+    for (i, row) in bytes.get(start..end)?.chunks_exact(16).enumerate() {
+        let tag: [u8; 4] = row[..4].try_into().ok()?;
+        let checksum = row[4..8].try_into().ok()?;
+        if records.iter().any(|(t, _, _)| *t == tag) {
+            return None;
+        }
+        let pos = read(start + i * 16 + 8)?;
+        let len = read(start + i * 16 + 12)?;
+        let payload = bytes.get(pos..pos.checked_add(len)?)?;
+        size = size.checked_add(len.checked_add(3)? & !3)?;
+        if size > MAX {
+            return None;
+        }
+        records.push((tag, checksum, payload));
+    }
+    Some((header, records))
+}
+
+fn standalone_size(bytes: &[u8], index: u32) -> Option<usize> {
+    if !bytes.starts_with(b"ttcf") {
+        return (index == 0 && bytes.len() <= 16 << 20).then_some(bytes.len());
+    }
+    let (_, rows) = directory(bytes, index)?;
+    Some(12 + rows.len() * 16 + rows.iter().map(|(_, _, p)| (p.len() + 3) & !3).sum::<usize>())
+}
+
+/// Copy the selected face only. Never write the complete collection or change its licence.
+pub fn standalone_face(bytes: Vec<u8>, index: u32) -> Result<Vec<u8>, String> {
+    if !bytes.starts_with(b"ttcf") {
+        if index == 0 && bytes.len() <= 16 << 20 && FontRef::new(&bytes).is_ok() {
+            return Ok(bytes);
+        }
+        return Err("the installed font is invalid or exceeds 16 MiB".into());
+    }
+    let (header, mut rows) = directory(&bytes, index).ok_or("the selected font collection face is invalid or exceeds 16 MiB")?;
+    rows.sort_unstable_by_key(|(tag, _, _)| *tag);
+    let mut result = header.to_vec();
+    result.resize(12 + rows.len() * 16, 0);
+    let mut head = None;
+    for (i, (tag, checksum, data)) in rows.into_iter().enumerate() {
+        let pos = result.len();
+        let r = 12 + i * 16;
+        result[r..r + 4].copy_from_slice(&tag);
+        result[r + 4..r + 8].copy_from_slice(&checksum);
+        result[r + 8..r + 12].copy_from_slice(&(pos as u32).to_be_bytes());
+        result[r + 12..r + 16].copy_from_slice(&(data.len() as u32).to_be_bytes());
+        result.extend_from_slice(data);
+        result.resize((result.len() + 3) & !3, 0);
+        if tag == *b"head" {
+            if data.len() < 12 {
+                return Err("invalid collection font header".into());
+            }
+            head = Some(pos + 8);
+            result[pos + 8..pos + 12].fill(0);
+        }
+    }
+    let head = head.ok_or("missing collection font header")?;
+    let sum = result.chunks_exact(4).fold(0u32, |s, w| s.wrapping_add(u32::from_be_bytes(w.try_into().expect("four bytes"))));
+    let adjustment = 0xB1B0AFBAu32.wrapping_sub(sum);
+    result[head..head + 4].copy_from_slice(&adjustment.to_be_bytes());
+    FontRef::new(&result).map_err(|e| e.to_string())?;
+    Ok(result)
 }
 
 /// A selected external font is document input. Require its own open-licence declaration;
@@ -528,5 +673,127 @@ mod tests {
             assert_eq!(m.cid(code), u32::from(glyph), "cid {cid_code} PCGlyphs mapping");
             assert!((m.width(code) - width / 1000.0).abs() < 1e-8, "cid {cid_code} width");
         }
+    }
+}
+
+/// A user-chosen embeddable program. Never holds a path: reopening a PDF resolves only the
+/// program attached to its own font resource, and never consults a path from the document.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExplicitFace {
+    bytes: std::sync::Arc<Vec<u8>>,
+    postscript: String,
+    program_id: u64,
+}
+
+impl ExplicitFace {
+    pub fn new(bytes: Vec<u8>) -> Result<Self, String> {
+        validate_document_input(&bytes)?;
+        let (_, postscript) = names(&bytes)?;
+        use std::hash::{DefaultHasher, Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        bytes.hash(&mut hasher);
+        let program_id = hasher.finish();
+        Ok(Self { bytes: std::sync::Arc::new(bytes), postscript, program_id })
+    }
+
+    pub fn name(&self) -> &str {
+        &self.postscript
+    }
+
+    pub fn program_len(&self) -> usize {
+        self.bytes.len()
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    pub fn program_id(&self) -> u64 {
+        self.program_id
+    }
+
+    pub fn first_missing(&self, text: &str) -> Option<char> {
+        let face = FontRef::new(&self.bytes).ok()?;
+        let map = face.charmap();
+        text.chars().map(|c| if c == '\t' { ' ' } else { c }).find(|&c| !matches!(c, '\r' | '\n') && map.map(c).is_none_or(|gid| gid.to_u32() == 0))
+    }
+
+    pub fn layout(&self, line: &str) -> Result<crate::source_shaping::ShapedRun, String> {
+        crate::source_shaping::shape(&self.bytes, &line.replace('\t', " "))
+    }
+
+    /// A bounded outline of a shaped glyph belonging to this selected face.
+    pub fn outline(&self, glyph: u32) -> Result<crate::GlyphOutline, crate::GlyphError> {
+        crate::face_glyph(&self.bytes, glyph)
+    }
+
+    pub fn width(&self, line: &str, size: f64) -> Option<f64> {
+        self.layout(line).ok().map(|row| row.advance * size)
+    }
+
+    pub fn nominal_width(&self, text: &str, size: f64) -> Option<f64> {
+        let f = FontRef::new(&self.bytes).ok()?;
+        let cmap = f.charmap();
+        let loc = LocationRef::default();
+        let metrics = f.metrics(Size::unscaled(), loc);
+        let advances = f.glyph_metrics(Size::unscaled(), loc);
+        let width: f64 =
+            text.chars().filter_map(|c| cmap.map(if c == '\t' { ' ' } else { c })).filter_map(|gid| advances.advance_width(gid)).map(f64::from).sum();
+        Some(width * size / f64::from(metrics.units_per_em))
+    }
+
+    /// Reuse the complete program attached to an explicitly selected resource we wrote. Limits
+    /// and policy are checked again before this program can be used to lay out any newly edited content.
+    pub fn program_ref(doc: &Document, resource: &Object) -> Option<ObjRef> {
+        let top = doc.resolve(resource);
+        let top = top.as_dict()?;
+        let descendants = doc.resolve(top.get(b"DescendantFonts")?);
+        let cid = doc.resolve(descendants.as_array()?.first()?);
+        let descriptor = doc.resolve(cid.as_dict()?.get(b"FontDescriptor")?);
+        let descriptor = descriptor.as_dict()?;
+        descriptor.get(b"FontFile2").or_else(|| descriptor.get(b"FontFile3"))?.as_ref()
+    }
+
+    pub fn from_pdf_program(doc: &Document, reference: ObjRef) -> Option<Self> {
+        let program = doc.get(reference);
+        let Object::Stream(program) = program.as_ref() else { return None };
+        if !matches!(program.dict.get(b"PCFullFont"), Some(Object::Bool(true))) {
+            return None;
+        }
+        Self::new(program.decoded_within(16 << 20).ok()?).ok()
+    }
+
+    /// A selected program embedded once for all shaped rows. Every glyph (including contextual
+    /// glyphs) gets the correct position, mapping, and original logical text.
+    pub fn embed_rows(
+        &self,
+        doc: &mut Document,
+        fonts: &mut Dict,
+        rows: &[crate::source_shaping::ShapedRun],
+    ) -> Result<(String, Vec<Vec<u16>>), String> {
+        use std::collections::hash_map::Entry;
+        let mut index = HashMap::new();
+        let mut mappings = Vec::new();
+        let mut all = Vec::with_capacity(rows.len());
+        for row in rows {
+            let mut encoded = Vec::with_capacity(row.glyphs.len());
+            for glyph in &row.glyphs {
+                let key = (glyph.text.clone(), glyph.id);
+                let code = match index.entry(key.clone()) {
+                    Entry::Occupied(e) => *e.get(),
+                    Entry::Vacant(e) => {
+                        if mappings.len() >= 65_534 {
+                            return Err("shaped font mapping exceeds its budget".into());
+                        }
+                        mappings.push(key);
+                        *e.insert(mappings.len() as u16)
+                    }
+                };
+                encoded.push(code);
+            }
+            all.push(encoded);
+        }
+        let resource = embed_mapping(doc, fonts, &self.bytes, &self.postscript, &mappings)?;
+        Ok((resource, all))
     }
 }

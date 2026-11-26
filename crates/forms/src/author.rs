@@ -24,7 +24,8 @@ pub use lifecycle::{add_field, delete_field, delete_field_object, delete_widget,
 pub(crate) use look::button_appearance;
 pub(crate) use look::redraw_field_object;
 pub use look::{
-    BorderStyle, CheckStyle, FieldFont, Look, LookPatch, check_style, look, redraw_field, redraw_fields, set_button_icon, set_button_icon_target,
+    BorderStyle, CheckStyle, FieldFont, Look, LookPatch, check_style, field_font_name, look, redraw_field, redraw_fields, set_button_icon,
+    set_button_icon_target,
 };
 pub(crate) use tree::{ensure_form, form_fonts_as_objects};
 
@@ -107,6 +108,9 @@ pub struct FieldProps {
     /// Change only these appearance properties. Unlike `look`, this preserves each widget's
     /// other colours, border settings and default appearance, including custom font resources.
     pub appearance: Option<LookPatch>,
+    /// A validated desktop font selection, supplied as bytes (never a file path in a PDF).
+    /// It is embedded into the form's resources before the edited fields are redrawn.
+    pub installed_font: Option<std::sync::Arc<Vec<u8>>>,
     /// Format, Validate and Calculate tabs (written as Acrobat's AF scripts).
     pub format: Option<crate::af::Format>,
     pub validate: Option<crate::af::Validate>,

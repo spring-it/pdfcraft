@@ -146,3 +146,15 @@
 	{list} and {last}	{list}和{last}
 	{n} lines	{n} 行
 	{rule} - {status}	{rule}：{status}
+	Search fonts…	搜尋字型…
+	No matching installed fonts.	找不到符合的本機字型。
+	This font cannot be embedded in a PDF.	此字型無法嵌入 PDF。
+	Could not load the local font.	無法載入本機字型。
+	If you restart before applying the redaction, select the same installed font again.	如果在套用密文前重新啟動軟體，請重新選擇同一款本機字型。
+	This font cannot be used to draw the watermark.	此字型無法用於繪製浮水印。
+	Select the same local redaction font before marking this text.	請先選擇原來使用的本機密文字型，再標記文字。
+	The selected font cannot draw all the redaction overlay text.	所選字型無法顯示密文疊加文字中的部分字元。
+	The selected font cannot lay out this redaction overlay as one line.	所選字型無法將這段密文疊加文字排成一行。
+	Select the same installed redaction overlay font again, then apply; nothing was redacted.	請重新選擇原來使用的本機密文疊加字型，再套用；未套用任何密文。
+	The selected font cannot lay out this redaction overlay; nothing was redacted.	所選字型無法排版這段密文疊加文字；未套用任何密文。
+	The installed-font redaction overlay is too long.	使用本機字型的密文疊加文字過長。

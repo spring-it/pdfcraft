@@ -5,17 +5,16 @@
 //! marked-content block as viewers expect. Supported: single-line, multiline (wrapped), comb,
 //! password, quadding, auto font size (`0 Tf`), combo boxes and list boxes (selection shown).
 //!
-//! The `/DA` font is used when the form's `/DR` defines it as a simple font that can encode the
-//! displayed text (using its own encoding and Differences), or as a composite font with a
-//! predefined Unicode CMap such as `UniJIS-UTF16-H`, as Japanese forms use. Otherwise (unsupported
-//! characters, other composite fonts, missing resources) Helvetica is used. Text the chosen font
+//! The `/DA` font is used when the form's `/DR` defines it as a mapped font that can encode the
+//! displayed text (including a full embedded desktop face with ToUnicode), or as a composite
+//! font with a predefined Unicode CMap such as `UniJIS-UTF16-H`, as Japanese forms use.
+//! Otherwise (unsupported characters, other composite fonts, missing resources) Helvetica is used. Text the chosen font
 //! can't hold (outside WinAnsi in Helvetica, or beyond U+FFFF in a UCS-2 CMap) is drawn as `?`, as
 //! Acrobat keeps a value its field font can't show: the value itself is stored as typed,
 //! [`field_appearance_drawn`] returns the first such character, and the caller marks the widget
 //! (`pdfcraft_fonts::UNDRAWN_MARK`) and asks other viewers to redraw the field
-//! (`/NeedAppearances`). Widths are the field font's own (its `/Widths`, or the standard-14
-//! metrics), Helvetica's when Helvetica stands in, and one em per full-width character in
-//! composite fonts.
+//! (`/NeedAppearances`). Widths are the field font's own when available, Helvetica's when
+//! Helvetica stands in, and one em per full-width character for predefined Unicode CMaps.
 //!
 //! `/MK /R` (0, 90, 180, 270, counterclockwise) lays the content out in the upright box and sets
 //! the appearance `/Matrix` so that box lands on the widget rectangle. Any other value is 0, and
@@ -303,8 +302,8 @@ pub fn parse_da(da: &str) -> Da {
 #[derive(Clone, Debug, PartialEq)]
 enum FontText {
     WinAnsi,
-    /// A reused simple font's encoding, including indirect dictionaries and Differences.
-    Simple(Box<Metrics>),
+    /// A reused font with its own mapping, including embedded Type 0 fonts.
+    Mapped(Box<Metrics>),
     /// A composite font with a predefined Unicode CMap.
     Unicode(UnicodeCMap),
 }
@@ -314,14 +313,14 @@ impl FontText {
         match self {
             Self::WinAnsi => win_ansi(s),
             // Selection checks every displayed string first; wrapping only removes line breaks.
-            Self::Simple(metrics) => metrics.encode(&s.replace('\t', " ")).unwrap_or_default(),
+            Self::Mapped(metrics) => metrics.encode(&s.replace('\t', " ")).unwrap_or_default(),
             Self::Unicode(cmap) => cmap.encode(s),
         }
     }
 
     fn can_encode(&self, s: &str) -> bool {
         match self {
-            Self::Simple(metrics) => metrics.encode(&s.replace('\t', " ")).is_some(),
+            Self::Mapped(metrics) => metrics.encode(&s.replace('\t', " ")).is_some(),
             _ => true,
         }
     }
@@ -332,7 +331,7 @@ impl FontText {
     fn first_unencodable(&self, s: &str) -> Option<char> {
         match self {
             Self::WinAnsi => pdfcraft_fonts::first_undrawable(s),
-            Self::Simple(metrics) => {
+            Self::Mapped(metrics) => {
                 // A whole string that encodes has no such character, in one pass over the font's
                 // ranges. Otherwise each distinct character is asked once (a call scans every range).
                 if metrics.encode(&s.replace('\t', " ")).is_some() {
@@ -351,7 +350,7 @@ impl FontText {
         match self {
             Self::WinAnsi => helvetica_width(s, size),
             // The font's `/Widths`, or its standard-14 metrics (Courier, Times) when it has none.
-            Self::Simple(metrics) => match metrics.encode(&s.replace(['\t', '\r', '\n'], " ")) {
+            Self::Mapped(metrics) => match metrics.encode(&s.replace(['\t', '\r', '\n'], " ")) {
                 Some(bytes) => metrics.codes(&bytes).iter().map(|&(code, _)| metrics.width(code)).sum::<f64>() * size,
                 None => helvetica_width(s, size),
             },
@@ -370,17 +369,21 @@ fn dr_font(doc: &Document, name: &str) -> Option<(Object, FontText)> {
     let fd = font.as_dict()?;
     match fd.name(b"Subtype") {
         Some(b"Type1" | b"TrueType" | b"MMType1") => {}
-        // Japanese, Chinese and Korean forms: a CID font addressed by Unicode (a non-embedded
-        // `/HeiseiMin-W3` with `/UniJIS-UCS2-H`, say). Embedded CMap streams and Identity-H need
-        // the font's own mapping, so those still fall back to Helvetica.
-        Some(b"Type0") => return Some((entry, FontText::Unicode(UnicodeCMap::from_name(fd.name(b"Encoding")?)?))),
+        Some(b"Type0") => {
+            // Selected desktop fonts have their own ToUnicode and real widths. Keep predefined
+            // Unicode CMaps for non-embedded East Asian forms, which may have neither.
+            if fd.get(b"ToUnicode").is_some_and(|o| matches!(*doc.resolve(o), Object::Stream(_))) {
+                return Some((entry, FontText::Mapped(Box::new(Metrics::from_dict(doc, fd)))));
+            }
+            return Some((entry, FontText::Unicode(UnicodeCMap::from_name(fd.name(b"Encoding")?)?)));
+        }
         _ => return None,
     }
     // Symbolic fonts (ZapfDingbats, Symbol) can't show WinAnsi text.
     if matches!(fd.name(b"BaseFont"), Some(b"ZapfDingbats" | b"Symbol")) {
         return None;
     }
-    Some((entry, FontText::Simple(Box::new(Metrics::from_dict(doc, fd)))))
+    Some((entry, FontText::Mapped(Box::new(Metrics::from_dict(doc, fd)))))
 }
 
 /// A push button's caption, centered in a `width` × `height` box, in the font, size and color its
@@ -873,7 +876,7 @@ fn field_appearance_fit(doc: &Document, f: &Field, w: &Widget, values: &[String]
     let thai = matches!(f.kind, FieldKind::Text | FieldKind::Combo)
         && !f.is_comb()
         && text.chars().any(shaped_text::is_thai)
-        && !dr.as_ref().is_some_and(|(_, enc)| matches!(enc, FontText::Simple(_)) && can_show(enc, &text, false))
+        && !dr.as_ref().is_some_and(|(_, enc)| matches!(enc, FontText::Mapped(_)) && can_show(enc, &text, false))
         && shaped_text::thai_refusal(&text).is_none();
     let latin_text: String = if thai { text.chars().filter(|c| !shaped_text::is_thai(*c)).collect() } else { text.clone() };
     // Latin, Greek and Cyrillic the form's font can't hold, nor Helvetica, are drawn from the
@@ -1322,7 +1325,7 @@ mod tests {
         f.set(b"Subtype".to_vec(), Object::name("Type1"));
         f.set(b"BaseFont".to_vec(), Object::name("Helvetica"));
         f.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
-        let font = FontText::Simple(Box::new(Metrics::from_dict(&doc, &f)));
+        let font = FontText::Mapped(Box::new(Metrics::from_dict(&doc, &f)));
         assert_eq!(font.first_unencodable("h\u{e9}llo\tw\u{e9}rld"), None);
         assert_eq!(font.first_unencodable(&"a\u{e9}".repeat(1000)), None);
         assert_eq!(font.first_unencodable("ab\u{3a9}c\u{3a8}"), Some('\u{3a9}'));

@@ -30,6 +30,39 @@ fn alignment(ui: &mut egui::Ui, quadding: &mut i64) {
         });
 }
 
+/// Select a new font without replacing the current custom face on unrelated edits.
+pub(super) fn font_field(ui: &mut egui::Ui, d: &mut FieldDraft) {
+    let selected =
+        d.installed_font.as_ref().map(|(name, _)| name.as_str()).or_else(|| d.standard_font.map(FieldFont::label)).unwrap_or(&d.current_font_name);
+    ui.label(tl!("Font:"));
+    craft_ui::ComboBox::from_id_salt("field-font").selected_text(crate::font_picker::label(ui.ctx(), selected)).show_ui(ui, |ui| {
+        for font in FieldFont::ALL {
+            if ui.selectable_label(d.standard_font == Some(font), font.label()).clicked() {
+                d.standard_font = Some(font);
+                d.installed_font = None;
+                d.font_error = None;
+            }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(face) = crate::font_picker::choices(ui) {
+            match pdfcraft_engine::text_fonts::load_document_face(&face) {
+                Ok(bytes) => {
+                    d.installed_font = Some((face.names.postscript, std::sync::Arc::new(bytes)));
+                    d.standard_font = None;
+                    d.font_error = None;
+                }
+                Err(error) => d.font_error = Some(error),
+            }
+        }
+    });
+    ui.end_row();
+    if let Some(error) = &d.font_error {
+        ui.label("");
+        ui.colored_label(ui.visuals().error_fg_color, error);
+        ui.end_row();
+    }
+}
+
 /// Draw Field Properties; returns (apply, cancel).
 pub(crate) fn body(ui: &mut egui::Ui, d: &mut FieldDraft, t: &crate::theme::Tokens) -> (bool, bool) {
     use crate::widgets;
@@ -85,14 +118,10 @@ pub(crate) fn body(ui: &mut egui::Ui, d: &mut FieldDraft, t: &crate::theme::Toke
                         );
                     });
                     ui.end_row();
+                    if d.look.is_some() && d.has_text_appearance() {
+                        font_field(ui, d);
+                    }
                     if let Some(l) = d.look.as_mut() {
-                        ui.label(tl!("Font:"));
-                        craft_ui::ComboBox::from_id_salt("field-font").selected_text(l.font.label()).show_ui(ui, |ui| {
-                            for f in FieldFont::ALL {
-                                ui.selectable_value(&mut l.font, f, f.label());
-                            }
-                        });
-                        ui.end_row();
                         ui.label(tl!("Text Color:"));
                         if let Some(c) = crate::comments::swatch_grid(ui, Some(l.text)) {
                             l.text = c;

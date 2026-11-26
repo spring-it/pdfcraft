@@ -18,7 +18,7 @@ use crate::{icons, widgets};
 
 /// A font picked from the font list. The caller applies it, since keeping the paragraph's own
 /// font also means restoring the family it started with.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub(crate) enum FontChoice {
     /// The fonts the paragraph already uses.
     KeepSource,
@@ -29,7 +29,7 @@ pub(crate) enum FontChoice {
     /// Load font…: pick a font file.
     Load,
     /// A font file installed on this computer.
-    Installed(std::path::PathBuf),
+    Installed(pdfcraft_engine::text_fonts::InstalledFace),
 }
 
 /// What the font list offers and shows.
@@ -153,7 +153,7 @@ pub(crate) fn panel(
     let width = ui.available_width();
     let font_resp = outlined(ui, |ui| {
         craft_ui::ComboBox::from_id_salt("format-font")
-            .selected_text(fonts.shown.as_str())
+            .selected_text(crate::font_picker::label(ui.ctx(), &fonts.shown))
             .width(width)
             .show_ui(ui, |ui| {
                 if let Some(sources) = fonts.sources {
@@ -161,14 +161,14 @@ pub(crate) fn panel(
                         out.font = Some(FontChoice::KeepSource);
                     }
                     for (resource, face) in sources.iter().filter(|(r, _)| !r.starts_with("PCApproved")) {
-                        if ui.selectable_label(false, face).clicked() {
+                        if ui.selectable_label(false, crate::font_picker::label(ui.ctx(), face)).clicked() {
                             out.font = Some(FontChoice::Resource(resource.clone()));
                         }
                     }
                     ui.separator();
                 }
                 for f in [FontFamily::Helvetica, FontFamily::Times, FontFamily::Courier] {
-                    if ui.selectable_label(fonts.sources.is_none() && look.family == f, f.label()).clicked() {
+                    if ui.selectable_label(fonts.sources.is_none() && look.local_face.is_none() && look.family == f, f.label()).clicked() {
                         out.font = Some(FontChoice::Family(f));
                     }
                 }
@@ -177,82 +177,11 @@ pub(crate) fn panel(
                     if ui.selectable_label(false, tl!("Load font…")).clicked() {
                         out.font = Some(FontChoice::Load);
                     }
-                    #[cfg(not(target_arch = "wasm32"))]
-                    ui.menu_button(tl!("Installed fonts…"), |ui| {
-                        ui.set_min_width(260.0);
-                        let reload = ui.button(tl!("Reload")).clicked();
-                        match crate::files::installed_font_files(ui.ctx(), reload) {
-                            Some(list) if list.is_empty() => {
-                                ui.label(tl!("No openly licensed document fonts found. Load a font file."));
-                            }
-                            Some(list) => {
-                                let search_id = ui.scope_id().with("installed-font-search");
-                                let mut query = ui.data(|d| d.get_temp::<String>(search_id)).unwrap_or_default();
-                                ui.horizontal(|ui| {
-                                    let (icon_rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
-                                    crate::icons::paint(ui, icon_rect, "search", 13.0, ui.visuals().text_color().gamma_multiply(0.6));
-                                    let resp = ui.add(
-                                        egui::TextEdit::singleline(&mut query).hint_text(tl!("Search…")).desired_width(ui.available_width() - 8.0),
-                                    );
-                                    if resp.changed() {
-                                        ui.data_mut(|d| d.insert_temp(search_id, query.clone()));
-                                    }
-                                });
-                                ui.separator();
-
-                                let query_lower = query.trim().to_lowercase();
-                                let mut families: std::collections::BTreeMap<&str, Vec<&pdfcraft_engine::text_fonts::FontFile>> =
-                                    std::collections::BTreeMap::new();
-                                for font in &list {
-                                    if query_lower.is_empty()
-                                        || font.family.to_lowercase().contains(&query_lower)
-                                        || font.face.to_lowercase().contains(&query_lower)
-                                    {
-                                        families.entry(&font.family).or_default().push(font);
-                                    }
-                                }
-
-                                if families.is_empty() {
-                                    ui.label(tl!("No openly licensed document fonts found. Load a font file."));
-                                } else {
-                                    egui::ScrollArea::vertical().max_height(350.0).show(ui, |ui| {
-                                        for (family, faces) in families {
-                                            if faces.len() == 1 {
-                                                if let Some(&font) = faces.first() {
-                                                    let label =
-                                                        if font.face != font.family && !font.face.is_empty() { font.face.as_str() } else { family };
-                                                    if ui.button(label).clicked() {
-                                                        out.font = Some(FontChoice::Installed(font.path.clone()));
-                                                        ui.close();
-                                                    }
-                                                }
-                                            } else {
-                                                ui.menu_button(family, |ui| {
-                                                    ui.set_min_width(180.0);
-                                                    for font in faces {
-                                                        let label = font
-                                                            .face
-                                                            .strip_prefix(family)
-                                                            .map(str::trim)
-                                                            .filter(|s| !s.is_empty())
-                                                            .unwrap_or(&font.face);
-                                                        if ui.button(label).clicked() {
-                                                            out.font = Some(FontChoice::Installed(font.path.clone()));
-                                                            ui.close();
-                                                        }
-                                                    }
-                                                });
-                                            }
-                                        }
-                                    });
-                                }
-                            }
-                            None => {
-                                ui.label(tl!("Finding document fonts…"));
-                            }
-                        }
-                    });
                     ui.add_space(4.0);
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some(font) = crate::font_picker::choices(ui) {
+                    out.font = Some(FontChoice::Installed(font));
                 }
             })
             .response

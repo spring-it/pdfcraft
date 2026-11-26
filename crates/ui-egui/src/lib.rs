@@ -138,6 +138,7 @@ use menus::tab_context;
 use panels::all_tools_ui;
 use panels::comments_panel;
 use panels::format_text_ui;
+mod font_picker;
 use panels::organize_panel;
 use panels::page_selection_ui;
 use panels::search_ui;

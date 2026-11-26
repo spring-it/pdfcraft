@@ -88,6 +88,73 @@ fn ap(doc: &Document, w: &Widget) -> String {
     String::from_utf8_lossy(&s.decoded().unwrap()).into_owned()
 }
 
+/// Installing a local face changes the field appearance, not just its font menu label.
+#[test]
+fn installed_form_face_writes_portable_text_and_button_appearances() {
+    let phrase = "中文查核 123";
+    let Some(face) = pdfcraft_fonts::ui_chinese_fonts()
+        .into_iter()
+        .find(|font| pdfcraft_fonts::embedding::validate_document_input(font.bytes).is_ok() && pdfcraft_fonts::embedding::covers(font.bytes, phrase))
+    else {
+        assert!(pdfcraft_fonts::ui_chinese_fonts().is_empty(), "bundled font does not cover the test phrase");
+        return;
+    };
+    let bytes = Arc::new(face.bytes.to_vec());
+    let (_, expected_name) = pdfcraft_fonts::embedding::names(&bytes).unwrap();
+    let mut doc = fixture();
+    let patch = LookPatch { text: Some([0.2, 0.4, 0.7]), ..Default::default() };
+    for name in ["name", "notes", "go", "country", "toppings"] {
+        let choice = matches!(name, "country" | "toppings");
+        let props = FieldProps {
+            options: choice.then(|| vec![phrase.into()]),
+            installed_font: Some(bytes.clone()),
+            appearance: Some(patch),
+            caption: (name == "go").then(|| (0, phrase.into())),
+            ..Default::default()
+        };
+        set_props(&mut doc, name, &props).unwrap();
+        if name != "go" {
+            let value = if choice { FieldValue::Choice(vec![phrase.into()]) } else { FieldValue::Text(phrase.into()) };
+            set_value(&mut doc, name, &value).unwrap();
+        }
+    }
+    let mut doc = reopen(&doc);
+    // A later partial style edit leaves the selected face and the stored Unicode intact.
+    set_props(&mut doc, "name", &FieldProps { appearance: Some(LookPatch { width: Some(2.0), ..Default::default() }), ..Default::default() })
+        .unwrap();
+    let all = fields(&doc);
+    let acroform = acroform(&doc).unwrap();
+    let dr = doc.resolve(acroform.get(b"DR").unwrap());
+    let fonts = doc.resolve(dr.as_dict().unwrap().get(b"Font").unwrap());
+    let fonts = fonts.as_dict().unwrap();
+    let resource = appearance::parse_da(&field(&all, "name").da).font;
+    assert_eq!(fonts.iter().filter(|(name, _)| name.starts_with(b"PCFull")).count(), 1, "all fields reuse the installed program");
+    let chosen = fonts.get(resource.as_bytes()).unwrap().clone();
+    let font = doc.resolve(&chosen);
+    let metrics = pdfcraft_fonts::pdf::Metrics::from_dict(&doc, font.as_dict().unwrap());
+    for name in ["name", "notes", "go", "country", "toppings"] {
+        let f = field(&all, name);
+        assert_eq!(field_font_name(&doc, f), expected_name);
+        assert_eq!(appearance::parse_da(&f.da).font, resource);
+        let (used_face, drawn) = appearance_text(&doc, &f.widgets[0], resource.as_bytes());
+        assert_eq!(&used_face, font.as_ref());
+        let actual = drawn.iter().map(|line| metrics.decode(line)).collect::<String>();
+        assert_eq!(actual, phrase, "the saved appearance of {name} encodes the actual Chinese text");
+    }
+    assert!(undrawn_fields(&doc).is_empty());
+}
+
+/// A font blocked by validation, or selected for a field without editable text, changes nothing.
+#[test]
+fn rejecting_an_invalid_field_font_does_not_change_the_form() {
+    let mut doc = fixture();
+    let before = write_incremental(&doc, &SaveOptions::default()).unwrap();
+    let invalid = FieldProps { tooltip: Some("must stay unchanged".into()), installed_font: Some(Arc::new(vec![0, 1, 2])), ..Default::default() };
+    assert!(set_props(&mut doc, "name", &invalid).is_err());
+    assert!(set_props(&mut doc, "agree", &invalid).is_err());
+    assert_eq!(write_incremental(&doc, &SaveOptions::default()).unwrap(), before);
+}
+
 /// A push button's caption is drawn in the font, size and color its `/DA` asks for; with an
 /// automatic size (0) it is sized to fit the button, in the form's default font and color.
 #[test]

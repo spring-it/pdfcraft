@@ -681,6 +681,7 @@ pub(crate) fn editor(ctx: &egui::Context, keys: PageKeys, view: &mut DocView, in
     let zoom = xf.zoom();
     let Some(draft) = view.content.draft.as_mut() else { return (None, false) };
     let font = crate::edit_text_ui::editor_font(&draft.style, (draft.style.size as f32 * zoom).clamp(1.0, 300.0));
+    let font = crate::font_picker::preview_font(ctx, draft.style.local_face.as_ref(), font);
     let text = AddedText { text: draft.text.clone(), ..draft.style.clone() };
     let Some(page_width) = info.pages.get(page).map(|p| p.width as f64) else { return (None, false) };
     if let Some((key, z, width, rect)) = &view.content.layout

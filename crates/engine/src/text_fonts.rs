@@ -8,6 +8,116 @@ pub struct FontFile {
     pub face: String,
 }
 
+/// A desktop picker entry. Blocked faces are discoverable by name, but cannot be embedded.
+#[derive(Clone, Debug)]
+pub struct InstalledFace {
+    pub path: PathBuf,
+    pub names: pdfcraft_fonts::embedding::DisplayFace,
+}
+
+impl InstalledFace {
+    pub fn label(&self, ui_language: &str) -> &str {
+        match ui_language {
+            "zh-hans" => self.names.chinese_simplified.as_deref(),
+            "zh-hant" => self.names.chinese_traditional.as_deref(),
+            _ => None,
+        }
+        .unwrap_or(&self.names.postscript)
+    }
+}
+
+/// Read and validate again at selection time; never trust a path retained by the picker.
+pub fn load_installed_face(path: &Path) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    file.take((16 << 20) + 1).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    pdfcraft_fonts::embedding::validate_document_input(&bytes)?;
+    Ok(bytes)
+}
+
+/// Load the same face the picker showed, supporting collections as well as standalone files.
+pub fn load_document_face(face: &InstalledFace) -> Result<Vec<u8>, String> {
+    let bytes = load_raster_face(face)?;
+    pdfcraft_fonts::embedding::validate_document_input(&bytes)?;
+    Ok(bytes)
+}
+
+pub fn load_raster_face(face: &InstalledFace) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let file = std::fs::File::open(&face.path).map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    file.take((64 << 20) + 1).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    if bytes.len() > 64 << 20 {
+        return Err("the installed font collection exceeds 64 MiB".into());
+    }
+    let result = pdfcraft_fonts::embedding::standalone_face(bytes, face.names.face_index)?;
+    let postscript = pdfcraft_fonts::embedding::postscript_name(&result)?;
+    if postscript != face.names.postscript {
+        return Err("the installed font changed; reload the font list".into());
+    }
+    Ok(result)
+}
+
+/// Discover localized family/face names from installed TTF/OTF and TTC/OTC fonts. This
+/// catalog does not replace the confined, eligible-only scanner exposed to automation.
+pub fn discover_desktop(roots: &[PathBuf]) -> Vec<InstalledFace> {
+    use std::io::Read;
+    const ENTRY_LIMIT: usize = 4096;
+    const FONT_LIMIT: usize = 3072;
+    let mut allowance = 512u64 << 20;
+    let mut pending: Vec<_> = roots.iter().rev().take(16).filter_map(|r| r.canonicalize().ok()).map(|r| (r, 0u8)).collect();
+    let mut result = Vec::new();
+    let mut visited = std::collections::HashSet::new();
+    let mut seen = std::collections::HashMap::new();
+    while let Some((path, depth)) = pending.pop() {
+        if visited.len() >= ENTRY_LIMIT || result.len() >= FONT_LIMIT || allowance == 0 {
+            break;
+        }
+        let Ok(meta) = std::fs::symlink_metadata(&path) else { continue };
+        if meta.file_type().is_symlink() || !visited.insert(path.clone()) {
+            continue;
+        }
+        if meta.is_dir() && depth < 4 {
+            if let Ok(children) = std::fs::read_dir(&path) {
+                let left = ENTRY_LIMIT.saturating_sub(visited.len() + pending.len());
+                let mut entries: Vec<_> = children.take(left).flatten().map(|e| e.path()).collect();
+                entries.sort();
+                pending.extend(entries.into_iter().rev().map(|p| (p, depth + 1)));
+            }
+            continue;
+        }
+        if !meta.is_file() || meta.len() == 0 || meta.len() > (64 << 20) || meta.len() > allowance {
+            continue;
+        }
+        let Some(ext) = path.extension().and_then(std::ffi::OsStr::to_str) else { continue };
+        if !["ttf", "otf", "ttc", "otc"].iter().any(|x| x.eq_ignore_ascii_case(ext)) {
+            continue;
+        }
+        allowance -= meta.len();
+        let mut bytes = Vec::new();
+        if std::fs::File::open(&path).and_then(|f| f.take(meta.len() + 1).read_to_end(&mut bytes)).is_err() || bytes.len() as u64 != meta.len() {
+            continue;
+        }
+        for names in pdfcraft_fonts::embedding::display_faces(&bytes, 64) {
+            let key = (names.family.to_lowercase(), names.postscript.to_lowercase());
+            if let Some(&index) = seen.get(&key) {
+                let existing: &mut InstalledFace = &mut result[index];
+                if (names.can_embed, names.can_rasterize) > (existing.names.can_embed, existing.names.can_rasterize) {
+                    *existing = InstalledFace { path: path.clone(), names };
+                }
+            } else {
+                if result.len() >= FONT_LIMIT {
+                    break;
+                }
+                seen.insert(key, result.len());
+                result.push(InstalledFace { path: path.clone(), names });
+            }
+        }
+    }
+    result
+}
+
 /// Standard user-installed font folders; discovery is performed only on request.
 pub fn installed_directories() -> Vec<PathBuf> {
     let home = std::env::var_os("HOME").map(PathBuf::from);

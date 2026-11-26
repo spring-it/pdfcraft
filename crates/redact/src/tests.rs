@@ -5617,7 +5617,14 @@ fn removing_comments_keeps_annotations_that_are_not_comments() {
 #[test]
 fn overlay_text_takes_its_font_size_colour_alignment_and_repeats() {
     let mut doc = one_page(b"BT /F1 12 Tf 20 250 Td (Secret salary figures) Tj ET", "", Vec::new());
-    let look = pdfcraft_annot::OverlayLook { font: pdfcraft_annot::OverlayFont::Courier, size: 8.0, color: [0.0, 0.0, 1.0], align: 0, repeat: true };
+    let look = pdfcraft_annot::OverlayLook {
+        font: pdfcraft_annot::OverlayFont::Courier,
+        local_font: None,
+        size: 8.0,
+        color: [0.0, 0.0, 1.0],
+        align: 0,
+        repeat: true,
+    };
     let shape = Shape::Redact { quads: vec![rect_quad([10.0, 200.0, 290.0, 270.0])], overlay: "REDACTED".into(), look };
     let style = Style::default_for(&shape);
     add_annotation(&mut doc, &NewAnnotation { page: 0, shape, style, contents: String::new(), author: "T".into() }, &Meta::default()).unwrap();
@@ -5639,6 +5646,54 @@ fn overlay_text_takes_its_font_size_colour_alignment_and_repeats() {
         .and_then(|r| r.get(b"Font").and_then(|f| doc.resolve(f).as_dict().cloned()))
         .unwrap();
     assert!(fonts.contains(b"PCCour") && !fonts.contains(b"PCTimes"));
+}
+
+#[test]
+fn selected_local_overlay_outlines_survive_save_and_do_not_exempt_original_content() {
+    let mut look = pdfcraft_annot::OverlayLook { size: 12.0, color: [1.0, 0.0, 0.0], repeat: true, ..Default::default() };
+    // A locally selected face need not be a bundled face; known bundled bytes keep this test
+    // deterministic. Use Han when the pinned CJK assets are present, or a real Latin test face.
+    let cjk = pdfcraft_fonts::ui_chinese_fonts()
+        .into_iter()
+        .find(|f| pdfcraft_fonts::embedding::validate_document_input(f.bytes).is_ok() && pdfcraft_fonts::embedding::covers(f.bytes, "已遮盖"));
+    let (bytes, caption) = cjk.map_or((pdfcraft_fonts::INTER_REGULAR, "Overlay"), |f| (f.bytes, "已遮盖"));
+    look.select_local_font(bytes.to_vec()).unwrap();
+    let mut doc = one_page(b"BT /F1 12 Tf 20 250 Td (SECRET SALARY FIGURES) Tj ET BT /F1 12 Tf 20 80 Td (PUBLIC) Tj ET", "", Vec::new());
+    let shape = Shape::Redact { quads: vec![rect_quad([10.0, 236.0, 290.0, 272.0])], overlay: caption.into(), look };
+    let style = Style::default_for(&shape);
+    add_annotation(&mut doc, &NewAnnotation { page: 0, shape, style, contents: String::new(), author: "T".into() }, &Meta::default()).unwrap();
+    let mut doc = Document::open(Arc::new(write_full(&doc, &SaveOptions::default()).unwrap())).unwrap();
+    assert_eq!(marks(&doc)[0].look, look, "pending PDF stores a face ID, not a font file");
+    let mut proof = Snapshot::capture(&doc, None).unwrap();
+    let report = apply(&mut doc, None).unwrap();
+    assert!(report.glyphs > 0);
+    proof.set_overlay_streams(&doc, &report.overlays).unwrap();
+    let out = write_full(&doc, &SaveOptions::default()).unwrap();
+    assert!(proof.prove_saved(&out, None, &ProofOptions::default()).passed());
+    let saved = Document::open(Arc::new(out.clone())).unwrap();
+    assert!(marks(&saved).is_empty() && !content(&saved, 0).contains("SECRET"));
+    let painted = content(&saved, 0);
+    assert!(painted.contains(" l ") && painted.matches(" cm ").count() > 2, "rendered repeated selected-font paths, not text/font resources");
+    assert!(!out.windows(b"PCLocalOverlayFont".len()).any(|w| w == b"PCLocalOverlayFont"));
+
+    let mut renderer = pdfcraft_render::PageRenderer::new(Arc::new(out), pdfcraft_render::RenderConfig::default());
+    let image = renderer.render(pdfcraft_render::RenderRequest { page: 0, scale: 1.0, ..Default::default() });
+    assert!(image.error.is_none(), "{:?}", image.error);
+    assert!(image.rgba.chunks_exact(4).filter(|p| p[0] > 170 && p[1] < 40 && p[2] < 40).count() > 20, "the applied red overlay label renders");
+}
+
+#[test]
+fn unknown_local_overlay_face_refuses_instead_of_using_pdf_supplied_data() {
+    let mut doc = one_page(b"BT /F1 12 Tf 20 250 Td (SECRET SALARY FIGURES) Tj ET", "", Vec::new());
+    mark(&mut doc, 0, &[[10.0, 236.0, 290.0, 272.0]], "Standard");
+    let m = marks(&doc).remove(0);
+    doc.update_dict(m.obj, |d| {
+        d.set(b"PCLocalOverlayFont".to_vec(), Object::String(pdfcraft_cos::PdfString::text("untrusted.pdf")));
+    })
+    .unwrap();
+    let before = write_full(&doc, &SaveOptions::default()).unwrap();
+    assert!(matches!(apply(&mut doc, None), Err(RedactError::Undrawable(_))));
+    assert_eq!(before, write_full(&doc, &SaveOptions::default()).unwrap(), "missing face aborts atomically");
 }
 
 fn repeated_overlay_document(width: f64, height: f64, repeat: bool) -> Document {

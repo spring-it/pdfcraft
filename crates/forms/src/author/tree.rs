@@ -43,6 +43,18 @@ pub(crate) fn ensure_form(doc: &mut Document) -> Result<ObjRef, FormError> {
     Ok(r)
 }
 
+/// Add an approved program to the AcroForm /DR, reusing an exact program and mapping
+/// already present. The caller validates document permissions before invoking the edit.
+pub(super) fn install_font(doc: &mut Document, bytes: &[u8], postscript: &str) -> Result<String, FormError> {
+    let form = ensure_form(doc)?;
+    let mut af = doc.get(form).as_dict().cloned().ok_or(FormError::NoForm)?;
+    let (dr, mut fonts) = form_fonts(doc, &af);
+    let name = pdfcraft_fonts::embedding::embed(doc, &mut fonts, bytes, postscript).map_err(FormError::Invalid)?;
+    store_form_fonts(doc, &mut af, dr, fonts);
+    doc.set(form, Object::Dict(af));
+    Ok(name)
+}
+
 /// The form dictionary's `/DR` and its `/Font` dictionary, resolved (empty where missing).
 fn form_fonts(doc: &Document, af: &Dict) -> (Dict, Dict) {
     let dr = af.get(b"DR").map(|o| doc.resolve(o)).and_then(|o| o.as_dict().cloned()).unwrap_or_default();
