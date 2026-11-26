@@ -116,5 +116,5 @@ toml = "1"
 # Only synthetic attribute fixtures use xattr; product reads/writes use rustix.
 xattr = "1.6"
 
-[target.'cfg(target_os = "linux")'.dev-dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tempfile = "3.27"
