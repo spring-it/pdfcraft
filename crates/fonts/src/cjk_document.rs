@@ -14,7 +14,7 @@ pub fn is_cjk(c: char) -> bool {
 #[derive(Debug)]
 enum Bytes {
     Bundled(&'static [u8]),
-    #[cfg(windows)]
+    #[cfg(any(windows, test))]
     Local {
         bytes: std::sync::Arc<Vec<u8>>,
         index: u32,
@@ -25,7 +25,7 @@ impl Bytes {
     fn read(&self) -> Option<FontRef<'_>> {
         match self {
             Self::Bundled(bytes) => FontRef::new(bytes).ok(),
-            #[cfg(windows)]
+            #[cfg(any(windows, test))]
             Self::Local { bytes, index } => FontRef::from_index(bytes, *index).ok(),
         }
     }
@@ -64,14 +64,18 @@ pub(crate) fn shaper(index: usize, font: &FontRef<'_>) -> Option<&'static harfru
     Some(fonts().get(index)?.shaper.get_or_init(|| harfrust::ShaperData::new(font)))
 }
 
+fn covers_with_face(font: &FontRef<'_>, text: &str) -> bool {
+    let map = font.charmap();
+    text.chars().all(|c| matches!(c, '\n' | '\r' | '\t') || map.map(c).is_some_and(|g| g.to_u32() != 0))
+}
+
 pub(crate) fn select(text: &str) -> Option<(usize, FontRef<'static>)> {
     if !text.chars().any(is_cjk) {
         return None;
     }
     fonts().iter().enumerate().find_map(|(index, face)| {
-        let f = face.bytes.read()?;
-        let map = f.charmap();
-        text.chars().all(|c| matches!(c, '\n' | '\r' | '\t') || map.map(c).is_some_and(|g| g.to_u32() != 0)).then_some((index, f))
+        let font = face.bytes.read()?;
+        covers_with_face(&font, text).then_some((index, font))
     })
 }
 
@@ -83,17 +87,55 @@ pub fn covers(text: &str) -> bool {
 /// remains the fallback when the machine has no eligible custom-installed face.
 pub fn local_document_face(text: &str) -> Option<std::sync::Arc<Vec<u8>>> {
     #[cfg(windows)]
+    return select_local_standalone(fonts(), text);
+    #[cfg(not(windows))]
     {
-        let (index, _) = select(text)?;
-        if let Bytes::Local { bytes, index: 0 } = &fonts().get(index)?.bytes
-            && FontRef::new(bytes).is_ok()
-            && bytes.len() <= 16 << 20
-        {
-            return Some(std::sync::Arc::clone(bytes));
-        }
+        let _ = text;
+        None
     }
-    let _ = text;
-    None
+}
+
+#[cfg(any(windows, test))]
+fn select_local_standalone(faces: &[Face], text: &str) -> Option<std::sync::Arc<Vec<u8>>> {
+    if !text.chars().any(is_cjk) {
+        return None;
+    }
+    faces.iter().find_map(|face| {
+        let Bytes::Local { bytes, index: 0 } = &face.bytes else { return None };
+        if bytes.len() > 16 << 20 {
+            return None;
+        }
+        // The paragraph writer needs standalone bytes, so a font collection can't win this
+        // particular search even if that face covers the entire text for the outline writer.
+        let font = FontRef::new(bytes).ok()?;
+        covers_with_face(&font, text).then(|| std::sync::Arc::clone(bytes))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    #[test]
+    fn paragraph_fallback_continues_past_an_unusable_installed_face() {
+        let Some(bundled) =
+            crate::ui_chinese_fonts().into_iter().find(|face| FontRef::new(face.bytes).ok().is_some_and(|font| covers_with_face(&font, "中文 A")))
+        else {
+            assert!(!crate::ui_chinese_fonts().iter().any(|face| !face.bytes.is_empty()), "expected bundled Chinese test coverage");
+            return;
+        };
+        let correct = Arc::new(bundled.bytes.to_vec());
+        let faces = [
+            Face::from(Bytes::Local { bytes: Arc::clone(&correct), index: 1 }),
+            Face::from(Bytes::Local { bytes: Arc::new(vec![0]), index: 0 }),
+            Face::from(Bytes::Local { bytes: Arc::clone(&correct), index: 0 }),
+            Face::from(Bytes::Bundled(bundled.bytes)),
+        ];
+        let chosen = select_local_standalone(&faces, "中文 A").expect("the later installed standalone face covers the entire input");
+        assert!(Arc::ptr_eq(&correct, &chosen));
+        assert!(select_local_standalone(&faces, "中文 🦄").is_none(), "partial glyph coverage is not enough");
+    }
 }
 
 pub fn refusal(text: &str) -> Option<String> {
