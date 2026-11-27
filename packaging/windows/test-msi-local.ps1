@@ -19,6 +19,15 @@ function Require([bool] $Pass, [string] $Message) {
   if (-not $Pass) { throw "MSI validation failed: $Message" }
 }
 
+# Check both the database product name and the separate Explorer-visible summary stream.
+$brand = '沃飞翼览 PDF'
+$productName = First 'SELECT `Value` FROM `Property` WHERE `Property` = ''ProductName'''
+Require ($productName -ceq $brand) "MSI ProductName must be '$brand', got '$productName'"
+$summary = $Database.GetType().InvokeMember('SummaryInformation', 'GetProperty', $null, $Database, @(0))
+$summarySubject = [string] $summary.GetType().InvokeMember('Property', 'GetProperty', $null, $summary, @(3))
+Require ($summarySubject.Contains($brand)) "MSI file properties must retain '$brand', got '$summarySubject'"
+Write-Output "ok MSI product name and summary: $brand"
+
 $allUsers = First 'SELECT `Value` FROM `Property` WHERE `Property` = ''ALLUSERS'''
 Require ($allUsers -ne '1') 'ALLUSERS must not select per-machine scope'
 $parent = First 'SELECT `Directory_Parent` FROM `Directory` WHERE `Directory` = ''INSTALLFOLDER'''
