@@ -774,9 +774,18 @@ fn format_text_lists_fit_the_narrowest_tools_pane_in_every_language() {
         assert!(h.state_mut().execute("edit.text"));
         h.run_steps(3);
         let lists: Vec<egui::Rect> = h.query_all_by_role(Role::ComboBox).map(|n| n.rect()).collect();
-        // Found by its value (a font name, never translated), not as the widest list: an overrun
-        // could make another list the widest.
-        let font = h.query_all_by_role(Role::ComboBox).find(|n| n.value().as_deref() == Some("Helvetica")).map(|n| n.rect()).expect("the font list");
+        // Find the actual font list by its localized value, not by width: an overrun could make
+        // another list the widest.
+        let label = match lang.code() {
+            "zh-hans" => "赫尔维蒂卡体",
+            "zh-hant" => "赫爾維蒂卡體",
+            _ => "Helvetica",
+        };
+        let font = h
+            .query_all_by_role(Role::ComboBox)
+            .find(|n| n.value().as_deref() == Some(label))
+            .map(|n| n.rect())
+            .unwrap_or_else(|| panic!("{}: the font list must display {label}", lang.code()));
         for r in &lists {
             assert!(r.right() <= font.right() + 0.5, "{}: {r:?} reaches past the font list ({font:?})", lang.code());
         }
