@@ -211,3 +211,27 @@ fn replacements_commit_all_selected_pages_and_preserve_other_marks_and_shared_re
         }
     }
 }
+
+#[test]
+fn header_uses_the_selected_latin_face_and_chinese_fallback_in_the_saved_pdf() {
+    use pdfcraft_fonts::embedding::ExplicitFace;
+    const CHINESE: &str = "我来测试个撒地方";
+    if pdfcraft_fonts::ui_chinese_fonts().is_empty() {
+        return;
+    }
+    let latin = ExplicitFace::new(include_bytes!("../../../assets/fonts/Inter-Regular.ttf").to_vec()).unwrap();
+    assert_eq!(latin.first_missing(CHINESE), Some('我'));
+    let mut hf = HeaderFooter { local_face: Some(latin.clone()), ..Default::default() };
+    hf.text[1] = format!("ABC {CHINESE} <<1>>");
+    assert_eq!(hf.first_undrawable(), None);
+    let mut doc = fixture();
+    add_header_footer(&mut doc, &[0, 1], &hf, false, &cx()).unwrap();
+    let saved = reopen(&doc);
+    for page in 0..2 {
+        let stream = streams(&saved, page).last().unwrap().clone();
+        assert!(stream.contains("/PCFull") && stream.contains("/PCTh"), "{stream}");
+        assert!(!stream.contains('?'));
+        let lines = crate::text::text_lines(&saved, page).unwrap();
+        assert!(lines.iter().any(|l| l.text.contains(&format!("ABC {CHINESE} {}", page + 1))), "{lines:?}");
+    }
+}

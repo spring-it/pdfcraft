@@ -32,15 +32,21 @@ fn alignment(ui: &mut egui::Ui, quadding: &mut i64) {
 
 /// Select a new font without replacing the current custom face on unrelated edits.
 pub(super) fn font_field(ui: &mut egui::Ui, d: &mut FieldDraft) {
-    let selected =
-        d.installed_font.as_ref().map(|(name, _)| name.as_str()).or_else(|| d.standard_font.map(FieldFont::label)).unwrap_or(&d.current_font_name);
+    let selected = if let Some((name, _)) = &d.installed_font {
+        crate::font_picker::label(ui.ctx(), name)
+    } else if let Some(font) = d.standard_font {
+        crate::font_picker::preset(font.label())
+    } else {
+        crate::font_picker::label(ui.ctx(), &d.current_font_name)
+    };
     ui.label(tl!("Font:"));
-    craft_ui::ComboBox::from_id_salt("field-font").selected_text(crate::font_picker::label(ui.ctx(), selected)).show_ui(ui, |ui| {
+    crate::font_picker::combo("field-font").selected_text(selected).show_ui(ui, |ui| {
         for font in FieldFont::ALL {
-            if ui.selectable_label(d.standard_font == Some(font), font.label()).clicked() {
+            if ui.selectable_label(d.standard_font == Some(font), crate::font_picker::preset(font.label())).clicked() {
                 d.standard_font = Some(font);
                 d.installed_font = None;
                 d.font_error = None;
+                ui.close();
             }
         }
         #[cfg(not(target_arch = "wasm32"))]

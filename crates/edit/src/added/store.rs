@@ -199,8 +199,8 @@ fn validate(c: &Content) -> Result<(), EditError> {
             if (r[2] - r[0]).abs() < 1.0 {
                 return Err(EditError::Invalid("the text box is too narrow".into()));
             }
-            if let Some(face) = &t.local_face {
-                if let Some(c) = face.first_missing(&t.text) {
+            if t.local_face.is_some() {
+                if let Some(c) = first_undrawable(t) {
                     return Err(crate::undrawable(c));
                 }
                 return Ok(());
@@ -247,7 +247,7 @@ fn write(doc: &mut Document, page: usize, c: &Content, obj: Option<ObjRef>) -> R
         drop_fonts(doc, &mut pres, &own_fonts(doc, r));
     }
     let taken = pres.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
-    let (content, res) = draw(doc, c, view, &taken, obj.is_some())?;
+    let (content, res, selected_font) = draw(doc, c, view, &taken, obj.is_some())?;
     if obj.is_none() {
         crate::check_on_top(doc, p)?;
     }
@@ -262,12 +262,8 @@ fn write(doc: &mut Document, page: usize, c: &Content, obj: Option<ObjRef>) -> R
     let mut sd = Dict::new();
     sd.set(b"PCMark".to_vec(), Object::name(TAG));
     let mut added = params(c);
-    if let Content::Text(t) = c
-        && t.local_face.is_some()
-        && let Some(fonts) = res.get(b"Font").and_then(Object::as_dict)
-        && let Some((_, font)) = fonts.iter().next()
-    {
-        added.set(b"PCTypeface".to_vec(), font.clone());
+    if let Some(font) = selected_font {
+        added.set(b"PCTypeface".to_vec(), font);
     }
     if user_unit != 1.0 {
         added.set(b"UserUnit".to_vec(), Object::Real(user_unit));

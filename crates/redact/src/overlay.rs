@@ -53,24 +53,22 @@ fn number(v: f64) -> String {
 /// still pass it. No object reference is allowed through this path.
 fn local_overlay(c: &mut Output<'_>, mark: &Mark) -> Result<(), RedactError> {
     let look = &mark.look;
-    let face = look
-        .selected_local_font()
-        .ok_or_else(|| RedactError::Undrawable("Select the same installed redaction overlay font again, then apply; nothing was redacted.".into()))?;
-    if mark.overlay.len() > pdfcraft_annot::OverlayLook::MAX_LOCAL_TEXT_BYTES {
-        return Err(RedactError::OverlayLimit);
-    }
-    if face.first_missing(&mark.overlay).is_some() {
-        return Err(RedactError::Undrawable("The selected font cannot draw all the redaction overlay text.".into()));
-    }
-    let shape_error = |_| RedactError::Undrawable("The selected font cannot lay out this redaction overlay; nothing was redacted.".into());
-    let run = face.layout(&mark.overlay).map_err(shape_error)?;
-    if !(0.0..=32768.0).contains(&run.advance) || run.glyphs.len() > 4096 {
-        return Err(RedactError::OverlayLimit);
-    }
+    let run = look.layout_local_overlay(&mark.overlay).map_err(|e| match e {
+        pdfcraft_annot::OverlayLayoutError::MissingFace => {
+            RedactError::Undrawable("Select the same installed redaction overlay font again, then apply; nothing was redacted.".into())
+        }
+        pdfcraft_annot::OverlayLayoutError::MissingGlyph => {
+            RedactError::Undrawable("The selected font cannot draw all the redaction overlay text.".into())
+        }
+        pdfcraft_annot::OverlayLayoutError::Layout => {
+            RedactError::Undrawable("The selected font cannot lay out this redaction overlay; nothing was redacted.".into())
+        }
+        pdfcraft_annot::OverlayLayoutError::Limit => RedactError::OverlayLimit,
+    })?;
     let mut path_room = *c.remaining;
     let mut path = Output { bytes: Vec::new(), remaining: &mut path_room };
-    for glyph in run.glyphs {
-        let outline = face.outline(glyph.id.to_u32()).map_err(|_| RedactError::OverlayLimit)?;
+    for glyph in &run.glyphs {
+        let outline = run.outline(glyph).map_err(|_| RedactError::OverlayLimit)?;
         let mut paints = false;
         for contour in outline.contours {
             if contour.len() < 2 {
@@ -93,7 +91,7 @@ fn local_overlay(c: &mut Output<'_>, mark: &Mark) -> Result<(), RedactError> {
     if path.bytes.is_empty() {
         return Ok(());
     }
-    let gap = if look.repeat { face.layout(" ").map_err(shape_error)?.advance.max(0.0) } else { 0.0 };
+    let gap = run.gap;
     let [cr, cg, cb] = look.color.map(|v| v.clamp(0.0, 1.0));
     for r in &mark.rects {
         let (w, h) = (r[2] - r[0], r[3] - r[1]);

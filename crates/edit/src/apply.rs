@@ -1,8 +1,8 @@
 use pdfcraft_fonts::shaped_text::{is_thai, thai_refusal, thai_width};
 
 use super::marks::{
-    Background, Context, HeaderFooter, MarkKind, MarkText, Watermark, add_picture_resource, bates_start, expand, matrix_number, n, picture,
-    picture_at, rgb, shrink_matrix,
+    Background, Context, HeaderFooter, MarkKind, MarkText, Watermark, add_picture_resource, bates_start, expand, header_font_runs, matrix_number, n,
+    picture, picture_at, rgb, shrink_matrix,
 };
 use super::place::{
     END, Isolation, add_page_resources, add_resources, begin, check, check_on_top, contents, free_font_name, isolation, page_fonts, page_list, place,
@@ -86,14 +86,23 @@ fn add_header_footer_in_place(doc: &mut Document, pages: &[usize], hf: &HeaderFo
     };
     let bates_of = |k: usize| bates0.checked_add(k as u64).ok_or_else(|| EditError::Invalid("the Bates numbers are too large".into()));
     // Every Thai line drawn on any page (a Bates prefix may join a template's Thai), for its fonts.
-    let mut thai_lines = std::collections::BTreeSet::new();
-    if hf.local_face.is_none() && hf.text.iter().any(|t| t.chars().any(|c| is_thai(c) || pdfcraft_fonts::cjk_document::is_cjk(c))) {
+    let mut fallback_lines = std::collections::BTreeSet::new();
+    if hf.text.iter().any(|t| t.chars().any(|c| is_thai(c) || pdfcraft_fonts::cjk_document::is_cjk(c))) {
         for k in 0..pages.len() {
             let (number, bates) = (number_of(k)?, bates_of(k)?);
-            thai_lines.extend(hf.text.iter().flat_map(|t| expand(t, number, count, bates, cx).lines().map(str::to_owned).collect::<Vec<_>>()));
+            for t in &hf.text {
+                let expanded = expand(t, number, count, bates, cx);
+                for line in expanded.lines() {
+                    if let Some(face) = &hf.local_face {
+                        fallback_lines.extend(header_font_runs(face, line).into_iter().filter_map(|(covered, s)| (!covered).then(|| s.to_owned())));
+                    } else {
+                        fallback_lines.insert(line.to_owned());
+                    }
+                }
+            }
         }
     }
-    let thai = MarkText::new(doc, &all, pages, thai_lines.iter().map(String::as_str))?;
+    let thai = MarkText::new(doc, &all, pages, fallback_lines.iter().map(String::as_str))?;
     for (k, &i) in pages.iter().enumerate() {
         let page = &all[i];
         let (w, h) = page.display_size(doc);
@@ -104,28 +113,39 @@ fn add_header_footer_in_place(doc: &mut Document, pages: &[usize], hf: &HeaderFo
             let template = &hf.text[slot];
             if template.trim().is_empty() { Vec::new() } else { expand(template, number, count, bates, cx).lines().map(str::to_owned).collect() }
         });
-        let mut explicit = if let Some(face) = &hf.local_face {
-            let rows = slots.iter().flatten().map(|line| face.layout(line).map_err(EditError::Invalid)).collect::<Result<Vec<_>, _>>()?;
-            let mut fonts = page_fonts(doc, page);
-            let (resource, encoded) = face.embed_rows(doc, &mut fonts, &rows).map_err(EditError::Invalid)?;
-            let mut own = super::Dict::new();
-            if let Some(font) = fonts.get(resource.as_bytes()) {
-                own.set(resource.as_bytes().to_vec(), font.clone());
+        let runs = hf.local_face.as_ref().map(|face| slots.iter().flatten().map(|line| header_font_runs(face, line)).collect::<Vec<_>>());
+        let explicit = if let (Some(face), Some(runs)) = (&hf.local_face, &runs) {
+            let rows = runs
+                .iter()
+                .flatten()
+                .filter(|(covered, _)| *covered)
+                .map(|(_, text)| face.layout(text).map_err(EditError::Invalid))
+                .collect::<Result<Vec<_>, _>>()?;
+            if rows.is_empty() {
+                None
+            } else {
+                let mut fonts = page_fonts(doc, page);
+                let (resource, encoded) = face.embed_rows(doc, &mut fonts, &rows).map_err(EditError::Invalid)?;
+                let mut own = super::Dict::new();
+                if let Some(font) = fonts.get(resource.as_bytes()) {
+                    own.set(resource.as_bytes().to_vec(), font.clone());
+                }
+                Some((resource, rows.into_iter().zip(encoded).collect::<Vec<_>>(), own))
             }
-            Some((resource, rows.into_iter().zip(encoded), own))
         } else {
             None
         };
-        // The page resource the face is added under: the usual name, unless the page already
-        // draws another font by it, which must not change under the header.
+        // The built-in resource remains available for a segment the selected face cannot draw.
         let preferred = match hf.font {
             added::Family::Helvetica => "PCHelv",
             added::Family::Times => "PCTimes",
             added::Family::Courier => "PCCour",
         };
         let base = hf.font.base_font(false, false);
-        let resource = explicit.as_ref().map_or_else(|| free_font_name(doc, &page_fonts(doc, page), preferred, base), |(r, ..)| r.clone());
+        let resource = free_font_name(doc, &page_fonts(doc, page), preferred, base);
         let mut body: Vec<u8> = format!("BT\n/{resource} {} Tf\n{}\n", n(size), rgb(hf.color)).into_bytes();
+        let mut lines_and_runs = runs.iter().flatten();
+        let mut encoded = explicit.iter().flat_map(|(_, r, _)| r);
         let mut current = None;
         let mut underlines = String::new();
         for (slot, lines) in slots.iter().enumerate() {
@@ -134,8 +154,16 @@ fn add_header_footer_in_place(doc: &mut Document, pages: &[usize], hf: &HeaderFo
             for (li, line) in lines.iter().enumerate() {
                 // Centred and right-aligned text is placed by its width in the chosen face.
                 let face = |s: &str, size: f64| hf.font.width(s, size, false, false);
-                let row = explicit.as_mut().and_then(|(_, rows, _)| rows.next());
-                let tw = row.as_ref().map_or_else(|| thai_width(line, size, face), |(r, _)| r.advance * size);
+                let segments = lines_and_runs.next().map(|runs| {
+                    runs.iter()
+                        .map(|(covered, text)| {
+                            let row = covered.then(|| encoded.next()).flatten();
+                            let advance = row.map_or_else(|| thai_width(text, size, face), |(r, _)| r.advance * size);
+                            (*text, row, advance)
+                        })
+                        .collect::<Vec<_>>()
+                });
+                let tw = segments.as_ref().map_or_else(|| thai_width(line, size, face), |r| r.iter().map(|(_, _, w)| w).sum());
                 let x = match slot % 3 {
                     0 => left,
                     1 => (w - tw) / 2.0,
@@ -143,13 +171,25 @@ fn add_header_footer_in_place(doc: &mut Document, pages: &[usize], hf: &HeaderFo
                 };
                 // Headers hang below the top margin; footers sit on the bottom margin.
                 let y = if header { h - top - size * 0.8 - li as f64 * line_h } else { bottom + (lines.len() - 1 - li) as f64 * line_h };
-                if let Some((row, codes)) = row {
+                if let Some(segments) = segments {
                     let logical: String = line.encode_utf16().map(|u| format!("{u:04X}")).collect();
                     body.extend(format!("/Span <</ActualText <FEFF{logical}>>> BDC\n").bytes());
-                    for (glyph, code) in row.glyphs.iter().zip(codes) {
-                        body.extend(
-                            format!("1 0 0 1 {} {} Tm <{code:04X}> Tj\n", n(x + glyph.position[0] * size), n(y + glyph.position[1] * size)).bytes(),
-                        );
+                    let mut pen = x;
+                    for (text, row, advance) in segments {
+                        if let Some(((row, codes), (chosen, ..))) = row.zip(explicit.as_ref()) {
+                            body.extend(format!("/{chosen} {} Tf\n", n(size)).bytes());
+                            for (glyph, code) in row.glyphs.iter().zip(codes) {
+                                body.extend(
+                                    format!("1 0 0 1 {} {} Tm <{code:04X}> Tj\n", n(pen + glyph.position[0] * size), n(y + glyph.position[1] * size))
+                                        .bytes(),
+                                );
+                            }
+                            body.extend(format!("/{resource} {} Tf\n", n(size)).bytes());
+                            current = None;
+                        } else {
+                            thai.show(&mut body, text, pen, y, size, &resource, |s| face(s, size), &mut current);
+                        }
+                        pen += advance;
                     }
                     body.extend_from_slice(b"EMC\n");
                 } else {
@@ -170,7 +210,8 @@ fn add_header_footer_in_place(doc: &mut Document, pages: &[usize], hf: &HeaderFo
         // A name already there is that very font (see `free_font_name`): left as it is.
         if let Some((_, _, fonts)) = explicit {
             super::place::add_page_fonts(doc, page, &fonts)?;
-        } else if !page_fonts(doc, page).contains(resource.as_bytes()) {
+        }
+        if !page_fonts(doc, page).contains(resource.as_bytes()) {
             add_page_resources(doc, page, None, &[(resource.into_bytes(), base)])?;
         }
         thai.add_to(doc, &page_list(doc)[i])?;

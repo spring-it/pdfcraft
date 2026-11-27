@@ -517,13 +517,14 @@ pub(crate) fn props_body(ui: &mut egui::Ui, d: &mut RedactPrefs, _t: &Tokens) ->
                 ui.add_enabled_ui(on, |ui| {
                     let label = look
                         .selected_local_font()
-                        .map_or_else(|| look.font.name().to_owned(), |font| crate::font_picker::label(ui.ctx(), font.name()));
-                    craft_ui::ComboBox::from_id_salt("overlay-font").selected_text(label).show_ui(ui, |ui| {
+                        .map_or_else(|| crate::font_picker::preset(look.font.name()), |font| crate::font_picker::explicit_label(ui.ctx(), &font));
+                    crate::font_picker::combo("overlay-font").selected_text(label).show_ui(ui, |ui| {
                         for f in pdfcraft_engine::OverlayFont::ALL {
-                            if ui.selectable_label(look.local_font.is_none() && look.font == f, f.name()).clicked() {
+                            if ui.selectable_label(look.local_font.is_none() && look.font == f, crate::font_picker::preset(f.name())).clicked() {
                                 look.font = f;
                                 look.local_font = None;
                                 d.local_font_error = None;
+                                ui.close();
                             }
                         }
                         #[cfg(not(target_arch = "wasm32"))]

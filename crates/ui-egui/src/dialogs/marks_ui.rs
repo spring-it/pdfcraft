@@ -604,10 +604,14 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
             });
             ui.horizontal_wrapped(|ui| {
                 let font_label = ui.label("字体");
-                let presets = ["微软雅黑", "黑体", "Arial", "Georgia", "等宽字体"];
-                let selected = d.watermark_font.as_ref().map_or_else(|| presets[d.font_family.min(4)].to_owned(), |font| font.label.clone());
+                let presets = if crate::i18n::current().code() == "zh-hant" {
+                    ["微軟雅黑", "黑體", "阿里爾體", "喬治亞體", "等寬字型"]
+                } else {
+                    ["微软雅黑", "黑体", "阿里尔体", "乔治亚体", "等宽字体"]
+                };
+                let selected = d.watermark_font.as_ref().map_or_else(|| presets[d.font_family.min(4)].to_owned(), |font| font.label());
                 ui.add_enabled_ui(!d.use_file, |ui| {
-                    craft_ui::ComboBox::from_id_salt("wofei-watermark-font")
+                    crate::font_picker::combo("wofei-watermark-font")
                         .selected_text(selected)
                         .show_ui(ui, |ui| {
                             for (i, label) in presets.into_iter().enumerate() {
@@ -620,8 +624,7 @@ fn watermark_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool
                             }
                             #[cfg(not(target_arch = "wasm32"))]
                             if let Some(face) = crate::font_picker::raster_choices(ui) {
-                                let language = crate::i18n::current().code();
-                                match crate::watermark_text::InstalledFont::from_picker(face, language) {
+                                match crate::watermark_text::InstalledFont::from_picker(face) {
                                     Ok(font) => {
                                         d.watermark_font = Some(font);
                                         d.watermark_font_error = None;
@@ -1001,29 +1004,30 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
             ui.horizontal(|ui| {
                 // The standard faces a header can be drawn in (#3754).
                 ui.label(tl!("Font:"));
-                let label = d.hf.local_face.as_ref().map_or(d.hf.font.label(), |f| f.name());
-                craft_ui::ComboBox::from_id_salt("hf-font").selected_text(crate::font_picker::label(ui.ctx(), label)).width(128.0).show_ui(
-                    ui,
-                    |ui| {
-                        for f in [FontFamily::Helvetica, FontFamily::Times, FontFamily::Courier] {
-                            if ui.selectable_label(d.hf.local_face.is_none() && d.hf.font == f, f.label()).clicked() {
-                                d.hf.font = f;
-                                d.hf.local_face = None;
+                let label =
+                    d.hf.local_face
+                        .as_ref()
+                        .map_or_else(|| crate::font_picker::preset(d.hf.font.label()), |face| crate::font_picker::explicit_label(ui.ctx(), face));
+                crate::font_picker::combo("hf-font").selected_text(label).width(128.0).show_ui(ui, |ui| {
+                    for f in [FontFamily::Helvetica, FontFamily::Times, FontFamily::Courier] {
+                        if ui.selectable_label(d.hf.local_face.is_none() && d.hf.font == f, crate::font_picker::preset(f.label())).clicked() {
+                            d.hf.font = f;
+                            d.hf.local_face = None;
+                            d.hf_font_error = None;
+                            ui.close();
+                        }
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if let Some(font) = crate::font_picker::choices(ui) {
+                        match pdfcraft_engine::text_fonts::load_document_face(&font).and_then(pdfcraft_fonts::embedding::ExplicitFace::new) {
+                            Ok(face) => {
+                                d.hf.local_face = Some(face);
                                 d.hf_font_error = None;
                             }
+                            Err(error) => d.hf_font_error = Some(error),
                         }
-                        #[cfg(not(target_arch = "wasm32"))]
-                        if let Some(font) = crate::font_picker::choices(ui) {
-                            match pdfcraft_engine::text_fonts::load_document_face(&font).and_then(pdfcraft_fonts::embedding::ExplicitFace::new) {
-                                Ok(face) => {
-                                    d.hf.local_face = Some(face);
-                                    d.hf_font_error = None;
-                                }
-                                Err(error) => d.hf_font_error = Some(error),
-                            }
-                        }
-                    },
-                );
+                    }
+                });
                 ui.label(tl!("Size"));
                 ui.add(egui::DragValue::new(&mut d.hf.font_size).range(4.0..=72.0).speed(0.5));
                 ui.add(widgets::checkbox(&mut d.hf.underline, tl!("Underline")));
@@ -1701,7 +1705,7 @@ mod company_watermark_tests {
 
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
-    fn selected_installed_watermark_font_changes_the_saved_pixels_and_never_silently_falls_back() {
+    fn selected_installed_watermark_font_changes_the_saved_pixels_and_backfills_missing_chinese() {
         let directory = tempfile::tempdir().unwrap();
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts");
         let inter = std::fs::read(dir.join("Inter-Regular.ttf")).unwrap();
@@ -1710,7 +1714,7 @@ mod company_watermark_tests {
         let faces = pdfcraft_engine::text_fonts::discover_desktop(&[directory.path().to_owned()]);
         let select = |name| {
             let face = faces.iter().find(|f| f.names.postscript == name).expect("installed font discovered");
-            crate::watermark_text::InstalledFont::from_picker(face.clone(), "zh-hans").expect("font can be rasterized")
+            crate::watermark_text::InstalledFont::from_picker(face.clone()).expect("font can be rasterized")
         };
         let mut draft = MarksDraft::default();
         draft.wm.text = "Draft iiiWWW".into();
@@ -1748,8 +1752,42 @@ mod company_watermark_tests {
             assert!(preview.points.x * crate::watermark_text::DPI as f32 > 1024.0, "preview retains the actual page-space size");
         });
         output.textures_delta.clear();
-        draft.wm.text = "机密文件".into();
-        assert!(edit(&draft, MarkKind::Watermark, 1).unwrap_err().contains("水印字体缺少字符"), "explicit fonts never silently swap faces");
+        draft.wm.text = "Draft iiiWWW🧪".into();
+        assert!(edit(&draft, MarkKind::Watermark, 1).unwrap_err().contains("水印字体缺少字符"), "missing unrelated glyphs must still be reported");
+
+        let chinese = "机密文件";
+        let bundled = pdfcraft_fonts::ui_chinese_fonts();
+        if !cfg!(windows) && bundled.is_empty() {
+            return; // Builds may omit Chinese font assets; the package test supplies them.
+        }
+        draft.wm.text = format!("Draft iiiWWW{chinese}");
+        let mixed_mono = resvg::tiny_skia::Pixmap::decode_png(&watermark_file(&draft).unwrap().unwrap().bytes).unwrap();
+        draft.watermark_font = Some(select("Inter-Regular"));
+        let mixed_inter = resvg::tiny_skia::Pixmap::decode_png(&watermark_file(&draft).unwrap().unwrap().bytes).unwrap();
+        // Both Latin-only faces fall back to the same face for Chinese. The difference in
+        // their Latin widths must survive the mixed run, to within a pixel of rounding.
+        let delta = |a: u32, b: u32| i64::from(a) - i64::from(b);
+        assert!((delta(mixed_mono.width(), mixed_inter.width()) - delta(b_pixels.width(), a_pixels.width())).abs() <= 1);
+        assert!(mixed_inter.width() > a_pixels.width());
+        assert!(
+            mixed_inter
+                .data()
+                .chunks_exact((mixed_inter.width() * 4) as usize)
+                .any(|row| { row.chunks_exact(4).skip(a_pixels.width() as usize).any(|pixel| pixel[3] > 0) }),
+            "Chinese glyphs beyond the Latin prefix must be painted, not merely measured"
+        );
+
+        let mixed_id = session.open("mixed.pdf", None, session.create_from_text("Sample", "Portable watermark").unwrap(), None).unwrap();
+        session.apply(mixed_id, edit(&draft, MarkKind::Watermark, 1).unwrap()).unwrap();
+        let mixed_doc = pdfcraft_cos::Document::open(session.save_bytes(mixed_id).unwrap()).unwrap();
+        assert!(
+            mixed_doc.scan_objects().any(|(_, o)| matches!(
+                o.as_ref(), pdfcraft_cos::Object::Stream(s) if s.dict.name(b"Subtype") == Some(b"Image") &&
+                    s.dict.int(b"Width") == Some(i64::from(mixed_inter.width())) &&
+                    s.dict.int(b"Height") == Some(i64::from(mixed_inter.height()))
+            )),
+            "Save must emit the mixed-font raster, not merely show it in preview"
+        );
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -1761,8 +1799,8 @@ mod company_watermark_tests {
         std::fs::write(directory.path().join("ChineseFace.ttc"), watermark_fixture_collection(&[inter, cjk.bytes])).unwrap();
         let catalog = pdfcraft_engine::text_fonts::discover_desktop(&[directory.path().to_owned()]);
         let face = catalog.iter().find(|face| face.names.face_index == 1).unwrap_or_else(|| panic!("Chinese TTC member missing from {catalog:?}"));
-        let installed = crate::watermark_text::InstalledFont::from_picker(face.clone(), "zh-hans").unwrap();
-        assert!(installed.label.contains("文楷"), "read the actual Chinese name from the name table: {:?}", installed.label);
+        let installed = crate::watermark_text::InstalledFont::from_picker(face.clone()).unwrap();
+        assert!(installed.display_name("zh-hans").contains("文楷"), "read the actual Chinese name from the name table");
         let mut draft = MarksDraft::default();
         draft.watermark_font = Some(installed);
         draft.wm.text = "机密文件".into();

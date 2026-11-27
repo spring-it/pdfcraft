@@ -176,17 +176,15 @@ impl PdfCraftApp {
         let edit = {
             let mut edit = edit;
             if let Edit::EditTextBlock { page, block, text, style } = &mut edit
-                && style.family.is_none()
-                && style.resource.is_none()
-                && style.bold.is_none()
                 && text.chars().any(pdfcraft_fonts::cjk_document::is_cjk)
                 && let Some(source) = self.session.get(id).and_then(|doc| doc.text_blocks(*page).get(*block).cloned())
                 && !source.invisible
-                && !source.bold
-                && !source.italic
-                && text.as_str() != source.editor_text
             {
-                style.local_han_font = pdfcraft_fonts::cjk_document::local_document_face(text);
+                let selected = style.resource.is_some() || style.ranges.iter().any(|run| run.resource.is_some());
+                if selected || style.family.is_none() && style.bold.is_none() && !source.bold && !source.italic && text.as_str() != source.editor_text
+                {
+                    style.local_han_font = pdfcraft_fonts::cjk_document::local_document_face(text);
+                }
             }
             edit
         };

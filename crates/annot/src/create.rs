@@ -576,18 +576,18 @@ fn set_redaction_properties(dict: &mut Dict, style: &Style, quads: &[[f64; 8]], 
     dict.set(b"QuadPoints".to_vec(), num_array(&quads.concat()));
     if !overlay.is_empty() {
         if let Some(key) = look.local_font {
-            if overlay.len() > OverlayLook::MAX_LOCAL_TEXT_BYTES {
-                return Err(AnnotError::Invalid("The installed-font redaction overlay is too long.".into()));
-            }
-            let face = look
-                .selected_local_font()
-                .ok_or_else(|| AnnotError::Invalid("Select the same local redaction font before marking this text.".into()))?;
-            if face.first_missing(overlay).is_some() {
-                return Err(AnnotError::Undrawable("The selected font cannot draw all the redaction overlay text.".into()));
-            }
-            if face.layout(overlay).is_err() {
-                return Err(AnnotError::Invalid("The selected font cannot lay out this redaction overlay as one line.".into()));
-            }
+            look.layout_local_overlay(overlay).map_err(|e| match e {
+                crate::OverlayLayoutError::MissingFace => {
+                    AnnotError::Invalid("Select the same local redaction font before marking this text.".into())
+                }
+                crate::OverlayLayoutError::MissingGlyph => {
+                    AnnotError::Undrawable("The selected font cannot draw all the redaction overlay text.".into())
+                }
+                crate::OverlayLayoutError::Layout => {
+                    AnnotError::Invalid("The selected font cannot lay out this redaction overlay as one line.".into())
+                }
+                crate::OverlayLayoutError::Limit => AnnotError::Invalid("The installed-font redaction overlay is too long.".into()),
+            })?;
             dict.set(b"PCLocalOverlayFont".to_vec(), PdfString::literal(format!("{key:016x}").into_bytes()));
         }
         dict.set(b"OverlayText".to_vec(), PdfString::text(overlay));

@@ -37,24 +37,27 @@ pub(super) fn wrapped(t: &AddedText) -> Vec<(String, bool, usize)> {
     let width = (t.rect[2] - t.rect[0]).max(t.size);
     let mut out = Vec::new();
     for (index, para) in t.text.split('\n').enumerate() {
-        if t.local_face.is_some() {
-            let measure = |s: &str| latin_width(t, s);
-            out.extend(
-                wrap_words(
-                    thai_words(
-                        para.chars()
-                            .map(|c| {
-                                let s = c.to_string();
-                                let w = measure(&s);
-                                (s, w)
-                            })
-                            .collect(),
-                    ),
-                    width,
-                )
-                .into_iter()
-                .map(|line| (line, false, index)),
-            );
+        if let Some(face) = &t.local_face {
+            let rtl = unicode_bidi::get_base_direction(para) == unicode_bidi::Direction::Rtl;
+            let mut atoms = Vec::new();
+            for (kind, run) in explicit_segments(face, para) {
+                if kind == ExplicitSegment::Cjk
+                    && let Ok(fallback) = pdfcraft_fonts::shape_cjk(run)
+                {
+                    atoms.extend(fallback.into_iter().map(|c| (c.text, c.advance * t.size + t.char_spacing)));
+                } else {
+                    atoms.extend(run.chars().map(|c| {
+                        let text = c.to_string();
+                        let w = if kind == ExplicitSegment::Selected {
+                            latin_width(t, &text)
+                        } else {
+                            t.family.width(&text, t.size, t.bold, t.italic) + t.char_spacing
+                        };
+                        (text, w)
+                    }));
+                }
+            }
+            out.extend(wrap_words(thai_words(atoms), width).into_iter().map(|line| (line, rtl, index)));
             continue;
         }
         // Arabic or Hebrew: laid out with the bidirectional algorithm and shaped.
@@ -215,13 +218,106 @@ pub(super) fn is_hebrew(c: char) -> bool {
     matches!(u32::from(c), 0x0591..=0x05F4 | 0xFB1D..=0xFB4F)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExplicitSegment {
+    Selected,
+    Cjk,
+    Unsupported,
+}
+
+/// Split at changes of actual coverage, not at changes of script. A selected face that supports
+/// Chinese punctuation or Han uses its own glyphs for those characters too.
+fn explicit_segments<'a>(face: &pdfcraft_fonts::embedding::ExplicitFace, line: &'a str) -> Vec<(ExplicitSegment, &'a str)> {
+    if face.first_missing(line).is_none() {
+        return (!line.is_empty()).then_some((ExplicitSegment::Selected, line)).into_iter().collect();
+    }
+    let mut coverage = std::collections::HashMap::new();
+    let mut out = Vec::new();
+    let mut start = 0;
+    let mut previous = None;
+    for (at, c) in line.char_indices() {
+        let kind = *coverage.entry(c).or_insert_with(|| {
+            if face.first_missing(c.encode_utf8(&mut [0; 4])).is_none() {
+                ExplicitSegment::Selected
+            } else if pdfcraft_fonts::cjk_document::is_cjk(c) {
+                ExplicitSegment::Cjk
+            } else {
+                ExplicitSegment::Unsupported
+            }
+        });
+        if let Some(prev) = previous
+            && prev != kind
+        {
+            out.push((prev, &line[start..at]));
+            start = at;
+        }
+        previous = Some(kind);
+    }
+    if let Some(kind) = previous {
+        out.push((kind, &line[start..]));
+    }
+    out
+}
+
+/// A run in the chosen font, or outlined glyphs from the system-first approved CJK fallback.
+pub(super) enum ExplicitPiece {
+    Selected(pdfcraft_fonts::source_shaping::ShapedRun),
+    Cjk(Vec<pdfcraft_fonts::ShapedCluster>),
+}
+
+impl ExplicitPiece {
+    pub(super) fn width(&self, t: &AddedText) -> f64 {
+        match self {
+            Self::Selected(row) => row.advance * t.size + t.char_spacing * row.glyphs.len() as f64,
+            Self::Cjk(clusters) => clusters.iter().map(|cluster| cluster.advance * t.size + t.char_spacing).sum(),
+        }
+    }
+}
+
+fn cjk_missing(run: &str) -> char {
+    run.chars().find(|c| !pdfcraft_fonts::cjk_document::covers(c.encode_utf8(&mut [0; 4]))).or_else(|| run.chars().next()).unwrap_or('?')
+}
+
+pub(super) fn explicit_layout(face: &pdfcraft_fonts::embedding::ExplicitFace, line: &str, rtl: bool) -> Result<Vec<ExplicitPiece>, EditError> {
+    if face.first_missing(line).is_none() {
+        // Keep the whole original shaping run when the chosen font can draw every character.
+        return Ok(vec![ExplicitPiece::Selected(face.layout(line).map_err(EditError::Invalid)?)]);
+    }
+    let mut pieces = Vec::new();
+    let info = ParagraphBidiInfo::new(line, Some(if rtl { Level::rtl() } else { Level::ltr() }));
+    let (levels, runs) = info.visual_runs(0..line.len());
+    for run in runs {
+        let run_rtl = levels.get(run.start).is_some_and(Level::is_rtl);
+        let Some(text) = line.get(run) else { continue };
+        let mut segments = explicit_segments(face, text);
+        if run_rtl {
+            segments.reverse();
+        }
+        for (kind, text) in segments {
+            pieces.push(match kind {
+                ExplicitSegment::Selected => ExplicitPiece::Selected(face.layout(text).map_err(EditError::Invalid)?),
+                ExplicitSegment::Cjk => ExplicitPiece::Cjk(pdfcraft_fonts::shape_cjk(text).map_err(|_| crate::undrawable(cjk_missing(text)))?),
+                ExplicitSegment::Unsupported => return Err(crate::undrawable(text.chars().next().unwrap_or('?'))),
+            });
+        }
+    }
+    Ok(pieces)
+}
+
 /// The first character of `t` that would be drawn as `?`: outside WinAnsiEncoding and not drawn
 /// with the craft-fonts Arabic (#125) or Hebrew (#128) face, or Arabic or Hebrew that the face can't
 /// draw (or that has no face to draw it). Page-content tools refuse such text; the Add-text editor
 /// keeps it open.
 pub fn first_undrawable(t: &AddedText) -> Option<char> {
     if let Some(face) = &t.local_face {
-        return face.first_missing(&t.text);
+        return t.text.split('\n').find_map(|line| {
+            explicit_segments(face, line).into_iter().find_map(|(kind, run)| match kind {
+                ExplicitSegment::Selected => None,
+                ExplicitSegment::Cjk if pdfcraft_fonts::cjk_document::covers(run) => None,
+                ExplicitSegment::Cjk => Some(cjk_missing(run)),
+                ExplicitSegment::Unsupported => run.chars().next(),
+            })
+        });
     }
     if t.text.chars().any(is_thai) {
         if let Some(c) = t.text.chars().find(|c| is_thai(*c) && !pdfcraft_fonts::thai_has(*c)) {
@@ -453,7 +549,18 @@ fn copy_key(c: &Content) -> Content {
 
 /// The widest explicit line before wrapping, measured with the PDF writing fonts.
 pub fn text_width(t: &AddedText) -> f64 {
-    t.text.split('\n').map(|line| shaped_width(t, line, unicode_bidi::get_base_direction(line) == unicode_bidi::Direction::Rtl)).fold(0.0, f64::max)
+    t.text
+        .split('\n')
+        .map(|line| {
+            let rtl = unicode_bidi::get_base_direction(line) == unicode_bidi::Direction::Rtl;
+            if let Some(face) = &t.local_face {
+                return explicit_layout(face, line, rtl)
+                    .map(|pieces| pieces.iter().map(|piece| piece.width(t)).sum())
+                    .unwrap_or_else(|_| latin_width(t, line));
+            }
+            shaped_width(t, line, rtl)
+        })
+        .fold(0.0, f64::max)
 }
 
 #[cfg(test)]

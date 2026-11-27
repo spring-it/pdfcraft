@@ -147,7 +147,9 @@ impl HeaderFooter {
     /// The dialog asks this too, so its preview never offers text that applying refuses (#2013).
     pub fn first_undrawable(&self) -> Option<char> {
         if let Some(face) = &self.local_face {
-            return self.text.iter().flat_map(|t| t.lines()).find_map(|line| face.first_missing(line));
+            return self.text.iter().flat_map(|t| t.lines()).find_map(|line| {
+                header_font_runs(face, line).into_iter().find_map(|(covered, text)| (!covered).then(|| first_undrawable_in_line(text)).flatten())
+            });
         }
         self.text.iter().flat_map(|t| t.lines()).find_map(first_undrawable_in_line)
     }
@@ -166,6 +168,31 @@ impl HeaderFooter {
         let bottom = lines(footer).map_or(0.0, |n| self.margins[1] + size * 0.8 + (n - 1) as f64 * line_h + size / 2.0);
         (top, bottom)
     }
+}
+
+/// Split only at coverage changes. An unsupported Chinese run is shaped by the existing
+/// system-first PDF fallback, leaving all glyphs the chosen face can draw in that face.
+pub(crate) fn header_font_runs<'a>(face: &pdfcraft_fonts::embedding::ExplicitFace, line: &'a str) -> Vec<(bool, &'a str)> {
+    if face.first_missing(line).is_none() {
+        return (!line.is_empty()).then_some((true, line)).into_iter().collect();
+    }
+    let mut out = Vec::new();
+    let mut start = 0;
+    let mut run = None;
+    for (i, c) in line.char_indices() {
+        let mut utf8 = [0; 4];
+        let selected = face.first_missing(c.encode_utf8(&mut utf8)).is_none();
+        if let Some(prev) = run.replace(selected)
+            && prev != selected
+        {
+            out.push((prev, &line[start..i]));
+            start = i;
+        }
+    }
+    if let Some(selected) = run {
+        out.push((selected, &line[start..]));
+    }
+    out
 }
 
 /// The `cm` that shrinks a page's original content (user space) into the band `hf` leaves free,

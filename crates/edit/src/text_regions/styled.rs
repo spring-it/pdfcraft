@@ -51,13 +51,20 @@ struct FontResolver<'a> {
 impl FontResolver<'_> {
     fn encodable_font(&mut self, source: &TextLine, text: &str, requested: Option<&str>) -> Result<Option<String>, EditError> {
         if let Some(resource) = requested {
-            if !self.metrics.get(resource).is_some_and(|metrics| source_encodes(metrics, text)) {
-                return Err(EditError::Invalid(format!(
-                    "the selected font resource {resource} cannot show U+{:04X}",
-                    text.chars().next().map_or(0, u32::from)
-                )));
+            if let Some(metrics) = self.metrics.get(resource) {
+                if source_encodes(metrics, text) {
+                    return Ok(Some(resource.to_owned()));
+                }
+                // A valid selected face owns every glyph it covers. For missing CJK only,
+                // let the normal, validated document fallback supply the glyph below.
+                if text.chars().any(pdfcraft_fonts::cjk_document::is_cjk) && pdfcraft_fonts::cjk_document::covers(text) {
+                    return Ok(None);
+                }
             }
-            return Ok(Some(resource.to_owned()));
+            return Err(EditError::Invalid(format!(
+                "the selected font resource {resource} cannot show U+{:04X}",
+                text.chars().next().map_or(0, u32::from)
+            )));
         }
         if self.metrics.get(&source.font).is_some_and(|metrics| source_encodes(metrics, text)) {
             return Ok(Some(source.font.clone()));
@@ -276,13 +283,13 @@ impl CharacterPreparation<'_> {
             };
             let span_text = span;
             let local = local_font.as_ref().filter(|_| {
-                selected_resource.is_none()
-                    && (chinese_font_name(&source.base_font) || no_kana && allow_chinese_rescue(&source.base_font, span))
-                    && style.family.is_none()
-                    && style.bold.is_none()
-                    && !source.bold
-                    && !source.italic
-                    && overrides.get(&index).is_none_or(|r| r.family.is_none())
+                selected_resource.is_some()
+                    || (chinese_font_name(&source.base_font) || no_kana && allow_chinese_rescue(&source.base_font, span))
+                        && style.family.is_none()
+                        && style.bold.is_none()
+                        && !source.bold
+                        && !source.italic
+                        && overrides.get(&index).is_none_or(|r| r.family.is_none())
             });
             let uniform_han = !use_thai_outlines
                 && existing_thai.is_none()
@@ -334,12 +341,19 @@ impl CharacterPreparation<'_> {
                     name.clone()
                 } else if let Some(name) = resolver.encodable_font(source, &text, requested)? {
                     name
-                } else if let Some((bytes, family, face)) =
-                    local.filter(|(bytes, _, _)| is_han_character(ch) && pdfcraft_fonts::embedding::covers(bytes, &text))
-                {
+                } else if let Some((bytes, family, face)) = local.filter(|(bytes, _, _)| {
+                    (is_han_character(ch) || requested.is_some() && pdfcraft_fonts::cjk_document::is_cjk(ch))
+                        && pdfcraft_fonts::embedding::covers(bytes, &text)
+                }) {
                     resolver.embed_face(format!("desktop:{face}"), bytes, family, "the local font could not be loaded")?
+                } else if requested.is_some()
+                    && is_han_character(ch)
+                    && let Some(face) = pdfcraft_fonts::ui_chinese_fonts().into_iter().find(|face| japanese_glyph_from(face, ch).is_ok())
+                {
+                    fallback.prepare_with_face(source, ch, face, chars.len())?;
+                    String::new()
                 } else if needs_type3(&text) {
-                    fallback.prepare(source, ch, &text, chars.len(), rescue)?
+                    fallback.prepare(source, ch, &text, chars.len(), rescue || requested.is_some())?
                 } else {
                     let name = resolver.substitute_font(source);
                     substituted = Some(source_family(&source.base_font).base_font(source.bold, source.italic).to_owned());

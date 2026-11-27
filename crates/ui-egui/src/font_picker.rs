@@ -1,36 +1,70 @@
 //! Shared desktop list for PDF font controls. Names are presentation only; a font is
 //! selected by its actual installed file, never by matching the translated label.
 
+mod names;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod popup_tests;
+
 use pdfcraft_engine::text_fonts::InstalledFace;
+use pdfcraft_fonts::embedding::{DisplayFace, ExplicitFace, face_key};
+
+/// Search, reload and scrolling are interactions inside a font menu, not selections.
+/// The font rows (and the callers' built-in choices) close explicitly after selection.
+pub(crate) fn combo(id: &'static str) -> craft_ui::ComboBox<'static> {
+    craft_ui::ComboBox::from_id_salt(id).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+}
+
+pub(crate) fn face_label(face: &DisplayFace, language: &str) -> String {
+    let localizations = match language {
+        "zh-hans" => [&face.chinese_simplified, &face.chinese_traditional],
+        "zh-hant" => [&face.chinese_traditional, &face.chinese_simplified],
+        _ => return face.postscript.clone(),
+    };
+    localizations
+        .into_iter()
+        .filter_map(Option::as_deref)
+        .find(|name| names::han(name))
+        .map(str::to_owned)
+        .unwrap_or_else(|| names::fallback(&face.postscript, Some(&face.family), language == "zh-hant"))
+}
 
 pub(crate) fn source_label(name: &str, fonts: &[InstalledFace], language: &str) -> String {
-    let key = pdfcraft_fonts::embedding::face_key(name);
-    let installed = fonts.iter().find(|f| pdfcraft_fonts::embedding::face_key(&f.names.postscript) == key);
-    if let Some(font) = installed
-        && matches!(language, "zh-hans" | "zh-hant")
-        && font.label(language) != font.names.postscript
-    {
-        return font.label(language).to_owned();
-    }
-    // Familiar source PDF aliases can be localized even when that font isn't installed.
-    if !matches!(language, "zh-hans" | "zh-hant") {
+    if !matches!(language, "zh-hans" | "zh-hant") || name.is_empty() {
         return name.into();
     }
-    match key.as_str() {
-        "simsun" => "宋体",
-        "nsimsun" => "新宋体",
-        "simhei" => "黑体",
-        "fangsong" | "fangsonggb2312" => "仿宋",
-        "kaiti" | "kaitigb2312" => "楷体",
-        "microsoftyahei" => "微软雅黑",
-        "microsoftyaheibold" => "微软雅黑 粗体",
-        "microsoftyaheilight" => "微软雅黑 细体",
-        "mingliu" => "細明體",
-        "pmingliu" => "新細明體",
-        "microsoftjhenghei" => "微軟正黑體",
-        _ => name,
+    let key = face_key(name);
+    if !key.is_empty()
+        && let Some(font) = fonts.iter().find(|f| face_key(&f.names.postscript) == key)
+    {
+        return face_label(&font.names, language);
     }
-    .into()
+    names::fallback(name, None, language == "zh-hant")
+}
+
+pub(crate) fn preset(name: &str) -> String {
+    source_label(name, &[], crate::i18n::current().code())
+}
+
+/// A font from this app's own saved PDF resource may no longer be installed. Read its
+/// official metadata once per face/language instead of needing a matching local file.
+pub(crate) fn explicit_label(ctx: &egui::Context, face: &ExplicitFace) -> String {
+    let language = crate::i18n::current().code();
+    if !matches!(language, "zh-hans" | "zh-hant") {
+        return face.name().into();
+    }
+    let id = egui::Id::new(("explicit-font-label", face.program_id(), language));
+    if let Some(label) = ctx.data(|d| d.get_temp::<String>(id)) {
+        return label;
+    }
+    let label = pdfcraft_fonts::embedding::display_faces(face.bytes(), 1)
+        .first()
+        .map_or_else(|| source_label(face.name(), &[], language), |names| face_label(names, language));
+    ctx.data_mut(|d| d.insert_temp(id, label.clone()));
+    label
+}
+
+pub(crate) fn installed_label(font: &DisplayFace) -> String {
+    face_label(font, crate::i18n::current().code())
 }
 
 pub(crate) fn label(ctx: &egui::Context, name: &str) -> String {
@@ -78,6 +112,15 @@ pub(crate) fn raster_choices(ui: &mut egui::Ui) -> Option<InstalledFace> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn list(ui: &mut egui::Ui, raster_only: bool) -> Option<InstalledFace> {
+    list_with(ui, raster_only, crate::files::installed_font_files)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn list_with(
+    ui: &mut egui::Ui,
+    raster_only: bool,
+    installed: impl FnOnce(&egui::Context, bool) -> Option<std::sync::Arc<Vec<InstalledFace>>>,
+) -> Option<InstalledFace> {
     let language = crate::i18n::current().code();
     let id = ui.scope_id().with("font-search");
     let mut query = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_default();
@@ -89,26 +132,24 @@ fn list(ui: &mut egui::Ui, raster_only: bool) -> Option<InstalledFace> {
         }
     });
     let reload = ui.small_button(tl!("Reload")).clicked();
-    let Some(fonts) = crate::files::installed_font_files(ui.ctx(), reload) else {
+    let Some(fonts) = installed(ui.ctx(), reload) else {
         ui.label(tl!("Finding document fonts…"));
         return None;
     };
     let query = query.trim().to_lowercase();
     let mut shown = fonts
         .iter()
-        .filter(|f| {
+        .map(|face| (face, face_label(&face.names, language)))
+        .filter(|(f, label)| {
             query.is_empty()
-                || [f.names.family.as_str(), f.names.postscript.as_str(), f.label("zh-hans"), f.label("zh-hant")]
+                || [f.names.family.as_str(), f.names.postscript.as_str(), label, f.label("zh-hans"), f.label("zh-hant")]
                     .iter()
                     .any(|name| name.to_lowercase().contains(&query))
         })
         .collect::<Vec<_>>();
-    shown.sort_by(|a, b| {
-        b.names
-            .can_embed
-            .cmp(&a.names.can_embed)
-            .then_with(|| a.label(language).cmp(b.label(language)))
-            .then(a.names.postscript.cmp(&b.names.postscript))
+    let allowed = |font: &InstalledFace| if raster_only { font.names.can_rasterize } else { font.names.can_embed };
+    shown.sort_by(|(a, a_label), (b, b_label)| {
+        allowed(b).cmp(&allowed(a)).then_with(|| a_label.cmp(b_label)).then(a.names.postscript.cmp(&b.names.postscript))
     });
     if shown.is_empty() {
         ui.label(tl!("No matching installed fonts."));
@@ -116,9 +157,9 @@ fn list(ui: &mut egui::Ui, raster_only: bool) -> Option<InstalledFace> {
     }
     let mut picked = None;
     egui::ScrollArea::vertical().max_height(230.0).show(ui, |ui| {
-        for font in shown {
-            let allowed = if raster_only { font.names.can_rasterize } else { font.names.can_embed };
-            let r = ui.add_enabled(allowed, egui::Button::selectable(false, font.label(language)));
+        for (font, label) in shown {
+            let allowed = allowed(font);
+            let r = ui.add_enabled(allowed, egui::Button::selectable(false, label));
             let r = if allowed {
                 r.on_hover_text(&font.names.postscript)
             } else {
@@ -161,5 +202,25 @@ mod tests {
         assert_eq!(source_label("ABCDEF+CustomText-Regular", &fonts, "en"), "ABCDEF+CustomText-Regular");
         assert_eq!(source_label("ABCDEF+SimSun", &fonts, "zh-hans"), "宋体");
         assert_eq!(fonts[0].names.face_index, 2);
+    }
+
+    #[test]
+    fn english_only_installed_face_uses_the_same_chinese_label_in_rows_and_selected_fields() {
+        let f = InstalledFace {
+            path: "fonts/dejavu.ttf".into(),
+            names: DisplayFace {
+                family: "DejaVu Sans".into(),
+                postscript: "DejaVuSans-BoldOblique".into(),
+                chinese_simplified: Some("DejaVu Sans".into()),
+                chinese_traditional: None,
+                face_index: 0,
+                can_embed: true,
+                can_rasterize: true,
+            },
+        };
+        let shown = face_label(&f.names, "zh-hans");
+        assert_eq!(shown, "德雅无衬线体 粗倾斜体");
+        assert_eq!(source_label("DejaVuSans-BoldOblique", &[f], "zh-hans"), shown);
+        assert_eq!(source_label("DejaVuSans-BoldOblique", &[], "en"), "DejaVuSans-BoldOblique");
     }
 }

@@ -91,6 +91,22 @@ fn header_and_footer_dialog_draws_in_the_chosen_face() {
 }
 
 #[test]
+fn chinese_header_font_picker_uses_chinese_for_the_value_and_every_standard_option() {
+    let mut h = harness();
+    h.state_mut().set_option("language", "zh-hans").unwrap();
+    assert!(h.state_mut().execute("edit.header_footer"));
+    h.run_steps(4);
+    h.get_by_value("赫尔维蒂卡体").click();
+    h.run_steps(3);
+    h.get_by_label("赫尔维蒂卡体");
+    h.get_by_label("时代罗马体");
+    h.get_by_label("信使等宽体").click();
+    h.run_steps(3);
+    h.get_by_value("信使等宽体");
+    assert_eq!(h.state().marks_draft.hf.font, pdfcraft_engine::FontFamily::Courier);
+}
+
+#[test]
 fn header_and_footer_dialog_can_shrink_the_page_content() {
     let mut h = harness();
     assert!(h.state_mut().execute("edit.bates"));

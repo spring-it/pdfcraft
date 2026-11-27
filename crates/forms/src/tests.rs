@@ -144,6 +144,88 @@ fn installed_form_face_writes_portable_text_and_button_appearances() {
     assert!(undrawn_fields(&doc).is_empty());
 }
 
+/// Selecting a Latin-only font does not make Chinese in fields or button captions disappear.
+#[test]
+fn installed_latin_field_face_keeps_covered_text_and_draws_missing_han() {
+    const HAN: &str = "我来测试个撒地方";
+    let phrase = format!("A {HAN} B");
+    if pdfcraft_fonts::ui_chinese_fonts().is_empty() {
+        return;
+    }
+    let face = pdfcraft_fonts::document_latin_fonts(true)
+        .into_iter()
+        .find(|f| pdfcraft_fonts::embedding::validate_document_input(f.bytes).is_ok())
+        .expect("an embeddable Latin-only face");
+    let choice = Arc::new(face.bytes.to_vec());
+    let (_, face_name) = pdfcraft_fonts::embedding::names(&choice).unwrap();
+    assert!(!pdfcraft_fonts::embedding::covers(&choice, HAN));
+    assert!(pdfcraft_fonts::embedding::covers(&choice, "A B"));
+    let mut doc = fixture();
+    for name in ["name", "notes", "zip", "go", "country", "toppings"] {
+        let selected = if name == "zip" { "A我B" } else { &phrase };
+        let choice_field = matches!(name, "country" | "toppings");
+        let props = FieldProps {
+            options: choice_field.then(|| vec![selected.to_owned()]),
+            installed_font: Some(choice.clone()),
+            font_size: Some(7.0),
+            caption: (name == "go").then(|| (0, selected.to_owned())),
+            ..Default::default()
+        };
+        set_props(&mut doc, name, &props).unwrap();
+        if name != "go" {
+            let value = if choice_field { FieldValue::Choice(vec![selected.to_owned()]) } else { FieldValue::Text(selected.to_owned()) };
+            set_value(&mut doc, name, &value).unwrap();
+        }
+    }
+    let doc = reopen(&doc);
+    let ff = fields(&doc);
+    for name in ["name", "notes", "zip", "go", "country", "toppings"] {
+        let f = field(&ff, name);
+        assert_eq!(field_font_name(&doc, f), face_name, "{name} /DA should keep the chosen face");
+        let selected = if name == "zip" { "A我B" } else { &phrase };
+        if name != "go" {
+            assert_eq!(f.value, [selected], "the field stores Unicode, not fallback characters");
+        }
+        let widget = doc.get(f.widgets[0].obj);
+        let ap = doc.dict(widget.as_dict().unwrap().get(b"AP").unwrap()).unwrap();
+        let normal = doc.resolve(ap.get(b"N").unwrap());
+        let Object::Stream(normal) = normal.as_ref() else { panic!("normal appearance stream") };
+        let res = doc.dict(normal.dict.get(b"Resources").unwrap()).unwrap();
+        let fonts = doc.dict(res.get(b"Font").unwrap()).unwrap();
+        let data = normal.decoded().unwrap();
+        let mut font = None;
+        let mut drawn = String::new();
+        let mut chosen = String::new();
+        let mut outlined = String::new();
+        let mut maps = std::collections::HashMap::new();
+        for op in pdfcraft_content::parse(&data).ops {
+            if op.is("Tf") {
+                font = op.operands.first().and_then(Object::as_name).map(<[u8]>::to_vec);
+            }
+            if op.is("Tj") {
+                let key = font.as_deref().unwrap_or_else(|| panic!("{name}: Tf precedes Tj: {}", String::from_utf8_lossy(&data)));
+                let (is_outline, metrics) = maps.entry(key.to_vec()).or_insert_with(|| {
+                    let resolved = doc.dict(fonts.get(key).expect("the appearance declares its font")).unwrap();
+                    (resolved.name(b"Subtype") == Some(b"Type3"), pdfcraft_fonts::pdf::Metrics::from_dict(&doc, &resolved))
+                });
+                let encoded = &op.operands[0].as_string().unwrap().bytes;
+                let text = metrics.decode(encoded);
+                drawn.push_str(&text);
+                if *is_outline {
+                    outlined.push_str(&text);
+                } else {
+                    assert!(key.starts_with(b"PCFull"), "{name} must keep the selected font for covered glyphs");
+                    chosen.push_str(&text);
+                }
+            }
+        }
+        assert_eq!(drawn, selected, "{name}: actual saved Tj text, not just the field value");
+        assert_eq!(chosen, if name == "zip" { "AB" } else { "A  B" }, "{name}: covered glyphs use the selected program");
+        assert_eq!(outlined, if name == "zip" { "我" } else { HAN }, "{name}: uncovered Han uses portable fallback");
+    }
+    assert!(undrawn_fields(&doc).is_empty());
+}
+
 /// A font blocked by validation, or selected for a field without editable text, changes nothing.
 #[test]
 fn rejecting_an_invalid_field_font_does_not_change_the_form() {

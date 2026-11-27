@@ -191,3 +191,81 @@ fn chosen_local_face_is_saved_for_add_text_and_header_and_can_be_reedited() {
     let lines = text::text_lines(&changed, 0).unwrap();
     assert!(lines.iter().any(|l| l.text == "這是重新編輯" && l.font.starts_with("PCFull")), "{lines:?}");
 }
+
+/// An installed Latin face need not contain Han for Add Text to save real Chinese glyphs.
+#[test]
+fn add_text_keeps_chosen_latin_font_and_falls_back_for_the_reported_chinese() {
+    use pdfcraft_cos::Object;
+    use pdfcraft_edit::{AddedText, Content};
+    const CHINESE: &str = "我来测试个撒地方";
+    if pdfcraft_fonts::ui_chinese_fonts().is_empty() {
+        return;
+    }
+    let choice = pdfcraft_fonts::document_latin_fonts(true)
+        .into_iter()
+        .find_map(|f| pdfcraft_fonts::embedding::ExplicitFace::new(f.bytes.to_vec()).ok())
+        .expect("an embedded Latin-only face");
+    assert!(choice.first_missing("Testing ABC 123").is_none());
+    assert_eq!(choice.first_missing(CHINESE), Some('我'), "same coverage distinction as Noto Sans Bold");
+    let mut doc = styled_text_page("Helvetica");
+    let make =
+        |text: &str| AddedText { text: text.into(), rect: [30.0, 110.0, 555.0, 155.0], local_face: Some(choice.clone()), ..Default::default() };
+    let t = make(CHINESE);
+    assert_eq!(pdfcraft_edit::added::first_undrawable(&t), None, "the draft must permit Commit");
+    assert_eq!(pdfcraft_edit::added::first_undrawable(&make("我🦄")), Some('🦄'), "a genuinely missing non-Han glyph is not hidden");
+    pdfcraft_edit::add_content(&mut doc, 0, &Content::Text(t)).unwrap();
+
+    let mut saved = reopen(&doc);
+    let phrase = format!("Testing {CHINESE} ABC 123");
+    let assert_roundtrip = |d: &Document, expected: &str, uses_selected_face: bool| {
+        let item = pdfcraft_edit::list_added(d).pop().expect("the text item remains editable");
+        let Content::Text(t) = item.content else { panic!("text item") };
+        assert_eq!(t.local_face.as_ref(), Some(&choice), "the selected program survives even with no visible Latin");
+        assert_eq!(t.text, expected);
+        let lines = text::text_lines(d, 0).unwrap();
+        assert!(lines.iter().any(|line| line.text == expected), "saved text extraction must retain {expected}: {lines:?}");
+        let stream = d.get(item.obj);
+        let Object::Stream(stream) = stream.as_ref() else { panic!("expected added text stream") };
+        let content = String::from_utf8(stream.decoded().unwrap()).expect("ASCII PDF operators");
+        assert!(!content.contains('?'));
+        assert!(content.contains("/PCAr"), "fallback outlines are actually painted, not only stored as text: {content}");
+        assert_eq!(content.contains("/PCFull"), uses_selected_face, "the selected font owns the visible Latin portion: {content}");
+        let marker = d.dict(stream.dict.get(b"PCAdded").unwrap()).unwrap();
+        let selected = d.dict(marker.get(b"PCTypeface").unwrap()).unwrap();
+        assert_eq!(selected.name(b"BaseFont"), Some(choice.name().as_bytes()), "the marker must never point to the fallback");
+        let page = &pdfcraft_model::pages(d)[0].dict;
+        let resources = d.dict(page.get(b"Resources").unwrap()).unwrap();
+        let fonts = d.dict(resources.get(b"Font").unwrap()).unwrap();
+        let fallback = fonts.iter().find_map(|(key, f)| key.starts_with(b"PCAr").then(|| d.dict(f)).flatten()).expect("fallback font");
+        let cmap = d.resolve(fallback.get(b"ToUnicode").unwrap());
+        let Object::Stream(cmap) = cmap.as_ref() else { panic!("ToUnicode stream") };
+        let map = String::from_utf8(cmap.decoded().unwrap()).unwrap();
+        for c in CHINESE.chars() {
+            assert!(map.contains(&format!("<{:04X}>", u32::from(c))), "fallback glyph {c} has a Unicode mapping");
+        }
+    };
+    assert_roundtrip(&saved, CHINESE, false);
+    pdfcraft_edit::update_content(&mut saved, 0, 0, &Content::Text(make(&phrase))).unwrap();
+    let changed = reopen(&saved);
+    assert_roundtrip(&changed, &phrase, true);
+}
+
+#[test]
+fn existing_paragraph_keeps_selected_latin_face_and_saves_missing_chinese() {
+    let Some(fallback) = pdfcraft_fonts::ui_chinese_fonts().into_iter().find(|f| {
+        pdfcraft_fonts::embedding::covers(f.bytes, "ABC 我来测试个撒地方 123") && pdfcraft_fonts::embedding::validate_document_input(f.bytes).is_ok()
+    }) else {
+        return;
+    };
+    let latin = include_bytes!("../../../../assets/fonts/Inter-Regular.ttf");
+    let mut doc = styled_text_page("Helvetica");
+    let resource = text::register_text_font(&mut doc, 0, latin).unwrap();
+    let style = text::BlockStyle { resource: Some(resource.clone()), local_han_font: Some(Arc::new(fallback.bytes.to_vec())), ..Default::default() };
+    let phrase = "ABC 我来测试个撒地方 123";
+    text::rewrite_block(&mut doc, 0, 0, Some(phrase), &style).unwrap();
+    let after = reopen(&doc);
+    let lines = text::text_lines(&after, 0).unwrap();
+    assert_eq!(lines.iter().map(|l| l.text.as_str()).collect::<String>(), phrase);
+    assert!(lines.iter().any(|l| l.font == resource && l.text.contains("ABC")), "{lines:?}");
+    assert!(lines.iter().any(|l| l.font != resource && l.text.contains("我来")), "{lines:?}");
+}

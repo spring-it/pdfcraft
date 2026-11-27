@@ -1,5 +1,6 @@
 use super::layout::{
-    Piece, arabic_error, hebrew_error, is_arabic, is_hebrew, is_thai, latin_width, norm, shaped_layout, text_rect, thai_error, wrapped,
+    ExplicitPiece, Piece, arabic_error, explicit_layout, hebrew_error, is_arabic, is_hebrew, is_thai, latin_width, norm, shaped_layout, text_rect,
+    thai_error, wrapped,
 };
 use super::types::{AddedText, Align, Family, Ink};
 use super::{
@@ -111,45 +112,93 @@ fn draw_explicit(
     face: &pdfcraft_fonts::embedding::ExplicitFace,
     taken: &Dict,
     out: &mut Vec<u8>,
-) -> Result<Dict, EditError> {
+) -> Result<(Dict, Object), EditError> {
     let lines = wrapped(t);
-    let rows = lines.iter().map(|(text, ..)| face.layout(text).map_err(EditError::Invalid)).collect::<Result<Vec<_>, _>>()?;
+    let layouts = lines.iter().map(|(text, rtl, _)| explicit_layout(face, text, *rtl)).collect::<Result<Vec<_>, _>>()?;
+    let rows = layouts
+        .iter()
+        .flatten()
+        .filter_map(|piece| match piece {
+            ExplicitPiece::Selected(row) => Some(row.clone()),
+            ExplicitPiece::Cjk(_) => None,
+        })
+        .collect::<Vec<_>>();
     let mut fonts = taken.clone();
+    // Keep the selection in the item's metadata even when no visible character uses it;
+    // reopening and adding Latin text later must still use the chosen program.
     let (resource, encoded) = face.embed_rows(doc, &mut fonts, &rows).map_err(EditError::Invalid)?;
+    let selected_font = fonts.get(resource.as_bytes()).cloned().ok_or_else(|| EditError::Invalid("could not store the selected font".into()))?;
+    let mut encoded = encoded.into_iter();
     let mut own_fonts = Dict::new();
-    if let Some(f) = fonts.get(resource.as_bytes()) {
-        own_fonts.set(resource.as_bytes().to_vec(), f.clone());
+    if rows.iter().any(|row| !row.glyphs.is_empty()) {
+        own_fonts.set(resource.as_bytes().to_vec(), selected_font.clone());
     }
-    let r = text_rect(t);
+    let fallback = ShapedFonts::new(
+        layouts
+            .iter()
+            .flatten()
+            .filter_map(|piece| match piece {
+                ExplicitPiece::Cjk(clusters) => Some(clusters.iter()),
+                ExplicitPiece::Selected(_) => None,
+            })
+            .flatten(),
+        shaped_glyph,
+        taken,
+        &mut own_fonts,
+        "PCAr",
+        &mut |o| Object::Ref(doc.add(o)),
+    )
+    .map_err(|(_, cluster)| crate::undrawable(cluster.text.chars().next().unwrap_or('?')))?;
+    let r = norm(t.rect); // Width and the top edge suffice after layout.
     let paragraphs: Vec<usize> = lines.iter().map(|(_, _, p)| *p).collect();
-    out.extend(format!("BT /{resource} {} Tf {}\n", n(t.size), t.fill_op()).bytes());
-    for (i, ((line, rtl, _), (row, cids))) in lines.iter().zip(rows.iter().zip(encoded)).enumerate() {
+    out.extend(format!("BT {}\n", t.fill_op()).bytes());
+    for (i, ((line, rtl, _), pieces)) in lines.iter().zip(layouts.iter()).enumerate() {
         let logical: String = line.encode_utf16().map(|u| format!("{u:04X}")).collect();
         out.extend(format!("/Span <</ActualText <FEFF{logical}>>> BDC\n").bytes());
-        let width = row.advance * t.size + t.char_spacing * row.glyphs.len() as f64;
-        let (x, _) = placed(t, r, &paragraphs, i, width, line.matches(' ').count(), *rtl);
+        let width = pieces.iter().map(|piece| piece.width(t)).sum();
+        let (mut pen, word_spacing) = placed(t, r, &paragraphs, i, width, line.matches(' ').count(), *rtl);
         let y = r[3] - (i as f64 * 1.2 + 0.95) * t.size;
-        for (j, (glyph, cid)) in row.glyphs.iter().zip(cids).enumerate() {
-            out.extend(
-                format!(
-                    "1 0 0 1 {} {} Tm <{cid:04X}> Tj\n",
-                    n(x + glyph.position[0] * t.size + j as f64 * t.char_spacing),
-                    n(y + glyph.position[1] * t.size)
-                )
-                .bytes(),
-            );
+        let mut current = None;
+        for piece in pieces {
+            match piece {
+                ExplicitPiece::Selected(row) => {
+                    let cids = encoded.next().ok_or_else(|| EditError::Invalid("could not encode the selected font".into()))?;
+                    out.extend(format!("/{resource} {} Tf\n", n(t.size)).bytes());
+                    current = None;
+                    let mut extra = 0.0;
+                    for (glyph, cid) in row.glyphs.iter().zip(cids) {
+                        out.extend(
+                            format!(
+                                "1 0 0 1 {} {} Tm <{cid:04X}> Tj\n",
+                                n(pen + glyph.position[0] * t.size + extra),
+                                n(y + glyph.position[1] * t.size),
+                            )
+                            .bytes(),
+                        );
+                        extra += t.char_spacing + word_spacing * glyph.text.matches(' ').count() as f64;
+                    }
+                    pen += row.advance * t.size + extra;
+                }
+                ExplicitPiece::Cjk(clusters) => pen = fallback.show(out, clusters, pen, y, t.size, t.char_spacing, word_spacing, &mut current),
+            }
         }
         out.extend_from_slice(b"EMC\n");
     }
     out.extend_from_slice(b"ET\n");
-    Ok(own_fonts)
+    Ok((own_fonts, selected_font))
 }
 
 /// Content and resources for an item; `view` maps display space to user space. `taken` holds the
 /// page's font names. `existing`: the item is being replaced, so a build without the Arabic or
 /// Hebrew face keeps drawing that text as `?`, as before it was supported, rather than refusing to
 /// move it.
-pub(super) fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict, existing: bool) -> Result<(Vec<u8>, Dict), EditError> {
+pub(super) fn draw(
+    doc: &mut Document,
+    c: &Content,
+    view: [f64; 6],
+    taken: &Dict,
+    existing: bool,
+) -> Result<(Vec<u8>, Dict, Option<Object>), EditError> {
     let mut res = Dict::new();
     let mut out = format!(
         "q {} {} {} {} {} {} cm\n",
@@ -164,10 +213,10 @@ pub(super) fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict
     match c {
         Content::Text(t) => {
             if let Some(face) = &t.local_face {
-                let fonts = draw_explicit(doc, t, face, taken, &mut out)?;
+                let (fonts, selected) = draw_explicit(doc, t, face, taken, &mut out)?;
                 res.set(b"Font".to_vec(), Object::Dict(fonts));
                 out.extend_from_slice(b"Q\n");
-                return Ok((out, res));
+                return Ok((out, res, Some(selected)));
             }
             let base = t.family.base_font(t.bold, t.italic);
             let name = font_name(base);
@@ -188,7 +237,7 @@ pub(super) fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict
                 draw_shaped(doc, t, taken, &mut fonts, &mut out)?;
                 res.set(b"Font".to_vec(), Object::Dict(fonts));
                 out.extend_from_slice(b"Q\n");
-                return Ok((out, res));
+                return Ok((out, res, None));
             }
             res.set(b"Font".to_vec(), Object::Dict(fonts));
             let r = text_rect(t);
@@ -240,7 +289,7 @@ pub(super) fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict
         }
     }
     out.extend_from_slice(b"Q\n");
-    Ok((out, res))
+    Ok((out, res, None))
 }
 
 pub(super) fn params(c: &Content) -> Dict {

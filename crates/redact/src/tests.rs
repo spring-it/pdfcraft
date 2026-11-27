@@ -5650,13 +5650,27 @@ fn overlay_text_takes_its_font_size_colour_alignment_and_repeats() {
 
 #[test]
 fn selected_local_overlay_outlines_survive_save_and_do_not_exempt_original_content() {
-    let mut look = pdfcraft_annot::OverlayLook { size: 12.0, color: [1.0, 0.0, 0.0], repeat: true, ..Default::default() };
     // A locally selected face need not be a bundled face; known bundled bytes keep this test
     // deterministic. Use Han when the pinned CJK assets are present, or a real Latin test face.
     let cjk = pdfcraft_fonts::ui_chinese_fonts()
         .into_iter()
         .find(|f| pdfcraft_fonts::embedding::validate_document_input(f.bytes).is_ok() && pdfcraft_fonts::embedding::covers(f.bytes, "已遮盖"));
     let (bytes, caption) = cjk.map_or((pdfcraft_fonts::INTER_REGULAR, "Overlay"), |f| (f.bytes, "已遮盖"));
+    check_installed_overlay_after_reopen(bytes, caption);
+}
+
+#[test]
+fn selected_latin_face_with_chinese_overlay_keeps_redaction_proof_and_renders() {
+    if !pdfcraft_fonts::cjk_document::covers("已遮盖") {
+        return;
+    }
+    let latin = pdfcraft_fonts::INTER_REGULAR;
+    assert!(!pdfcraft_fonts::embedding::covers(latin, "已遮盖"), "the selected Latin font lacks Han glyphs");
+    check_installed_overlay_after_reopen(latin, "Redacted 已遮盖");
+}
+
+fn check_installed_overlay_after_reopen(bytes: &[u8], caption: &str) {
+    let mut look = pdfcraft_annot::OverlayLook { size: 12.0, color: [1.0, 0.0, 0.0], repeat: true, ..Default::default() };
     look.select_local_font(bytes.to_vec()).unwrap();
     let mut doc = one_page(b"BT /F1 12 Tf 20 250 Td (SECRET SALARY FIGURES) Tj ET BT /F1 12 Tf 20 80 Td (PUBLIC) Tj ET", "", Vec::new());
     let shape = Shape::Redact { quads: vec![rect_quad([10.0, 236.0, 290.0, 272.0])], overlay: caption.into(), look };

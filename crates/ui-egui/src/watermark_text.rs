@@ -108,22 +108,31 @@ fn choose_face(text: &str, family: usize) -> Result<(Vec<u8>, u32), String> {
 /// An explicit, validated local face; its bytes never become a PDF resource.
 #[derive(Clone, PartialEq)]
 pub(crate) struct InstalledFont {
-    pub(crate) label: String,
+    names: pdfcraft_fonts::embedding::DisplayFace,
     bytes: std::sync::Arc<Vec<u8>>,
 }
 
 impl std::fmt::Debug for InstalledFont {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("InstalledFont").field("label", &self.label).finish_non_exhaustive()
+        f.debug_struct("InstalledFont").field("name", &self.names.postscript).finish_non_exhaustive()
     }
 }
 
 impl InstalledFont {
+    pub(crate) fn label(&self) -> String {
+        crate::font_picker::installed_label(&self.names)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn display_name(&self, language: &str) -> String {
+        crate::font_picker::face_label(&self.names, language)
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn from_picker(face: pdfcraft_engine::text_fonts::InstalledFace, language: &str) -> Result<Self, String> {
+    pub(crate) fn from_picker(face: pdfcraft_engine::text_fonts::InstalledFace) -> Result<Self, String> {
         // Revalidate if the installed font changed or was removed since the catalog snapshot.
         let bytes = pdfcraft_engine::text_fonts::load_raster_face(&face)?;
-        Ok(Self { label: face.label(language).to_owned(), bytes: std::sync::Arc::new(bytes) })
+        Ok(Self { names: face.names, bytes: std::sync::Arc::new(bytes) })
     }
 }
 
@@ -147,36 +156,58 @@ pub(crate) fn raster(
     if !size.is_finite() || !(8.0..=100.0).contains(&size) {
         return Err("水印字号必须介于 8–100 pt。".into());
     }
-    let fallback;
+    let preset;
     let font = if let Some(installed) = installed {
-        // Never replace an explicit choice with a different face when glyphs are missing.
         FontRef::new(&installed.bytes)
     } else {
         let (bytes, index) = choose_face(text, family)?;
-        fallback = bytes;
-        FontRef::from_index(&fallback, index)
+        preset = bytes;
+        FontRef::from_index(&preset, index)
     }
     .map_err(|_| "无法读取水印字体。")?;
+    let primary_map = font.charmap();
+    let mut missing_cjk = String::new();
+    if installed.is_some() {
+        // Keep the explicitly chosen face wherever possible. Search the normal local-first
+        // watermark fallbacks once for the missing CJK characters, not once per glyph.
+        for ch in text.chars().filter(|&ch| primary_map.map(ch).is_none_or(|id| id.to_u32() == 0)) {
+            if !pdfcraft_fonts::cjk_document::is_cjk(ch) {
+                return Err(format!("水印字体缺少字符：{ch}"));
+            }
+            missing_cjk.push(ch);
+        }
+    }
+    let missing_face = if missing_cjk.is_empty() { None } else { Some(choose_face(&missing_cjk, 0)?) };
+    let fallback = missing_face.as_ref().map(|(bytes, index)| FontRef::from_index(bytes, *index).map_err(|_| "无法读取水印字体。")).transpose()?;
+
     let loc = LocationRef::default();
-    let units = f64::from(font.metrics(Size::unscaled(), loc).units_per_em.max(1));
-    let advances = font.glyph_metrics(Size::unscaled(), loc);
+    let scale = |face: &FontRef<'_>| size / f64::from(face.metrics(Size::unscaled(), loc).units_per_em.max(1));
+    let font_scale = scale(&font);
+    let fallback_scale = fallback.as_ref().map(scale).unwrap_or(font_scale);
     let mut x = 0.0f64;
     let mut paths = String::new();
     for ch in text.chars() {
-        let id = font.charmap().map(ch).filter(|id| id.to_u32() != 0).ok_or_else(|| format!("水印字体缺少字符：{ch}"))?;
-        if let Some(outline) = font.outline_glyphs().get(id) {
+        let (face, glyph_scale, id) = match primary_map.map(ch).filter(|id| id.to_u32() != 0) {
+            Some(id) => (&font, font_scale, id),
+            None => {
+                let face = fallback.as_ref().ok_or_else(|| format!("水印字体缺少字符：{ch}"))?;
+                let id = face.charmap().map(ch).filter(|id| id.to_u32() != 0).ok_or_else(|| format!("水印字体缺少字符：{ch}"))?;
+                (face, fallback_scale, id)
+            }
+        };
+        if let Some(outline) = face.outline_glyphs().get(id) {
             let mut pen = SvgPen::default();
             outline.draw(DrawSettings::unhinted(Size::unscaled(), loc), &mut pen).map_err(|_| format!("无法绘制水印字符：{ch}"))?;
             if !pen.commands.is_empty() {
-                let _ = write!(paths, "<path transform=\"translate({x:.3} 0)\" d=\"{}\"/>", pen.commands);
+                let _ = write!(paths, "<path transform=\"translate({x:.3} 0) scale({glyph_scale:.7} -{glyph_scale:.7})\" d=\"{}\"/>", pen.commands);
             }
         } else if installed.is_some() && !ch.is_whitespace() {
             return Err(format!("无法绘制水印字符：{ch}"));
         }
-        x += f64::from(advances.advance_width(id).unwrap_or(0.0));
+        x += f64::from(face.glyph_metrics(Size::unscaled(), loc).advance_width(id).unwrap_or(0.0)) * glyph_scale;
     }
     let padding = size * 0.7;
-    let width_pts = x / units * size + padding * 2.0;
+    let width_pts = x + padding * 2.0;
     let height_pts = size * 1.7 + padding * 2.0;
     let width = (width_pts * DPI).ceil() as u32;
     let height = (height_pts * DPI).ceil() as u32;
@@ -185,10 +216,9 @@ pub(crate) fn raster(
     }
     let rgb = color.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
     let baseline = height_pts / 2.0 + size * 0.34;
-    let glyph_scale = size / units;
     let svg = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width}\" height=\"{height}\" viewBox=\"0 0 {width_pts:.3} {height_pts:.3}\">\
-        <g fill=\"rgb({},{},{})\" transform=\"translate({padding:.3} {baseline:.3}) scale({glyph_scale:.7} -{glyph_scale:.7})\">{paths}</g></svg>",
+        <g fill=\"rgb({},{},{})\" transform=\"translate({padding:.3} {baseline:.3})\">{paths}</g></svg>",
         rgb[0], rgb[1], rgb[2],
     );
     let tree = resvg::usvg::Tree::from_str(&svg, &resvg::usvg::Options::default()).map_err(|e| format!("水印图形解析失败：{e}"))?;

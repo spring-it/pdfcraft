@@ -307,15 +307,24 @@ pub(crate) fn body(ui: &mut egui::Ui, d: &mut Draft, t: &theme::Tokens) -> (bool
                     } else {
                         d.font_label.clone()
                     };
+                    let standard = d.font.apply && d.standard_font_picked && d.installed_font.is_none();
                     row(ui, "Font:", &mut d.font, |ui, v| {
-                        let font_label = crate::font_picker::label(ui.ctx(), tl!(&font_label));
-                        craft_ui::ComboBox::from_id_salt("bulk-font").selected_text(font_label).show_ui(ui, |ui| {
+                        let font_label =
+                            if standard { crate::font_picker::preset(&font_label) } else { crate::font_picker::label(ui.ctx(), tl!(&font_label)) };
+                        crate::font_picker::combo("bulk-font").selected_text(font_label).show_ui(ui, |ui| {
                             for font in FieldFont::ALL {
-                                if ui.selectable_label(d.standard_font_picked && d.installed_font.is_none() && *v == font, font.label()).clicked() {
+                                if ui
+                                    .selectable_label(
+                                        d.standard_font_picked && d.installed_font.is_none() && *v == font,
+                                        crate::font_picker::preset(font.label()),
+                                    )
+                                    .clicked()
+                                {
                                     *v = font;
                                     d.standard_font_picked = true;
                                     d.installed_font = None;
                                     d.error = None;
+                                    ui.close();
                                 }
                             }
                             #[cfg(not(target_arch = "wasm32"))]

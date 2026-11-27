@@ -152,30 +152,43 @@ pub(crate) fn panel(
     ui.spacing_mut().combo_height = 360.0;
     let width = ui.available_width();
     let font_resp = outlined(ui, |ui| {
-        craft_ui::ComboBox::from_id_salt("format-font")
-            .selected_text(crate::font_picker::label(ui.ctx(), &fonts.shown))
+        crate::font_picker::combo("format-font")
+            .selected_text(look.local_face.as_ref().map_or_else(
+                || if fonts.sources.is_none() { crate::font_picker::preset(&fonts.shown) } else { crate::font_picker::label(ui.ctx(), &fonts.shown) },
+                |face| crate::font_picker::explicit_label(ui.ctx(), face),
+            ))
             .width(width)
             .show_ui(ui, |ui| {
                 if let Some(sources) = fonts.sources {
                     if ui.selectable_label(false, tl!("Keep source fonts")).clicked() {
                         out.font = Some(FontChoice::KeepSource);
+                        ui.close();
                     }
                     for (resource, face) in sources.iter().filter(|(r, _)| !r.starts_with("PCApproved")) {
                         if ui.selectable_label(false, crate::font_picker::label(ui.ctx(), face)).clicked() {
                             out.font = Some(FontChoice::Resource(resource.clone()));
+                            ui.close();
                         }
                     }
                     ui.separator();
                 }
                 for f in [FontFamily::Helvetica, FontFamily::Times, FontFamily::Courier] {
-                    if ui.selectable_label(fonts.sources.is_none() && look.local_face.is_none() && look.family == f, f.label()).clicked() {
+                    if ui
+                        .selectable_label(
+                            fonts.sources.is_none() && look.local_face.is_none() && look.family == f,
+                            crate::font_picker::preset(f.label()),
+                        )
+                        .clicked()
+                    {
                         out.font = Some(FontChoice::Family(f));
+                        ui.close();
                     }
                 }
                 if fonts.sources.is_some() {
                     ui.separator();
                     if ui.selectable_label(false, tl!("Load font…")).clicked() {
                         out.font = Some(FontChoice::Load);
+                        ui.close();
                     }
                     ui.add_space(4.0);
                 }

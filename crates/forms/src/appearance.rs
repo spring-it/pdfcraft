@@ -144,9 +144,19 @@ impl TextBox {
         let can_show = |enc: &FontText, skip_latin: bool| {
             if self.multiline { shown.split(['\n', '\r']).all(|l| holds(enc, l, skip_latin)) } else { holds(enc, &shown, skip_latin) }
         };
-        let latin = !self.font.as_ref().is_some_and(|enc| can_show(enc, false));
-        let font = self.font.as_ref().filter(|enc| can_show(enc, latin)).unwrap_or(&FontText::WinAnsi);
-        let width_of = |t: &str, size: f64| shaped_text::fallback_width(t, size, false, latin, |s, size| font.width(s, size));
+        let can_keep_cjk = |enc: &FontText| {
+            if self.multiline {
+                shown.split(['\n', '\r']).all(|line| enc.covers_with_cjk(line))
+            } else {
+                enc.covers_with_cjk(&shown.replace(['\n', '\r'], " "))
+            }
+        };
+        let mixed_cjk = self.font.as_ref().is_some_and(|enc| !can_show(enc, false) && can_keep_cjk(enc));
+        let latin = !mixed_cjk && !self.font.as_ref().is_some_and(|enc| can_show(enc, false));
+        let font = self.font.as_ref().filter(|enc| mixed_cjk || can_show(enc, latin)).unwrap_or(&FontText::WinAnsi);
+        let width_of = |t: &str, size: f64| {
+            if mixed_cjk { font.mixed_width(t, size) } else { shaped_text::fallback_width(t, size, false, latin, |s, size| font.width(s, size)) }
+        };
         // The smallest an automatic size goes ([`auto_text_size_by`]).
         let size = self.size.unwrap_or(4.0);
         if self.multiline {
@@ -212,7 +222,7 @@ impl TextBox {
     fn font_switch(&self, prefix: &[char], inserted: &[char], suffix: &[char]) -> Option<usize> {
         let enc = self.font.as_ref().filter(|_| !self.password)?;
         // As `fits` decides: a multi-line value is checked line by line, its breaks aside.
-        let shows = |c: &char| (self.multiline && matches!(c, '\n' | '\r')) || enc.can_encode(&c.to_string());
+        let shows = |c: &char| (self.multiline && matches!(c, '\n' | '\r')) || enc.covers_with_cjk(&c.to_string());
         if !prefix.iter().chain(suffix).all(shows) {
             return None;
         }
@@ -325,6 +335,47 @@ impl FontText {
         }
     }
 
+    /// Keep the field's mapped font for everything it covers, and use the approved CJK
+    /// fallback only for contiguous Han/Kana/Hangul runs it really lacks.
+    fn cjk_pieces(&self, line: &str) -> Option<Vec<Piece>> {
+        if !matches!(self, Self::Mapped(_)) {
+            return None;
+        }
+        let line = line.replace(['\t', '\r', '\n'], " ");
+        if self.can_encode(&line) {
+            return Some(vec![Piece::Latin(line)]);
+        }
+        if !line.chars().any(pdfcraft_fonts::cjk_document::is_cjk) {
+            return None;
+        }
+        let mut coverage = std::collections::HashMap::new();
+        let mut spans: Vec<(bool, String)> = Vec::new();
+        for c in line.chars() {
+            let covered = *coverage.entry(c).or_insert_with(|| self.can_encode(c.encode_utf8(&mut [0; 4])));
+            if !covered && !pdfcraft_fonts::cjk_document::is_cjk(c) {
+                return None;
+            }
+            match spans.last_mut() {
+                Some((last, text)) if *last == covered => text.push(c),
+                _ => spans.push((covered, c.to_string())),
+            }
+        }
+        spans
+            .into_iter()
+            .map(|(covered, text)| if covered { Some(Piece::Latin(text)) } else { pdfcraft_fonts::shape_cjk(&text).ok().map(Piece::Shaped) })
+            .collect()
+    }
+
+    fn covers_with_cjk(&self, line: &str) -> bool {
+        self.can_encode(line) || self.cjk_pieces(line).is_some()
+    }
+
+    fn mixed_width(&self, line: &str, size: f64) -> f64 {
+        self.cjk_pieces(line)
+            .map(|pieces| shaped_text::pieces_width(&pieces, size, 0.0, |s, size| self.width(s, size)))
+            .unwrap_or_else(|| self.width(line, size))
+    }
+
     /// The first character of `s` the encoding can't hold, which [`Self::encode`] writes as `?`
     /// (a reused simple font is only chosen when it holds them all): reported by
     /// [`field_appearance_drawn`], so that `?` is never silent (app-agents.md rule 13).
@@ -392,7 +443,9 @@ fn dr_font(doc: &Document, name: &str) -> Option<(Object, FontText)> {
 /// character the standard-font writer cannot show.
 pub(crate) fn button_caption(doc: &Document, da: &str, caption: &str, width: f64, height: f64, auto: f64) -> (Vec<u8>, Dict, Option<char>) {
     let da = parse_da(da);
-    let (name, font, enc) = match dr_font(doc, &da.font).filter(|(_, enc)| enc.can_encode(caption)) {
+    let dr = dr_font(doc, &da.font);
+    let mixed_cjk = dr.as_ref().is_some_and(|(_, enc)| !enc.can_encode(caption) && enc.covers_with_cjk(caption));
+    let (name, font, enc) = match dr.filter(|(_, enc)| mixed_cjk || enc.can_encode(caption)) {
         Some((o, enc)) => (da.font.clone(), o, enc),
         None => ("Helv".to_string(), helvetica(), FontText::WinAnsi),
     };
@@ -400,11 +453,13 @@ pub(crate) fn button_caption(doc: &Document, da: &str, caption: &str, width: f64
     let size = if da.size > 0.0 { da.size } else { auto };
     let mut fonts = Dict::new();
     fonts.set(name.as_bytes().to_vec(), font);
-    if missing.is_some() && pdfcraft_fonts::cjk_document::covers(caption) {
-        let (lines, shaped) = shaped_text::appearance_lines(&[caption.to_owned()], &mut fonts);
+    if mixed_cjk || missing.is_some() && pdfcraft_fonts::cjk_document::covers(caption) {
+        let lines = [caption.to_owned()];
+        let (lines, shaped) =
+            if mixed_cjk { mixed_cjk_appearance(&enc, &lines, &mut fonts) } else { shaped_text::appearance_lines(&lines, &mut fonts) };
         if let Some(pieces) = lines.first().filter(|p| p.iter().any(|p| matches!(p, Piece::Shaped(_)))) {
             let tw = shaped_text::pieces_width(pieces, size, 0.0, |s, size| enc.width(s, size));
-            let mut out = format!("BT {} ", da.color).into_bytes();
+            let mut out = format!("BT /{name} {size:.2} Tf {} ", da.color).into_bytes();
             let mut current = None;
             shaped.show_line(
                 &mut out,
@@ -802,7 +857,7 @@ fn draws(doc: &Document, f: &Field, wd: &Dict, text: &str) -> bool {
     if let Some(enc) = dr.as_ref().filter(|enc| enc.can_encode(text)) {
         return enc.first_unencodable(text).is_none();
     }
-    if pdfcraft_fonts::cjk_document::covers(text) {
+    if dr.as_ref().is_some_and(|enc| enc.covers_with_cjk(text)) || pdfcraft_fonts::cjk_document::covers(text) {
         return true;
     }
     let rest: String = text.chars().filter(|c| !shaped_text::latin_fallback(*c)).collect();
@@ -820,7 +875,7 @@ pub(crate) fn thai_refusal(doc: &Document, f: &Field, text: &str) -> Option<Stri
     let held = |w: &Widget| {
         let wd = doc.get(w.obj).as_dict().cloned().unwrap_or_default();
         let da = parse_da(wd.get(b"DA").and_then(|o| doc.resolve(o).as_string().map(|s| s.to_text())).as_deref().unwrap_or(&f.da));
-        dr_font(doc, &da.font).is_some_and(|(_, enc)| text.split(['\n', '\r']).all(|l| enc.can_encode(l)))
+        dr_font(doc, &da.font).is_some_and(|(_, enc)| text.split(['\n', '\r']).all(|l| enc.covers_with_cjk(l)))
     };
     if f.widgets.iter().all(held) { None } else { shaped_text::thai_refusal(text).or_else(|| pdfcraft_fonts::cjk_document::refusal(text)) }
 }
@@ -856,10 +911,16 @@ fn field_appearance_fit(doc: &Document, f: &Field, w: &Widget, values: &[String]
         values.first().cloned().unwrap_or_default()
     };
     let text = if f.has(flags::PASSWORD) { "*".repeat(text.chars().count()) } else { text };
-    // Whether `enc` holds what is shown; with `skip_latin`, leaving out what the bundled face draws.
-    let can_show = |enc: &FontText, text: &str, skip_latin: bool| {
+    // Whether the /DA font can show the whole field, with either kind of supported fallback.
+    let can_show = |enc: &FontText, text: &str, skip_latin: bool, mix_cjk: bool| {
         let holds = |s: &str| {
-            if skip_latin { enc.can_encode(&s.chars().filter(|c| !shaped_text::latin_fallback(*c)).collect::<String>()) } else { enc.can_encode(s) }
+            if skip_latin {
+                enc.can_encode(&s.chars().filter(|c| !shaped_text::latin_fallback(*c)).collect::<String>())
+            } else if mix_cjk {
+                enc.covers_with_cjk(s)
+            } else {
+                enc.can_encode(s)
+            }
         };
         if f.kind == FieldKind::List {
             f.options.iter().all(|(_, display)| holds(display))
@@ -870,25 +931,33 @@ fn field_appearance_fit(doc: &Document, f: &Field, w: &Widget, values: &[String]
         }
     };
     let dr = dr_font(doc, &da.font);
+    let mixed_cjk = dr.as_ref().is_some_and(|(_, enc)| !can_show(enc, &text, false, false) && can_show(enc, &text, false, true));
     // Thai the form's font can't hold (it isn't a simple font encoding it) is drawn from the Thai
     // face, as Add text draws it: Type 3 glyphs beside the form's font, which draws the rest. One
     // line of a text field or combo box at a time; the `/DA` is kept.
-    let thai = matches!(f.kind, FieldKind::Text | FieldKind::Combo)
+    let thai = !mixed_cjk
+        && matches!(f.kind, FieldKind::Text | FieldKind::Combo)
         && !f.is_comb()
         && text.chars().any(shaped_text::is_thai)
-        && !dr.as_ref().is_some_and(|(_, enc)| matches!(enc, FontText::Mapped(_)) && can_show(enc, &text, false))
+        && !dr.as_ref().is_some_and(|(_, enc)| matches!(enc, FontText::Mapped(_)) && can_show(enc, &text, false, false))
         && shaped_text::thai_refusal(&text).is_none();
     let latin_text: String = if thai { text.chars().filter(|c| !shaped_text::is_thai(*c)).collect() } else { text.clone() };
     // Latin, Greek and Cyrillic the form's font can't hold, nor Helvetica, are drawn from the
     // bundled Inter face in the same way, beside the font that draws the rest (#6822): the value is
     // stored as typed either way, and this keeps its appearance from showing `?`.
-    let latin = !dr.as_ref().is_some_and(|(_, enc)| can_show(enc, &latin_text, false));
-    let (font_name, font_obj, enc) = match dr.filter(|(_, enc)| can_show(enc, &latin_text, latin)) {
+    let latin = !mixed_cjk && !dr.as_ref().is_some_and(|(_, enc)| can_show(enc, &latin_text, false, false));
+    let (font_name, font_obj, enc) = match dr.filter(|(_, enc)| mixed_cjk || can_show(enc, &latin_text, latin, false)) {
         Some((o, enc)) => (da.font.clone(), o, enc),
         None => ("Helv".to_string(), helvetica(), FontText::WinAnsi),
     };
     let width_of = |text: &str, size: f64| {
-        if thai || latin { shaped_text::fallback_width(text, size, thai, latin, |s, size| enc.width(s, size)) } else { enc.width(text, size) }
+        if mixed_cjk {
+            enc.mixed_width(text, size)
+        } else if thai || latin {
+            shaped_text::fallback_width(text, size, thai, latin, |s, size| enc.width(s, size))
+        } else {
+            enc.width(text, size)
+        }
     };
     // How far a line's ink reaches below and above its baseline (em), where Thai stacks or
     // descenders reach past the form font's (Helvetica's) -0.207 and 0.718; `None` otherwise.
@@ -1007,7 +1076,8 @@ fn field_appearance_fit(doc: &Document, f: &Field, w: &Widget, values: &[String]
             }
         }
     }
-    let (body, fonts, unencodable) = draw_lines(&shown, size, &font_name, font_obj, &enc, thai, latin);
+    let fallback = TextFallback { thai, latin, mixed_cjk };
+    let (body, fonts, unencodable) = draw_lines(&shown, size, &font_name, font_obj, &enc, fallback);
     // Acrobat regenerates only what is inside /Tx BMC when it redraws a field (e.g. on focus
     // changes), discarding what came before it (issues #1613, #633). The background and border
     // therefore go inside the marked-content block too, so a redraw keeps them with the text.
@@ -1036,6 +1106,31 @@ fn field_appearance_fit(doc: &Document, f: &Field, w: &Widget, values: &[String]
     (Stream::flate(d, &content), unencodable, overflow)
 }
 
+// Gather a shared Type 3 resource for fallback glyphs across all visible form lines.
+fn mixed_cjk_appearance(enc: &FontText, lines: &[String], fonts: &mut Dict) -> (Vec<Vec<Piece>>, ShapedFonts) {
+    let plain = |line: &String| vec![Piece::Latin(line.clone())];
+    let pieces = lines.iter().map(|line| enc.cjk_pieces(line).unwrap_or_else(|| plain(line))).collect::<Vec<_>>();
+    let fallback = ShapedFonts::new(
+        shaped_text::clusters(pieces.iter().map(Vec::as_slice)),
+        pdfcraft_fonts::shaped_glyph,
+        &Dict::new(),
+        fonts,
+        "PCTh",
+        &mut |obj| obj,
+    );
+    match fallback {
+        Ok(shaped) => (pieces, shaped),
+        Err(_) => (lines.iter().map(plain).collect(), ShapedFonts::default()),
+    }
+}
+
+#[derive(Clone, Copy)]
+struct TextFallback {
+    thai: bool,
+    latin: bool,
+    mixed_cjk: bool,
+}
+
 /// The text operators for the `shown` lines (where each starts, and what it says) at `size`, in
 /// the field's font `font_name` (`font`, written with `enc`); with `thai`, their Thai from the
 /// Thai face, and with `latin`, the Latin, Greek and Cyrillic characters the standard fonts lack
@@ -1047,14 +1142,15 @@ fn draw_lines(
     font_name: &str,
     font: Object,
     enc: &FontText,
-    thai: bool,
-    latin: bool,
+    fallback: TextFallback,
 ) -> (Vec<u8>, Dict, Option<char>) {
     let mut fonts = Dict::new();
     fonts.set(font_name.as_bytes().to_vec(), font);
     let lines: Vec<String> = shown.iter().map(|(_, _, text)| text.clone()).collect();
-    let (pieces, shaped) = if thai || latin {
-        shaped_text::fallback_appearance_lines(&lines, thai, latin, &mut fonts)
+    let (pieces, shaped) = if fallback.mixed_cjk {
+        mixed_cjk_appearance(enc, &lines, &mut fonts)
+    } else if fallback.thai || fallback.latin {
+        shaped_text::fallback_appearance_lines(&lines, fallback.thai, fallback.latin, &mut fonts)
     } else {
         (lines.into_iter().map(|l| vec![Piece::Latin(l)]).collect(), ShapedFonts::default())
     };
