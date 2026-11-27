@@ -563,6 +563,8 @@ impl Automation {
                 if bytes.len() > 16 << 20 {
                     return Err(ToolError::InvalidArgs("font input exceeds 16 MiB".into()));
                 }
+                // Automation discovery/import keeps its existing open-font policy.
+                pdfcraft_fonts::embedding::validate_document_input(&bytes).map_err(failed)?;
                 let before: Vec<_> = self.doc(&a)?.text_editor_fonts(page).into_iter().map(|f| f.resource).collect();
                 let mut out = self.apply(&a, Edit::RegisterTextFont { page, bytes: Arc::new(bytes) })?;
                 let added = self

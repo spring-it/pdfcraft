@@ -39,7 +39,7 @@ pub fn load_installed_face(path: &Path) -> Result<Vec<u8>, String> {
 /// Load the same face the picker showed, supporting collections as well as standalone files.
 pub fn load_document_face(face: &InstalledFace) -> Result<Vec<u8>, String> {
     let bytes = load_raster_face(face)?;
-    pdfcraft_fonts::embedding::validate_document_input(&bytes)?;
+    pdfcraft_fonts::embedding::validate_selected_document_input(&bytes)?;
     Ok(bytes)
 }
 

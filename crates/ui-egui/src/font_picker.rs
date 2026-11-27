@@ -52,7 +52,7 @@ pub(crate) fn explicit_label(ctx: &egui::Context, face: &ExplicitFace) -> String
     if !matches!(language, "zh-hans" | "zh-hant") {
         return face.name().into();
     }
-    let id = egui::Id::new(("explicit-font-label", face.program_id(), language));
+    let id = egui::Id::unique(("explicit-font-label", face.program_id(), language));
     if let Some(label) = ctx.data(|d| d.get_temp::<String>(id)) {
         return label;
     }

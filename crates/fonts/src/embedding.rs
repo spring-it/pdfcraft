@@ -99,7 +99,7 @@ pub fn display_faces(bytes: &[u8], max_faces: u32) -> Vec<DisplayFace> {
             let chinese_simplified = chinese(false);
             let chinese_traditional = chinese(true);
             let can_rasterize = standalone_size(bytes, face_index).is_some() && (f.glyf().is_ok() || f.cff().is_ok());
-            let can_embed = can_rasterize && validate_document_face(&f).is_ok();
+            let can_embed = can_rasterize && validate_selected_face(&f).is_ok();
             Some(DisplayFace { family, postscript, chinese_simplified, chinese_traditional, face_index, can_embed, can_rasterize })
         })
         .collect()
@@ -196,11 +196,34 @@ pub fn standalone_face(bytes: Vec<u8>, index: u32) -> Result<Vec<u8>, String> {
     Ok(result)
 }
 
-/// A selected external font is document input. Require its own open-licence declaration;
-/// never turn a proprietary system-interface fallback into an exported PDF font.
+/// Policy for automatic discovery and automatic fallback: only approved open fonts may
+/// be used without the owner explicitly choosing the face for an editable document.
 pub fn validate_document_input(bytes: &[u8]) -> Result<(), String> {
     validate(bytes)?;
     validate_document_face(&FontRef::new(bytes).map_err(|e| e.to_string())?)
+}
+
+/// A user's explicit choice for a document, not an application asset. Respect the
+/// original OpenType embedding flags; never rewrite those flags or subset a font.
+pub fn validate_selected_document_input(bytes: &[u8]) -> Result<(), String> {
+    validate(bytes)?;
+    validate_selected_face(&FontRef::new(bytes).map_err(|e| e.to_string())?)
+}
+
+fn validate_selected_face(font: &FontRef<'_>) -> Result<(), String> {
+    validate_face(font)?;
+    let (family, _) = face_names(font)?;
+    if family.trim().is_empty() {
+        return Err("the selected font has no family name".into());
+    }
+    let os2 = font.os2().map_err(|_| "the selected font has no readable document embedding permissions")?;
+    // 0 permits installable embedding; 8 permits editable embedding. Do not infer
+    // permission from unknown or contradictory bits. The full program is kept, so
+    // No Subsetting is supported. Other bits must not enable additional uses.
+    if !matches!(os2.fs_type(), 0 | 0x0008 | 0x0100 | 0x0108) {
+        return Err("the font does not permit editable PDF embedding".into());
+    }
+    Ok(())
 }
 
 /// Validate a particular face of a collection before extracting its outlines. This does
@@ -514,6 +537,45 @@ mod tests {
     }
 
     #[test]
+    fn explicit_font_choice_obeys_document_permissions_independently_of_the_open_catalog() {
+        fn table_offset(bytes: &[u8], tag: &[u8; 4]) -> usize {
+            let n = usize::from(u16::from_be_bytes(bytes[4..6].try_into().unwrap()));
+            let record = bytes[12..12 + n * 16].chunks_exact(16).find(|r| &r[..4] == tag).unwrap();
+            u32::from_be_bytes(record[8..12].try_into().unwrap()) as usize
+        }
+
+        // Use the repository test font with the OFL name records hidden for this in-memory
+        // fixture. Do not copy this test data into assets; real fonts' flags stay untouched.
+        let mut fixture = crate::INTER_REGULAR.to_vec();
+        let name = table_offset(&fixture, b"name");
+        let records = usize::from(u16::from_be_bytes(fixture[name + 2..name + 4].try_into().unwrap()));
+        for record in fixture[name + 6..][..records * 12].chunks_exact_mut(12) {
+            if record[6..8] == [0, 13] {
+                record[6..8].copy_from_slice(&[1, 0]);
+            }
+        }
+        let flags = table_offset(&fixture, b"OS/2") + 8;
+        assert!(validate_document_input(&fixture).is_err(), "the automatic catalog remains open-font-only");
+        for (permission, editable) in [(0u16, true), (8, true), (0x108, true), (2, false), (4, false), (0x208, false), (0x80, false)] {
+            fixture[flags..flags + 2].copy_from_slice(&permission.to_be_bytes());
+            assert_eq!(display_faces(&fixture, 1)[0].can_embed, editable, "picker permission {permission:#x}");
+            let choice = ExplicitFace::new(fixture.clone());
+            assert_eq!(choice.is_ok(), editable, "writer permission {permission:#x}");
+            if let Ok(choice) = choice {
+                let mut doc = Document::new_empty();
+                let mut fonts = Dict::new();
+                let rows = [choice.layout("Editable ABC").unwrap()];
+                let (resource, codes) = choice.embed_rows(&mut doc, &mut fonts, &rows).unwrap();
+                assert!(!codes[0].is_empty());
+                let entry = fonts.get(resource.as_bytes()).unwrap();
+                let program = ExplicitFace::program_ref(&doc, entry).unwrap();
+                let reopened = ExplicitFace::from_pdf_program(&doc, program).unwrap();
+                assert_eq!(reopened.bytes(), &fixture, "the complete selected face keeps the original permission bytes");
+            }
+        }
+    }
+
+    #[test]
     fn embedding_the_same_text_again_reuses_its_resource_and_program() {
         let bytes = include_bytes!("../../../assets/fonts/Inter-Regular.ttf");
         let face = FontRef::new(bytes).unwrap();
@@ -687,7 +749,7 @@ pub struct ExplicitFace {
 
 impl ExplicitFace {
     pub fn new(bytes: Vec<u8>) -> Result<Self, String> {
-        validate_document_input(&bytes)?;
+        validate_selected_document_input(&bytes)?;
         let (_, postscript) = names(&bytes)?;
         use std::hash::{DefaultHasher, Hash, Hasher};
         let mut hasher = DefaultHasher::new();

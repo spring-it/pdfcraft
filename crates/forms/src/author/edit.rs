@@ -147,7 +147,7 @@ fn set_props_target(doc: &mut Document, name: &str, object: Option<ObjRef>, prop
             if props.look.is_some() || props.appearance.is_some_and(|patch| patch.font.is_some()) {
                 return invalid("choose either a standard or an installed field font");
             }
-            pdfcraft_fonts::embedding::validate_document_input(bytes).map_err(FormError::Invalid)?;
+            pdfcraft_fonts::embedding::validate_selected_document_input(bytes).map_err(FormError::Invalid)?;
             let (_, postscript) = pdfcraft_fonts::embedding::names(bytes).map_err(FormError::Invalid)?;
             Ok((bytes, postscript))
         })
